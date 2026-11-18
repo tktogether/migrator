@@ -1,0 +1,2 @@
+inventory: donor root /dev/md127 (ext4) mounted at /mnt/reloca.to/inv/root
+inventory: mounted /dev/md126 at /boot (ext4, read-only)

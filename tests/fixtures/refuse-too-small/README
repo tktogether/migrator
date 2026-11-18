@@ -1,0 +1,4 @@
+refuse-too-small — the debian-md-ext4-bios donor (root used 412 GiB) onto a 400 GB KVM disk.
+Exercises R5/R7: the elastic slot (363.5 GiB) is smaller than the files requirement
+412 GiB x 1.10 + 512 MiB = 487156665548 bytes -> exit 4 naming the shortfall in bytes and
+human units (90.2G).

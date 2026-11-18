@@ -1,0 +1,1 @@
+  /dev/vda3|fxPV00-uefi-Lvm2-Xfs0-Gpt0-Esp0-000001|vg0|9122611200|1048576

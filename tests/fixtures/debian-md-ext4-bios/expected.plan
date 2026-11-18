@@ -1,0 +1,37 @@
+# reloca.to plan  donor=10.0.0.12/24/web1 (Supermicro%20X11SSH-F%20SN=S123456, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-456 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-456, boot=eth0/52:54:00:cc:dd:01)
+# inv_sha256=e06393eb6d3825466ed5775fbcd4abb1e4979a82b56bfb8a46a8b59cd7a0a0fb:9f3d4e0887e7b202da8d77bb6e5f1ca48ea31dd38a0c29b557481e72f423a24c  reloca=-  live=-  date=-
+[target]
+disk=/dev/vda id=model:- size=960197124096 lsec=512 psec=512 ptuuid=- head=-
+currently=free
+label=dos firmware=bios bios_grub=- esp=- driver=virtio_blk,virtio_pci,virtio_net data=ssh compress=lz4
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/sda2	kind=swap	fs=swap	size=8589934592	used=-	method=mkswap	target=/dev/vda2	tsize=8589934592	mount=swap	num=2	notes=-
+src=/dev/md0	kind=md	fs=ext4	size=1072693248	used=134217728	method=block	target=/dev/vda1	tsize=1073741824	mount=/boot	num=1	notes=grow
+src=/dev/md1	kind=md	fs=ext4	size=990404673536	used=442381631488	method=files	target=/dev/vda3	tsize=950530998272	mount=/	num=3	notes=elastic
+[sfdisk]
+label: dos
+label-id: 0x5c3f1a2b
+unit: sectors
+sector-size: 512
+/dev/vda1 : start=2048, size=2097152, type=83, bootable
+/dev/vda2 : start=2099200, size=16777216, type=82
+/dev/vda3 : start=18876416, size=1856505856, type=83
+[lvm]
+[mkfs]
+# guard: /dev/vda1 ext4 oldest_kernel=5.10.0 needs=none ok
+mkswap -U 3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02 /dev/vda2
+mkfs.ext4 -F -U 0d9e8f7a-2222-4b1c-8a3d-5e6f7a8b9c01 -b 4096 -I 256 -N 60456960 -O none,has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum /dev/vda3
+# guard: /dev/vda3 ext4 oldest_kernel=5.10.0 needs=none ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+UUID=0d9e8f7a-2222-4b1c-8a3d-5e6f7a8b9c01	keep
+/dev/md0	-> UUID=6f1c9e2a-1111-4c3b-9d2e-0a1b2c3d4e50
+UUID=3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02	keep
+[postfix]
+family=deb initramfs=initramfs-tools grub=i386-pc bls=0 lvm_devices_file=keep lvm_filter=keep selinux=none cloudinit=keep os_root=/dev/vda3 boot=/dev/vda1 esp=-
+[network]
+donor=ens3/52:54:00:aa:bb:01/interfaces target=eth0 mac=52:54:00:cc:dd:01 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:52:54:00:cc:dd:01
+[verify]
+drivers=virtio_blk,virtio_pci,virtio_net features=/dev/vda1:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3,/dev/vda3:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3 fstab=3 swap=3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02 esp=- cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

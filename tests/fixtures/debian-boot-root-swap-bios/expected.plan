@@ -1,0 +1,38 @@
+# reloca.to plan  donor=10.0.0.44/24/mail2 (Supermicro%20X11SSL-F%20SN=S555555, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-456 (Supermicro%20X11SSH-F%20SN=XS-456, boot=eno1/b0:83:fe:00:00:21)
+# inv_sha256=92ea0ed7f71168bbc3b83f871043efe1af2c943af161be313056906ddf3c9d94:ec41964fc206b98f0a6443040b742b81888bbf50da03b9953fea701e0ee8513c  reloca=-  live=-  date=-
+# WARN: partitions are renumbered (physical order on dos): PARTUUID= and /dev/sdaN references are rewritten to UUID=
+[target]
+disk=/dev/sda id=wwn:0x5000c500b0000009 size=1000204886016 lsec=512 psec=4096 ptuuid=0x99887766 head=-
+currently=old-os:"old-mail%20Debian%20GNU/Linux%2010%20(buster)%20mtime=2023-11-15"
+label=dos firmware=bios bios_grub=- esp=- driver=ahci,igb data=ssh compress=lz4
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/sda3	kind=swap	fs=swap	size=4294967296	used=-	method=mkswap	target=/dev/sda2	tsize=4294967296	mount=swap	num=2	notes=renumbered%203->2
+src=/dev/sda1	kind=part	fs=ext4	size=1073741824	used=209715200	method=block	target=/dev/sda1	tsize=1073741824	mount=/boot	num=1	notes=-
+src=/dev/sda2	kind=part	fs=ext4	size=494738079744	used=42949672960	method=block	target=/dev/sda3	tsize=994833334272	mount=/	num=3	notes=elastic,renumbered%202->3,grow
+[sfdisk]
+label: dos
+label-id: 0x7d1e2f3a
+unit: sectors
+sector-size: 512
+/dev/sda1 : start=2048, size=2097152, type=83, bootable
+/dev/sda2 : start=2099200, size=8388608, type=82
+/dev/sda3 : start=10487808, size=1943033856, type=83
+[lvm]
+[mkfs]
+# guard: /dev/sda1 ext4 oldest_kernel=6.1.0 needs=orphan_file:5.15 ok
+mkswap -U be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7 /dev/sda2
+# guard: /dev/sda3 ext4 oldest_kernel=6.1.0 needs=orphan_file:5.15 ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+UUID=ad1e2f3a-4b5c-4d6e-9f70-8192a3b4c5d6	keep
+UUID=9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f	keep
+UUID=be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7	keep
+resume=UUID=be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7	keep
+[postfix]
+family=deb initramfs=initramfs-tools grub=i386-pc bls=0 lvm_devices_file=keep lvm_filter=keep selinux=none cloudinit=keep os_root=/dev/sda3 boot=/dev/sda1 esp=-
+[network]
+donor=eno1/ac:1f:6b:aa:bb:cc/interfaces target=eth0 mac=b0:83:fe:00:00:21 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:b0:83:fe:00:00:21
+[verify]
+drivers=ahci,igb features=/dev/sda1:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum%20orphan_file|journal:journal_64bit%20journal_checksum_v3,/dev/sda3:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum%20orphan_file|journal:journal_64bit%20journal_checksum_v3 fstab=3 swap=be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7 esp=- cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

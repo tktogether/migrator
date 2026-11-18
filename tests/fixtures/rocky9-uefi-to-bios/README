@@ -1,0 +1,9 @@
+rocky9-uefi-to-bios — the rocky9-lvm-xfs-uefi donor (rhel, uefi, BLS) onto the same Dell R660
+booted in BIOS (legacy) mode, Secure Boot off.
+
+Exercises R2 on the rhel family in the uefi -> bios direction (no refusal since 2026-10-16):
+WARN "grub2 for bios (grub2-pc grub2-pc-modules) is installed ... by dnf in postfix", [postfix]
+grub_pkgs=grub2-pc,grub2-pc-modules and no grub_from_live= (that path is deb-only: the Live's
+grub knows no blscfg), grub=i386-pc; R5 bios_grub=128 physically first on gpt + pmbr_boot=1,
+the donor ESP kept as slot 1 (WARN "harmless, /boot/efi stays in fstab"); everything else as
+rocky9-lvm-xfs-uefi (the same sizes, identity all keep).

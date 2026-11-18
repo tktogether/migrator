@@ -1,0 +1,2 @@
+  /dev/vg0/root|vg0|root|d1zFmQ-Wi32-gApM-jfgy-5zg2-kqlU-99zxp4|8048869376|linear
+  /dev/vg0/swap|vg0|swap|sDBt6Z-Btuj-zD1c-2c5n-gA8U-KLBm-izTf9i|1073741824|linear

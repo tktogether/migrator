@@ -1,0 +1,20 @@
+rocky9-lvm-xfs-uefi — Rocky 9.4, gpt, one 120 GB PERC VD: 1 ESP 600 MiB (name "EFI System
+Partition"), 2 /boot xfs 1 GiB, 3 PV (vg rl: swap 8 GiB, root xfs 110 GiB used 20 GiB), BLS
+entries with options root=/dev/mapper/rl-root ... resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root
+rd.lvm.lv=rl/swap, lvm.conf use_devicesfile=1 + devices file, NM keyfile with mac-address,
+selinux enforcing, kernels 5.14 with pci_drivers.  Recipient: Dell R660, 2 TB sas (mpt3sas)
+with wwn, uefi WITH Secure Boot, 2 NICs bnxt_en.
+
+Exercises: R2 uefi -> uefi with secureboot=1 -> WARN "shim assumed" (no refusal), R4 gpt kept,
+R5 the ESP slot kept in place, no bios_grub on uefi, R6 gpt keeps numbers, uuids and the
+partition name (quoted in [sfdisk]), R7 PV slot elastic, root LV -l 100%FREE, block with grow
+(110 GiB fs on a 1.81 TiB LV), swap LV -L 8589934592b, esp with mkfs.vfat -i 1C2D3E4F,
+R8 mkfs not needed for block volumes but the guard comment lists REFLINK/BIGTIME/INOBTCNT/
+SPARSE_INODES against 5.14 -> ok, R10 /dev/mapper/rl-* keep in fstab and in the BLS options
+(root=, resume=), rd.lvm.lv keep, R11 rhel/dracut/x86_64-efi/bls=1/lvm_devices_file=delete/
+lvm_filter=keep/selinux=autorelabel, esp=/dev/sda1, R12 pins eth0 + eth1x (WARN 2 NICs).
+
+Checked by hand: usable 1907727 MiB, PV = 1907727 - 600 - 1024 = 1906103 MiB = 1998693859328
+bytes; root LV = floor((1998693859328 - 8589934592 - 4194304) / 4194304) x 4194304 =
+1990096584704; identity has 8 lines: 4 fstab + root=, resume=, rd.lvm.lv x2 (deduplicated
+across the two BLS entries and GRUB_CMDLINE_LINUX).

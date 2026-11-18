@@ -1,0 +1,7 @@
+# recipient: the same Dell R740 as centos7-md-lvm-xfs-bios, booted through UEFI, Secure Boot off: a bios -> uefi change on rhel
+host	role=recipient	hostname=to-XS-456	live=2026.09.20	fw=uefi	secureboot=0	bootnic=eno1	bootmac=b0:83:fe:00:00:01	bootip=10.0.1.56/24	gw=10.0.1.1	dmi_vendor=Dell Inc.	dmi_product=PowerEdge R740	dmi_serial=GH7TX22	dmi_uuid=4c4c4544-0047-4810-8037-c8c04f545832	ncpu=40	ram=274877906944	awk=mawk
+disk	dev=/dev/sda	size=999653638144	lsec=512	psec=4096	model=PERC_H730P_Mini	serial=00e1f2a3b4c5d6e7	wwn=0x6d0946606e5ad1002a1f2b3c4d5e6f70	byid=wwn-0x6d0946606e5ad1002a1f2b3c4d5e6f70	tran=sas	rm=0	ro=0	pttype=dos	ptuuid=0x0badcafe	drivers=sd,megaraid_sas	modalias=pci:v00001000d0000005Dsv00001028sd00001F47bc01sc04i00	usage=old-os:"web3 Ubuntu 20.04.6 LTS mtime=2024-03-01"
+nic	name=eno1	mac=b0:83:fe:00:00:01	driver=igb	modalias=pci:v00008086d00001521sv00001028sd00001F60bc02sc00i00	pci=0000:01:00.0	speed=1000	link=up	firmware=-	onboard=1
+nic	name=eno2	mac=b0:83:fe:00:00:02	driver=igb	modalias=pci:v00008086d00001521sv00001028sd00001F60bc02sc00i00	pci=0000:01:00.1	speed=-	link=down	firmware=-	onboard=2
+nic	name=eno3	mac=b0:83:fe:00:00:03	driver=igb	modalias=pci:v00008086d00001521sv00001028sd00001F60bc02sc00i00	pci=0000:01:00.2	speed=-	link=down	firmware=-	onboard=3
+nic	name=eno4	mac=b0:83:fe:00:00:04	driver=igb	modalias=pci:v00008086d00001521sv00001028sd00001F60bc02sc00i00	pci=0000:01:00.3	speed=-	link=down	firmware=-	onboard=4

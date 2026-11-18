@@ -1,0 +1,52 @@
+# reloca.to plan  donor=10.0.0.53/24/erp3 (Dell%20Inc.%20PowerEdge%20R650%20SN=DL65001, Rocky%20Linux%209.4%20(Blue%20Onyx))  recipient=to-XS-777 (Dell%20Inc.%20PowerEdge%20R660%20SN=JK9RL44, boot=eno1/b4:96:91:00:00:01)
+# inv_sha256=a70e654bb7db02006877c80d849fae2035fca27ec32b5765c4719b7af1271a1b:7b4421ab1de8d9a5a816c4264ef3fbf0e06bd49ebb6001bcbe7e0893b1071af0  reloca=-  live=-  date=-
+# WARN: firmware change uefi -> bios: grub2 for bios (grub2-pc grub2-pc-modules) is installed into the migrated OS by dnf in postfix, from its own repositories: they must be reachable from the recipient (grub_pkgs=)
+# WARN: donor ESP /dev/sda1 is kept as a slot on the bios recipient (harmless, /boot/efi stays in fstab)
+# WARN: recipient has 2 NICs: eth0 assignment depends on probe order; the udev pin (pins=) is best-effort
+[target]
+disk=/dev/sda id=wwn:0x6c0ffee0a1b2c3d4e5f6070809101113 size=2000398934016 lsec=512 psec=4096 ptuuid=aaaa1111-bbbb-4222-8333-cccc44445555 head=-
+currently=free
+label=gpt firmware=bios bios_grub=128 esp=1 driver=mpt3sas,bnxt_en data=ssh compress=lz4 pmbr_boot=1
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/sda3	kind=pv	fs=lvm	size=126331387904	used=-	method=pv	target=/dev/sda3	tsize=1998692810752	mount=-	num=3	notes=elastic
+src=/dev/sda1	kind=esp	fs=vfat	size=627900416	used=12582912	method=esp	target=/dev/sda1	tsize=629145600	mount=/boot/efi	num=1	notes=-
+src=/dev/rl/swap	kind=lv	fs=swap	size=8589934592	used=-	method=mkswap	target=/dev/rl/swap	tsize=8589934592	mount=swap	num=-	notes=swap-lv
+src=/dev/sda2	kind=part	fs=xfs	size=1072693248	used=293601280	method=block	target=/dev/sda2	tsize=1073741824	mount=/boot	num=2	notes=grow
+src=/dev/rl/root	kind=lv	fs=xfs	size=117738700800	used=21474836480	method=block	target=/dev/rl/root	tsize=1990096584704	mount=/	num=-	notes=100%FREE,grow
+[sfdisk]
+label: gpt
+label-id: 7e6d5c4b-3a29-4180-9f8e-7d6c5b4a3928
+unit: sectors
+sector-size: 512
+/dev/sda128 : start=2048, size=2048, type=21686148-6449-6E6F-744E-656564454649, uuid=3524E8FE-337A-509D-5A1D-804FFB39BDD8, name="BIOS boot"
+/dev/sda1 : start=4096, size=1228800, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=22222222-bbbb-4ccc-8ddd-000000000001, name="EFI System Partition"
+/dev/sda2 : start=1232896, size=2097152, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=22222222-bbbb-4ccc-8ddd-000000000002
+/dev/sda3 : start=3330048, size=3903696896, type=E6D6D379-F507-44C2-A23C-238F2A3DF928, uuid=22222222-bbbb-4ccc-8ddd-000000000003
+[lvm]
+pvcreate -ff -y --uuid Rk9pv0-1234-5678-9abc-def0-1234-56789a --norestorefile /dev/sda3
+vgcreate rl /dev/sda3
+lvcreate -y -n swap -L 8589934592b rl
+lvcreate -y -n root -l 100%FREE rl
+[mkfs]
+mkfs.vfat -F32 -i 1C2D3E4F /dev/sda1
+# guard: /dev/sda2 xfs oldest_kernel=5.14.0 needs=SPARSE_INODES:4.2,REFLINK:4.9,BIGTIME:5.10,INOBTCNT:5.10 ok
+mkswap -U e3f4a5b6-c7d8-4e9f-8a0b-2c3d4e5f6071 /dev/rl/swap
+# guard: /dev/rl/root xfs oldest_kernel=5.14.0 needs=SPARSE_INODES:4.2,REFLINK:4.9,BIGTIME:5.10,INOBTCNT:5.10 ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+/dev/mapper/rl-root	keep
+UUID=c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f	keep
+UUID=1C2D-3E4F	keep
+/dev/mapper/rl-swap	keep
+resume=/dev/mapper/rl-swap	keep
+rd.lvm.lv=rl/root	keep
+rd.lvm.lv=rl/swap	keep
+root=/dev/mapper/rl-root	keep
+[postfix]
+family=rhel initramfs=dracut grub=i386-pc bls=1 lvm_devices_file=delete lvm_filter=keep selinux=autorelabel cloudinit=keep os_root=/dev/rl/root boot=/dev/sda2 esp=/dev/sda1 grub_pkgs=grub2-pc,grub2-pc-modules
+[network]
+donor=eno1/d0:94:66:aa:bb:01/nm-keyfile target=eth0 mac=b4:96:91:00:00:01 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:b4:96:91:00:00:01,eth1x:b4:96:91:00:00:02
+[verify]
+drivers=mpt3sas,bnxt_en features=/dev/sda2:xfs:versionnum=0xb4b5%2Cfeatures2=0x18a%2Ccompat=0x0%2Cro_compat=0xd%2Cincompat=0xb%2Clog_incompat=0x0,/dev/rl/root:xfs:versionnum=0xb4b5%2Cfeatures2=0x18a%2Ccompat=0x0%2Cro_compat=0xd%2Cincompat=0xb%2Clog_incompat=0x0 fstab=4 swap=e3f4a5b6-c7d8-4e9f-8a0b-2c3d4e5f6071 esp=/dev/sda1 cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

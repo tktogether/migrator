@@ -1,0 +1,6 @@
+# LVM uses devices listed in this file.
+# Created by LVM command lvs pid 31477 at Fri Oct 16 08:13:31 2026
+# HASH=2688314401
+HOSTNAME=fixture-rocky
+VERSION=1.1.5
+IDTYPE=sys_serial IDNAME=XSDONOR0 DEVNAME=/dev/vda2 PVID=0VaEs4syn5qDW7Ju0j2faVBSMxB9cR10 PART=2

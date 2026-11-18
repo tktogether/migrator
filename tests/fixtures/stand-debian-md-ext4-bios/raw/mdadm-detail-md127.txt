@@ -1,0 +1,10 @@
+MD_LEVEL=raid1
+MD_DEVICES=2
+MD_METADATA=1.2
+MD_UUID=af3c7edd:88ed4780:b9ebe855:da9d6a1a
+MD_DEVNAME=fixture-debian:1
+MD_NAME=fixture-debian:1
+MD_DEVICE_dev_vdb3_ROLE=1
+MD_DEVICE_dev_vdb3_DEV=/dev/vdb3
+MD_DEVICE_dev_vda3_ROLE=0
+MD_DEVICE_dev_vda3_DEV=/dev/vda3

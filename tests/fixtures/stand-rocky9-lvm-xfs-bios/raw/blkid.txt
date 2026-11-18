@@ -1,0 +1,4 @@
+/dev/mapper/rl-swap: UUID="283edcc0-d9f8-4254-a185-a70cfdafdb66" TYPE="swap"
+/dev/mapper/rl-root: UUID="0f500000-0000-4000-8000-0000000000c9" BLOCK_SIZE="512" TYPE="xfs"
+/dev/vda2: UUID="0VaEs4-syn5-qDW7-Ju0j-2faV-BSMx-B9cR10" TYPE="LVM2_member" PARTUUID="7088cb2f-02"
+/dev/vda1: UUID="b0070000-0000-4000-8000-0000000000c9" BLOCK_SIZE="512" TYPE="xfs" PARTUUID="7088cb2f-01"

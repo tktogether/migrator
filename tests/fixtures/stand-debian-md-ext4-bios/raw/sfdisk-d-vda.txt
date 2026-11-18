@@ -1,0 +1,9 @@
+label: dos
+label-id: 0x432b9631
+device: /dev/vda
+unit: sectors
+sector-size: 512
+
+/dev/vda1 : start=        2048, size=     2097152, type=fd, bootable
+/dev/vda2 : start=     2099200, size=     4194304, type=82
+/dev/vda3 : start=     6293504, size=    10483712, type=fd

@@ -1,0 +1,4 @@
+# recipient: Supermicro, one 1 TB sata, bios
+host	role=recipient	hostname=to-XS-455	live=2026.09.20	fw=bios	secureboot=0	bootnic=eno1	bootmac=b0:83:fe:00:00:21	bootip=10.0.1.77/24	gw=10.0.1.1	dmi_vendor=Supermicro	dmi_product=X11SSH-F	dmi_serial=XS-455	dmi_uuid=5d6e7f80-91a2-b3c4-d5e6-f708192a3b4c	ncpu=8	ram=34359738368	awk=mawk
+disk	dev=/dev/sda	size=1000204886016	lsec=512	psec=4096	model=ST1000NM0008-2F2	serial=ZDT1CCCC	wwn=0x5000c500b0000009	byid=ata-ST1000NM0008-2F2100_ZDT1CCCC	tran=sata	rm=0	ro=0	pttype=dos	ptuuid=0x99887766	drivers=sd,ahci	modalias=pci:v00008086d0000A102sv000015D9sd00000886bc01sc06i01	usage=old-os:"old-mail Debian GNU/Linux 10 (buster) mtime=2023-11-15"
+nic	name=eno1	mac=b0:83:fe:00:00:21	driver=igb	modalias=pci:v00008086d00001533sv000015D9sd00001533bc02sc00i00	pci=0000:02:00.0	speed=1000	link=up	firmware=-	onboard=1

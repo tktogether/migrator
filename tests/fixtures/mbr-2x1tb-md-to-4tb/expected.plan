@@ -1,0 +1,39 @@
+# reloca.to plan  donor=10.0.0.12/24/web1 (Supermicro%20X11SSH-F%20SN=S123456, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-789 (Dell%20Inc.%20PowerEdge%20R340%20SN=7XK2Q33, boot=eno1/b0:83:fe:00:00:11)
+# inv_sha256=aa8ecb8a822801947ad0d07ccc21cd67547d6b8f9799db2841e1faafaaa39768:5ad0a7095c9493b31463351ccb5c8d1aefa863d6083f698302244a66f1dfd341  reloca=-  live=-  date=-
+# WARN: partition table dos -> gpt: new label-id and partition GUIDs, PARTUUID= references are rewritten to UUID=
+[target]
+disk=/dev/sda id=wwn:0x5000c500c1234567 size=4000787030016 lsec=512 psec=4096 ptuuid=1a2b3c4d-0000-4000-8000-00000000abcd head=-
+currently=old-os:"store2%20Ubuntu%2020.04.6%20LTS%20mtime=2024-03-01"
+label=gpt firmware=bios bios_grub=128 esp=- driver=ahci,igb data=ssh compress=lz4 pmbr_boot=1
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/sda2	kind=swap	fs=swap	size=8589934592	used=-	method=mkswap	target=/dev/sda2	tsize=8589934592	mount=swap	num=2	notes=-
+src=/dev/md0	kind=md	fs=ext4	size=1072693248	used=134217728	method=block	target=/dev/sda1	tsize=1073741824	mount=/boot	num=1	notes=grow
+src=/dev/md1	kind=md	fs=ext4	size=990404673536	used=442381631488	method=block	target=/dev/sda3	tsize=3991119331328	mount=/	num=3	notes=elastic,grow
+[sfdisk]
+label: gpt
+label-id: 54468FFB-9336-688F-4573-2D131446D5CC
+unit: sectors
+sector-size: 512
+/dev/sda128 : start=2048, size=2048, type=21686148-6449-6E6F-744E-656564454649, uuid=864977FF-6E6A-6BF3-07B6-79566A7FE497, name="BIOS boot"
+/dev/sda1 : start=4096, size=2097152, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=62F7669B-2CD9-B022-EE58-2045EF0258A2
+/dev/sda2 : start=2101248, size=16777216, type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F, uuid=EBFE1E43-0D57-5EF3-AF31-91684848A4D0
+/dev/sda3 : start=18878464, size=7795154944, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=781ACE73-FBF7-B2CA-7C66-E35D110A5A0B
+[lvm]
+[mkfs]
+# guard: /dev/sda1 ext4 oldest_kernel=5.10.0 needs=none ok
+mkswap -U 3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02 /dev/sda2
+# guard: /dev/sda3 ext4 oldest_kernel=5.10.0 needs=none ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+UUID=0d9e8f7a-2222-4b1c-8a3d-5e6f7a8b9c01	keep
+/dev/md0	-> UUID=6f1c9e2a-1111-4c3b-9d2e-0a1b2c3d4e50
+PARTUUID=5c3f1a2b-02	-> UUID=3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02
+resume=PARTUUID=5c3f1a2b-02	-> resume=UUID=3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02
+[postfix]
+family=deb initramfs=initramfs-tools grub=i386-pc bls=0 lvm_devices_file=keep lvm_filter=keep selinux=none cloudinit=keep os_root=/dev/sda3 boot=/dev/sda1 esp=-
+[network]
+donor=ens3/52:54:00:aa:bb:01/interfaces target=eth0 mac=b0:83:fe:00:00:11 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:b0:83:fe:00:00:11
+[verify]
+drivers=ahci,igb features=/dev/sda1:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3,/dev/sda3:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3 fstab=3 swap=3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02 esp=- cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

@@ -1,0 +1,10 @@
+stand-rocky9-lvm-xfs-uefi — the donor inventory CAPTURED by tools/reloca-test.sh (phase capture)
+from the rocky9-lvm-xfs-uefi fixture (Rocky Linux 9.8 by anaconda/kickstart, see
+tools/fixtures/README.md): gpt, ESP vfat C0DE-0E5E, /boot xfs, PV -> VG rl (swap LV, root LV
+xfs), BLS entries, dracut, NetworkManager keyfile on ens3 (no MAC pinned), SELinux enforcing,
+lvm.conf with the devices file. recipient.inv is the stand's synthetic 20 GiB uefi VM (as for the
+debian uefi fixture). expected.plan = plan_compute over the two: rhel/dracut/x86_64-efi/bls=1,
+devices file deleted, autorelabel, every fstab spec and BLS token kept (root=/dev/mapper/rl-root,
+resume=, rd.lvm.lv=), the root LV by block with grow, mkfs.vfat -i C0DE0E5E for the ESP.
+Regenerate after a re-capture: plan_compute donor.inv recipient.inv auto > expected.plan
+(swap/PV/VG/LV UUIDs are anaconda's and change with every rebuild of the fixture).

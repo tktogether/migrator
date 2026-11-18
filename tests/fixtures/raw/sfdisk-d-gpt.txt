@@ -1,0 +1,11 @@
+label: gpt
+label-id: 1F2E3D4C-5B6A-4988-9A0B-1C2D3E4F5A6B
+device: /dev/nvme0n1
+unit: sectors
+first-lba: 34
+last-lba: 1000215182
+sector-size: 512
+
+/dev/nvme0n1p1 : start=        2048, size=     1230848, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=A1B2C3D4-0001-4000-8000-000000000001, name="EFI System Partition"
+/dev/nvme0n1p2 : start=     1232896, size=     2097152, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=A1B2C3D4-0002-4000-8000-000000000002, name="boot, with comma"
+/dev/nvme0n1p3 : start=     3330048, size=   996884480, type=E6D6D379-F507-44C2-A23C-238F2A3DF928, uuid=A1B2C3D4-0003-4000-8000-000000000003, attrs="LegacyBIOSBootable"

@@ -1,0 +1,27 @@
+# captured by tools/reloca-test.sh: fixture debian-gpt-lvm-xfs-uefi (d2ab59850cbe), live 20260922c, 2026-09-30
+# reloca.to inventory role=donor date=2026-09-30T13:21:00Z host=XS-Live-OS
+host	role=donor	hostname=XS-Live-OS	live=20260922c	fw=uefi	secureboot=0	bootnic=eth0	bootmac=52:54:00:ab:cd:01	bootip=10.0.2.15/24	gw=10.0.2.2	dmi_vendor=QEMU	dmi_product=Standard PC (i440FX + PIIX, 1996)	dmi_serial=XS-STAND-DONOR	dmi_uuid=	ncpu=2	ram=3116974080	awk=mawk
+disk	dev=/dev/vda	size=10737418240	lsec=512	psec=512	model=	serial=XSDONOR0	wwn=	byid=virtio-XSDONOR0	tran=virtio	rm=0	ro=0	pttype=gpt	ptuuid=7a1e2d3c-4b5a-4968-8776-655443322110	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-uefi Debian GNU/Linux 12 (bookworm) mtime=2026-09-30
+part	dev=/dev/vda1	disk=/dev/vda	num=1	start=2048	size=1048576	type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B	bootable=0	partuuid=7a1e2d3c-0001-4000-8000-000000000001	name=EFI System Partition	fstype=vfat	ptype=primary
+part	dev=/dev/vda2	disk=/dev/vda	num=2	start=1050624	size=2097152	type=0FC63DAF-8483-4772-8E79-3D69D8477DE4	bootable=0	partuuid=7a1e2d3c-0002-4000-8000-000000000002	name=	fstype=ext4	ptype=primary
+part	dev=/dev/vda3	disk=/dev/vda	num=3	start=3147776	size=17821696	type=E6D6D379-F507-44C2-A23C-238F2A3DF928	bootable=0	partuuid=7a1e2d3c-0003-4000-8000-000000000003	name=	fstype=LVM2_member	ptype=primary
+pv	dev=/dev/vda3	uuid=fxPV00-uefi-Lvm2-Xfs0-Gpt0-Esp0-000001	vg=vg0	size=9122611200	pe_start=1048576
+vg	name=vg0	uuid=0IeSnV-CMPZ-kSQA-czzG-yo6N-SvhN-dSdeup	size=9122611200	free=0	pvs=/dev/vda3
+lv	path=/dev/vg0/root	vg=vg0	name=root	uuid=d1zFmQ-Wi32-gApM-jfgy-5zg2-kqlU-99zxp4	size=8048869376	segtype=linear
+lv	path=/dev/vg0/swap	vg=vg0	name=swap	uuid=sDBt6Z-Btuj-zD1c-2c5n-gA8U-KLBm-izTf9i	size=1073741824	segtype=linear
+fs	dev=/dev/vda1	type=vfat	uuid=C0DE-0E5F	label=EFI	fssize=536870912	used=-	inodes_used=-	inodes_total=-	min=-	state=-	bs=-	isz=-	features=-	journal_features=-	ssz=-	dirbs=-	masks=-	volid=C0DE0E5F
+fs	dev=/dev/vda2	type=ext4	uuid=b0070000-e4f4-4b00-8000-000000000002	label=boot	fssize=1073741824	used=114298880	inodes_used=342	inodes_total=65536	min=115699712	state=clean	bs=4096	isz=256	features=has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum	journal_features=journal_incompat_revoke,journal_64bit,journal_checksum_v3	ssz=-	dirbs=-	masks=features:has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum|journal:journal_incompat_revoke journal_64bit journal_checksum_v3	volid=-
+fs	dev=/dev/vg0/root	type=xfs	uuid=0f500000-0eaf-4a1c-8000-000000000003	label=root	fssize=8048869376	used=1027010560	inodes_used=17621	inodes_total=17920	min=-	state=clean	bs=4096	isz=512	features=V5,NLINK,DIRV2,ATTR,ALIGN,LOGV2,EXTFLG,MOREBITS,ATTR2,LAZYSBCOUNT,PROJID32BIT,CRC,FTYPE,FINOBT,SPARSE_INODES,REFLINK,INOBTCNT,BIGTIME	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0,ro_compat=0xd,incompat=0xb,log_incompat=0	volid=-
+swap	dev=/dev/vg0/swap	uuid=5a5a0000-0eaf-4a1c-8000-000000000004	label=swap	size=1073741824
+nic	name=eth0	mac=52:54:00:ab:cd:01	driver=virtio_net	modalias=virtio:d00000001v00001AF4,pci:v00001AF4d00001000sv00001AF4sd00000001bc02sc00i00	pci=0000:00:03.0	speed=-	link=up	firmware=-	onboard=-
+os	root=/dev/mapper/vg0-root	id=debian	like=	version=12	family=deb	pretty=Debian GNU/Linux 12 (bookworm)	hostname=fixture-uefi	initramfs=initramfs-tools	grub=grub2	grubcfg=/boot/grub/grub.cfg	bls=0	efidir=/boot/efi	selinux=-	cloudinit=0	netcfg=networkd	primary_nic=ens3	primary_mac=-	primary_ip=-	gw=-	ifnames=predictable	biosdevname=0	machine_id=f1c5e2a0d3b44c6f8a1b2c3d4e5f6071	kernels=1
+kernel	version=6.1.0-50-amd64	vmlinuz=/boot/vmlinuz-6.1.0-50-amd64	initrd=/boot/initrd.img-6.1.0-50-amd64	aliases=/lib/modules/6.1.0-50-amd64/modules.alias	builtin=/lib/modules/6.1.0-50-amd64/modules.builtin	pci_drivers=-
+fstab	spec=/dev/mapper/vg0-root	dev=/dev/mapper/vg0-root	mount=/	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=b0070000-e4f4-4b00-8000-000000000002	dev=/dev/vda2	mount=/boot	type=ext4	opts=defaults	dump=0	pass=2	nofail=0
+fstab	spec=UUID=C0DE-0E5F	dev=/dev/vda1	mount=/boot/efi	type=vfat	opts=umask=0077	dump=0	pass=1	nofail=0
+fstab	spec=/dev/mapper/vg0-swap	dev=/dev/mapper/vg0-swap	mount=none	type=swap	opts=sw	dump=0	pass=0	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=console=tty0 console=ttyS0,115200
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX_DEFAULT	value=
+mdconf	file=-	arrays=0	lines=-
+lvmconf	file=/etc/lvm/lvm.conf	filter=-	global_filter=-	use_devicesfile=-	devices_file=0
+netcfg	file=/etc/systemd/network/10-wired.network	kind=networkd	iface=ens3	mac=-	primary=1

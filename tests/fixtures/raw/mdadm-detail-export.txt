@@ -1,0 +1,10 @@
+MD_LEVEL=raid1
+MD_DEVICES=2
+MD_METADATA=1.2
+MD_UUID=d2e3f4a5:b6c7d8e9:f0a1b2c3:d4e5f6a7
+MD_DEVNAME=126
+MD_NAME=localhost:pv00
+MD_DEVICE_dev_sda2_ROLE=0
+MD_DEVICE_dev_sda2_DEV=/dev/sda2
+MD_DEVICE_dev_sdb2_ROLE=1
+MD_DEVICE_dev_sdb2_DEV=/dev/sdb2

@@ -1,0 +1,4 @@
+# reloca.to plan  donor=10.0.0.44/24/mail2 (Supermicro%20X11SSL-F%20SN=S555555, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-455 (Supermicro%20X11SSH-F%20SN=XS-455, boot=eno1/b0:83:fe:00:00:21)
+# inv_sha256=0256ecfed2f8982215d971dbb5a93a2dc96f4cd7f6f4316c70bb7075badbe5da:333c65789b7b63ab3cee50faa599417e409580a850a0b505a054eb659479eb23  reloca=-  live=-  date=-
+# WARN: partitions are renumbered (physical order on dos): PARTUUID= and /dev/sdaN references are rewritten to UUID=
+# ERROR: fstab entry /dev/sdc1 /data has no target and no nofail: drop it on the donor or add nofail

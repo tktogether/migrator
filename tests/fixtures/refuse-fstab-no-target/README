@@ -1,0 +1,4 @@
+refuse-fstab-no-target — the debian-boot-root-swap-bios donor plus an fstab line
+"/dev/sdc1 /data ext4 defaults 0 2" whose disk is not in the inventory (dev=-) and has no nofail.
+Exercises R10: an fstab spec without a target and without nofail is refused (exit 4); with
+nofail it would be removed with a WARN instead (asserted on the fly by the test).

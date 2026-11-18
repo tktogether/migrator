@@ -1,0 +1,42 @@
+# reloca.to plan  donor=10.0.0.37/24/app7 (Supermicro%20SYS-5019S-M%20SN=S987654, Ubuntu%2022.04.4%20LTS)  recipient=to-XS-901 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-901, boot=eth0/52:54:00:cc:dd:01)
+# inv_sha256=1017fb7e8a35f91659b92469bd922c06128b5c32f78663634c867717d7d335c2:c51d2ea0462dfe79d411249547100b3a8f9109aa20e8b17533bdaad345ac56e8  reloca=-  live=-  date=-
+# WARN: firmware change uefi -> bios: grub for bios is installed from the Live (grub_from_live=1); afterwards on the donor OS: apt install grub-pc and purge the other
+# WARN: donor ESP /dev/nvme0n1p1 is kept as a slot on the bios recipient (harmless, /boot/efi stays in fstab)
+# WARN: recipient modalias not checked against the donor kernels (no pci_drivers in the kernel records): drivers virtio_blk,virtio_pci,virtio_net are assumed present
+[target]
+disk=/dev/vda id=model:- size=400000000000 lsec=512 psec=512 ptuuid=- head=-
+currently=free
+label=gpt firmware=bios bios_grub=128 esp=1 driver=virtio_blk,virtio_pci,virtio_net data=ssh compress=lz4 pmbr_boot=1 grub_from_live=1
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/nvme0n1p1	kind=esp	fs=vfat	size=535805952	used=6291456	method=esp	target=/dev/vda1	tsize=536870912	mount=/boot/efi	num=1	notes=-
+src=/dev/nvme0n1p2	kind=part	fs=ext4	size=2147483648	used=314572800	method=block	target=/dev/vda2	tsize=2147483648	mount=/boot	num=2	notes=-
+src=/dev/nvme0n1p3	kind=part	fs=ext4	size=509424435200	used=128849018880	method=files	target=/dev/vda3	tsize=397311737856	mount=/	num=3	notes=elastic
+[sfdisk]
+label: gpt
+label-id: 3f2e1d0c-9b8a-4776-8554-33221100ffee
+unit: sectors
+sector-size: 512
+/dev/vda128 : start=2048, size=2048, type=21686148-6449-6E6F-744E-656564454649, uuid=80D4689B-5F52-0A13-C9B9-8B8526335AE1, name="BIOS boot"
+/dev/vda1 : start=4096, size=1048576, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=11111111-aaaa-4bbb-8ccc-000000000001
+/dev/vda2 : start=1052672, size=4194304, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=11111111-aaaa-4bbb-8ccc-000000000002
+/dev/vda3 : start=5246976, size=775999488, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=11111111-aaaa-4bbb-8ccc-000000000003
+[lvm]
+[mkfs]
+mkfs.vfat -F32 -i A1B2C3D4 /dev/vda1
+# guard: /dev/vda2 ext4 oldest_kernel=5.15.0 needs=none ok
+mkfs.ext4 -F -U 6b7c8d9e-0f1a-4b2c-9d3e-4f5a6b7c8d9e -b 4096 -I 256 -N 31088640 -O none,has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum /dev/vda3
+# guard: /dev/vda3 ext4 oldest_kernel=5.15.0 needs=none ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+UUID=6b7c8d9e-0f1a-4b2c-9d3e-4f5a6b7c8d9e	keep
+UUID=5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d	keep
+UUID=A1B2-C3D4	keep
+/swapfile	keep
+[postfix]
+family=deb initramfs=initramfs-tools grub=i386-pc bls=0 lvm_devices_file=keep lvm_filter=keep selinux=none cloudinit=disable os_root=/dev/vda3 boot=/dev/vda2 esp=/dev/vda1
+[network]
+donor=enp1s0/52:54:00:11:22:33/netplan target=eth0 mac=52:54:00:cc:dd:01 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:52:54:00:cc:dd:01
+[verify]
+drivers=virtio_blk,virtio_pci,virtio_net features=/dev/vda2:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3,/dev/vda3:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3 fstab=4 swap=- esp=/dev/vda1 cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

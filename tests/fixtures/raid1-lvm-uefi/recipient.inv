@@ -1,0 +1,5 @@
+# recipient: the stand's uefi VM with TWO identical 20 GiB virtio disks (XSRECIP0, XSRECIP1): raid=1 fixture
+host	role=recipient	hostname=to-XS-2	live=20260922c	fw=uefi	secureboot=0	bootnic=eth0	bootmac=52:54:00:cc:dd:01	bootip=10.0.2.15/24	gw=10.0.2.2	dmi_vendor=QEMU	dmi_product=Standard PC (i440FX + PIIX, 1996)	dmi_serial=XS-STAND-RECIP	dmi_uuid=	ncpu=2	ram=2082107392	awk=mawk
+disk	dev=/dev/vda	size=21474836480	lsec=512	psec=512	model=	serial=XSRECIP0	wwn=	byid=virtio-XSRECIP0	tran=virtio	rm=0	ro=0	pttype=-	ptuuid=	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=free
+disk	dev=/dev/vdb	size=21474836480	lsec=512	psec=512	model=	serial=XSRECIP1	wwn=	byid=virtio-XSRECIP1	tran=virtio	rm=0	ro=0	pttype=-	ptuuid=	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=free
+nic	name=eth0	mac=52:54:00:cc:dd:01	driver=virtio_net	modalias=virtio:d00000001v00001AF4,pci:v00001AF4d00001000sv00001AF4sd00000001bc02sc00i00	pci=0000:00:07.0	speed=-	link=up	firmware=-	onboard=-

@@ -1,0 +1,18 @@
+debian-md-ext4-bios — Debian 11, dos, 2x1 TB sata (sda, sdb), /boot ext4 on md0 (metadata 1.2,
+data_offset 2048), swap on sda2 (8 GiB), / ext4 on md1 (data_offset 262144, 922 GiB, used 412 GiB),
+fstab by UUID except /boot as /dev/md0, ifupdown on ens3.  Recipient: KVM, one 960 GB virtio disk
+(no wwn/serial -> id=model:-), bios, 1 NIC, kernel records carry pci_drivers.
+
+Exercises: R1 auto disk + tuple id, R3 base disk = disk of /boot (md member), mirror members of
+sdb dropped, R4 dos kept (< 2 TiB, bios), R5 md-backed slots = max(member, md size) and root slot
+elastic last, R6 numbers kept (physical order == donor order), fd -> 83, one bootable flag on
+/boot, R7 /boot block (grow: 1024 MiB slot > 1023 MiB md), root files (fs 922 GiB > 906 GiB slot),
+R8 explicit mkfs.ext4 -O none,<donor features> -N inodes_total, guard comment, R9 drivers with
+virtio-pci -> virtio_pci and the modalias check green, R10 /dev/md0 -> UUID=, UUID= kept,
+R11 postfix deb/initramfs-tools/i386-pc, R12 single NIC (no WARN), R13 verify masks, R14 order
+swap, /boot, / last. No warnings at all.
+
+Checked by hand in expected.plan: usable = floor(960197124096/MiB) - 2 MiB = 915713 MiB; elastic
+vda3 = 915713 - 1024 - 8192 = 906497 MiB = 950530998272 bytes = 1856505856 sectors starting at
+18876416 (= 2048 + 2097152 + 16777216); files requirement 412 GiB x 1.10 + 512 MiB = 487156665548
+< tsize; mkfs.ext4 -N 60456960 (inodes_total > inodes_used x 1.2); label-id 0x5c3f1a2b kept.

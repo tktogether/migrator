@@ -1,0 +1,3 @@
+refuse-btrfs — Debian 12 with / on btrfs (and /boot ext4).
+Exercises R7: btrfs on a volume that must be migrated is refused (exit 4) before any layout is
+printed beyond the header.

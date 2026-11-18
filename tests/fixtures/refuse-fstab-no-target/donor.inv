@@ -1,0 +1,21 @@
+# donor: as debian-boot-root-swap-bios plus an fstab line /dev/sdc1 /data without nofail (the disk is not in the inventory): refused
+host	role=donor	hostname=mail2	live=2026.09.20	fw=bios	secureboot=0	bootnic=eno1	bootmac=ac:1f:6b:aa:bb:cc	bootip=10.0.0.44/24	gw=10.0.0.1	dmi_vendor=Supermicro	dmi_product=X11SSL-F	dmi_serial=S555555	dmi_uuid=1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901	ncpu=4	ram=17179869184	awk=mawk
+disk	dev=/dev/sda	size=500107862016	lsec=512	psec=4096	model=Samsung SSD 860 EVO 500GB	serial=S3Z2NB0K123456X	wwn=0x5002538e40123456	byid=ata-Samsung_SSD_860_EVO_500GB_S3Z2NB0K123456X	tran=sata	rm=0	ro=0	pttype=dos	ptuuid=0x7d1e2f3a	drivers=sd,ahci	modalias=pci:v00008086d0000A102sv000015D9sd00000886bc01sc06i01	usage=fs:ext4
+part	dev=/dev/sda1	disk=/dev/sda	num=1	start=2048	size=2097152	type=83	bootable=1	partuuid=7d1e2f3a-01	name=-	fstype=ext4	ptype=primary
+part	dev=/dev/sda2	disk=/dev/sda	num=2	start=2099200	size=966285312	type=83	bootable=0	partuuid=7d1e2f3a-02	name=-	fstype=ext4	ptype=primary
+part	dev=/dev/sda3	disk=/dev/sda	num=3	start=968384512	size=8388608	type=82	bootable=0	partuuid=7d1e2f3a-03	name=-	fstype=swap	ptype=primary
+fs	dev=/dev/sda1	type=ext4	uuid=9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f	label=	fssize=1073741824	used=209715200	inodes_used=330	inodes_total=65536	min=-	state=clean	bs=4096	isz=256	features=has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum,orphan_file	journal_features=journal_64bit,journal_checksum_v3	ssz=-	dirbs=-	masks=features:has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum orphan_file|journal:journal_64bit journal_checksum_v3	volid=-
+fs	dev=/dev/sda2	type=ext4	uuid=ad1e2f3a-4b5c-4d6e-9f70-8192a3b4c5d6	label=	fssize=494738079744	used=42949672960	inodes_used=620000	inodes_total=30203904	min=47244640256	state=clean	bs=4096	isz=256	features=has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum,orphan_file	journal_features=journal_64bit,journal_checksum_v3	ssz=-	dirbs=-	masks=features:has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum orphan_file|journal:journal_64bit journal_checksum_v3	volid=-
+swap	dev=/dev/sda3	uuid=be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7	label=	size=4294967296
+nic	name=eno1	mac=ac:1f:6b:aa:bb:cc	driver=igb	modalias=pci:v00008086d00001533sv000015D9sd00001533bc02sc00i00	pci=0000:02:00.0	speed=1000	link=up	firmware=-	onboard=1
+os	root=/dev/sda2	id=debian	like=	version=12	family=deb	pretty=Debian GNU/Linux 12 (bookworm)	hostname=mail2	initramfs=initramfs-tools	grub=grub2	grubcfg=/boot/grub/grub.cfg	bls=0	efidir=-	selinux=-	cloudinit=0	netcfg=interfaces	primary_nic=eno1	primary_mac=ac:1f:6b:aa:bb:cc	primary_ip=10.0.0.44/24	gw=10.0.0.1	ifnames=predictable	biosdevname=0	machine_id=3c4d5e6f708192a3b4c5d6e7f8091a2b	kernels=1
+kernel	version=6.1.0-25-amd64	vmlinuz=/boot/vmlinuz-6.1.0-25-amd64	initrd=/boot/initrd.img-6.1.0-25-amd64	aliases=/lib/modules/6.1.0-25-amd64/modules.alias	builtin=/lib/modules/6.1.0-25-amd64/modules.builtin	pci_drivers=ahci:ahci,igb:igb,virtio_blk:virtio_blk,virtio-pci:virtio_pci
+fstab	spec=UUID=ad1e2f3a-4b5c-4d6e-9f70-8192a3b4c5d6	dev=/dev/sda2	mount=/	type=ext4	opts=errors=remount-ro	dump=0	pass=1	nofail=0
+fstab	spec=UUID=9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f	dev=/dev/sda1	mount=/boot	type=ext4	opts=defaults	dump=0	pass=2	nofail=0
+fstab	spec=UUID=be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7	dev=/dev/sda3	mount=none	type=swap	opts=sw	dump=0	pass=0	nofail=0
+fstab	spec=/dev/sdc1	dev=-	mount=/data	type=ext4	opts=defaults	dump=0	pass=2	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX_DEFAULT	value=quiet
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=resume=UUID=be2f3a4b-5c6d-4e7f-8091-a2b3c4d5e6f7
+mdconf	file=-	arrays=0	lines=-
+lvmconf	file=-	filter=-	global_filter=-	use_devicesfile=-	devices_file=0
+netcfg	file=/etc/network/interfaces	kind=interfaces	iface=eno1	mac=-	primary=1

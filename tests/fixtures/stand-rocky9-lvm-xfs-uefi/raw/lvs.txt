@@ -1,0 +1,2 @@
+  /dev/rl/root|rl|root|mF4jZE-f173-srna-qOG7-AuVn-7cTm-F5p0sL|10104078336|linear
+  /dev/rl/swap|rl|swap|b56XTv-VfEC-IJfs-0AzD-Nw9c-qD0D-h4z1Fv|1073741824|linear

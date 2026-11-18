@@ -1,0 +1,56 @@
+# reloca.to plan  donor=10.0.0.21/24/db1 (Dell%20Inc.%20PowerEdge%20R640%20SN=CN12345, CentOS%20Linux%207%20(Core))  recipient=to-XS-456 (Dell%20Inc.%20PowerEdge%20R740%20SN=GH7TX22, boot=eno1/b0:83:fe:00:00:01)
+# inv_sha256=cd3dbacad7ada27cc9d4bfba22fbe5b3b3fbb7b4eff8a799056728b966b4c7f3:5d443bfb51abe6bd3c0c11f278690652f132e08eab702d530387da2a866d8c2c  reloca=-  live=-  date=-
+# WARN: partitions of other donor disks are appended to /dev/sda as extra slots: /dev/sdb2(swap)
+# WARN: partitions are renumbered (physical order on dos): PARTUUID= and /dev/sdaN references are rewritten to UUID=
+# WARN: recipient has 4 NICs: eth0 assignment depends on probe order; the udev pin (pins=) is best-effort
+[target]
+disk=/dev/sda id=wwn:0x6d0946606e5ad1002a1f2b3c4d5e6f70 size=999653638144 lsec=512 psec=4096 ptuuid=0x0badcafe head=-
+currently=old-os:"web3%20Ubuntu%2020.04.6%20LTS%20mtime=2024-03-01"
+label=dos firmware=bios bios_grub=- esp=- driver=megaraid_sas,igb data=ssh compress=lz4
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/md126	kind=pv	fs=lvm	size=1994894868480	used=-	method=pv	target=/dev/sda4	tsize=989987864576	mount=-	num=4	notes=elastic,renumbered%203->4
+src=/dev/centos/swap	kind=lv	fs=swap	size=4294967296	used=-	method=mkswap	target=/dev/centos/swap	tsize=4294967296	mount=swap	num=-	notes=swap-lv
+src=/dev/sda2	kind=swap	fs=swap	size=4294967296	used=-	method=mkswap	target=/dev/sda2	tsize=4294967296	mount=swap	num=2	notes=-
+src=/dev/sdb2	kind=swap	fs=swap	size=4294967296	used=-	method=mkswap	target=/dev/sda3	tsize=4294967296	mount=swap	num=3	notes=from-other-disk,renumbered%202->3
+src=/dev/md127	kind=md	fs=xfs	size=1072693248	used=125829120	method=block	target=/dev/sda1	tsize=1073741824	mount=/boot	num=1	notes=grow
+src=/dev/centos/root	kind=lv	fs=xfs	size=1990583123968	used=161061273600	method=files	target=/dev/centos/root	tsize=985686605824	mount=/	num=-	notes=100%FREE
+[sfdisk]
+label: dos
+label-id: 0x000a1b2c
+unit: sectors
+sector-size: 512
+/dev/sda1 : start=2048, size=2097152, type=83, bootable
+/dev/sda2 : start=2099200, size=8388608, type=82
+/dev/sda3 : start=10487808, size=8388608, type=82
+/dev/sda4 : start=18876416, size=1933570048, type=8e
+[lvm]
+pvcreate -ff -y --uuid Zx1yQ2-abcd-efgh-ijkl-mnop-qrst-uvwxYZ --norestorefile /dev/sda4
+vgcreate centos /dev/sda4
+lvcreate -y -n swap -L 4294967296b centos
+lvcreate -y -n root -l 100%FREE centos
+[mkfs]
+# guard: /dev/sda1 xfs oldest_kernel=3.10.0 needs=none ok
+mkswap -U b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e /dev/sda2
+mkswap -U c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f /dev/sda3
+mkswap -U e4f5a6b7-c8d9-4e0f-9a1b-2c3d4e5f6071 /dev/centos/swap
+mkfs.xfs -f -m crc=1,finobt=1,reflink=0,rmapbt=0,bigtime=0,inobtcount=0,uuid=d3e4f5a6-b7c8-4d9e-8f0a-1b2c3d4e5f60 -i sparse=0,nrext64=0,size=512 -n ftype=1,size=4096 -b size=4096 -s size=512 /dev/centos/root
+# guard: /dev/centos/root xfs oldest_kernel=3.10.0 needs=none ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+/dev/mapper/centos-root	keep
+UUID=8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d	keep
+/dev/mapper/centos-swap	keep
+UUID=b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e	keep
+UUID=c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f	keep
+rd.md.uuid=9b8a7c6d:5e4f3a2b:1c0d9e8f:7a6b5c4d	remove
+rd.md.uuid=2e3f4a5b:6c7d8e9f:0a1b2c3d:4e5f6a7b	remove
+rd.lvm.lv=centos/root	keep
+rd.lvm.lv=centos/swap	keep
+[postfix]
+family=rhel initramfs=dracut grub=i386-pc bls=0 lvm_devices_file=keep lvm_filter=neutralise selinux=autorelabel cloudinit=keep os_root=/dev/centos/root boot=/dev/sda1 esp=-
+[network]
+donor=eno1/3c:ec:ef:11:22:33/ifcfg target=eth0 mac=b0:83:fe:00:00:01 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:b0:83:fe:00:00:01,eth1x:b0:83:fe:00:00:02,eth2x:b0:83:fe:00:00:03,eth3x:b0:83:fe:00:00:04
+[verify]
+drivers=megaraid_sas,igb features=/dev/sda1:xfs:versionnum=0xb4b5%2Cfeatures2=0x18a%2Ccompat=0x0%2Cro_compat=0x1%2Cincompat=0x1%2Clog_incompat=0x0,/dev/centos/root:xfs:versionnum=0xb4b5%2Cfeatures2=0x18a%2Ccompat=0x0%2Cro_compat=0x1%2Cincompat=0x1%2Clog_incompat=0x0 fstab=5 swap=b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e,c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f,e4f5a6b7-c8d9-4e0f-9a1b-2c3d4e5f6071 esp=- cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

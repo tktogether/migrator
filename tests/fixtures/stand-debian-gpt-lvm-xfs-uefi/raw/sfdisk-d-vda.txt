@@ -1,0 +1,11 @@
+label: gpt
+label-id: 7A1E2D3C-4B5A-4968-8776-655443322110
+device: /dev/vda
+unit: sectors
+first-lba: 2048
+last-lba: 20971486
+sector-size: 512
+
+/dev/vda1 : start=        2048, size=     1048576, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, uuid=7A1E2D3C-0001-4000-8000-000000000001, name="EFI System Partition"
+/dev/vda2 : start=     1050624, size=     2097152, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=7A1E2D3C-0002-4000-8000-000000000002
+/dev/vda3 : start=     3147776, size=    17821696, type=E6D6D379-F507-44C2-A23C-238F2A3DF928, uuid=7A1E2D3C-0003-4000-8000-000000000003

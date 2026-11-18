@@ -1,0 +1,10 @@
+[Match]
+Name=enp1s0
+MACAddress=52:54:00:aa:bb:cc
+
+[Network]
+Address=192.0.2.10/24
+DNS=192.0.2.1
+
+[Route]
+Gateway=192.0.2.1

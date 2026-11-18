@@ -1,0 +1,3 @@
+# reloca.to plan  donor=10.0.0.48/24/nas4 (Supermicro%20X11SSL-F%20SN=S666666, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-480 (Supermicro%20X11SSH-F%20SN=XS-480, boot=eno1/b0:83:fe:00:00:21)
+# inv_sha256=2a688ed1ae4372396e4de00fae3743a2a42091ae0826f5c4f7dca76205aa28aa:efbd902938e11ea9f34d807d240575126b72d4f25ecb1bfd4ac9b444014aa7e0  reloca=-  live=-  date=-
+# ERROR: /dev/sda2 is btrfs: only ext2/3/4 and xfs are migrated in v1

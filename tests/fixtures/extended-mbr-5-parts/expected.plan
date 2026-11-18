@@ -1,0 +1,50 @@
+# reloca.to plan  donor=10.0.0.61/24/files1 (Supermicro%20X9SCL%20SN=S222222, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-611 (Supermicro%20X11SSH-F%20SN=XS-611, boot=eno1/b0:83:fe:00:00:21)
+# inv_sha256=35aa995d86e0ed2d695920153be16490a5f844f8a554d4b30e76ca801ac2f8a7:e335bd6967b216924900c6a5054a92348cbb736765a6bd2a7abf3343f6e33b46  reloca=-  live=-  date=-
+# WARN: 5 slots need more than 4 primary partitions: gpt instead of dos (no extended/logical partitions)
+# WARN: partition table dos -> gpt: new label-id and partition GUIDs, PARTUUID= references are rewritten to UUID=
+# WARN: partitions are renumbered (physical order on gpt): PARTUUID= and /dev/sdaN references are rewritten to UUID=
+# WARN: /dev/sda6 (ext4) is dirty on the donor: block copy with partclone -I, fsck/journal replay on the copy
+[target]
+disk=/dev/sda id=wwn:0x5000c500b0000009 size=1000204886016 lsec=512 psec=4096 ptuuid=0x99887766 head=-
+currently=old-os:"old-mail%20Debian%20GNU/Linux%2010%20(buster)%20mtime=2023-11-15"
+label=gpt firmware=bios bios_grub=128 esp=- driver=ahci,igb data=ssh compress=lz4 pmbr_boot=1
+[volumes]
+# src kind fs size used method target tsize mount num notes  (transfer order: small first, root last)
+src=/dev/sda7	kind=swap	fs=swap	size=8589934592	used=-	method=mkswap	target=/dev/sda3	tsize=8589934592	mount=swap	num=3	notes=renumbered%207->3
+src=/dev/sda1	kind=part	fs=ext4	size=1073741824	used=157286400	method=block	target=/dev/sda1	tsize=1073741824	mount=/boot	num=1	notes=-
+src=/dev/sda8	kind=part	fs=ext4	size=32212254720	used=10737418240	method=block	target=/dev/sda4	tsize=32212254720	mount=/home	num=4	notes=renumbered%208->4
+src=/dev/sda6	kind=part	fs=ext4	size=107374182400	used=32212254720	method=block	target=/dev/sda2	tsize=107374182400	mount=/var	num=2	notes=renumbered%206->2,dirty
+src=/dev/sda5	kind=part	fs=ext4	size=161061273600	used=64424509440	method=block	target=/dev/sda5	tsize=850950881280	mount=/	num=5	notes=elastic,grow
+[sfdisk]
+label: gpt
+label-id: 05283BA6-B33B-BD0C-8841-749C3B07AF06
+unit: sectors
+sector-size: 512
+/dev/sda128 : start=2048, size=2048, type=21686148-6449-6E6F-744E-656564454649, uuid=512D2973-2889-C392-9698-76C6A156AC90, name="BIOS boot"
+/dev/sda1 : start=4096, size=2097152, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=6078D556-FD1E-4B20-4C1E-BBCF01DEE52A
+/dev/sda2 : start=2101248, size=209715200, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=84B88F1A-40AF-25B1-A652-44D58989A07C
+/dev/sda3 : start=211816448, size=16777216, type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F, uuid=3921A42F-E717-7996-DB77-A0AFD2C2C4A5
+/dev/sda4 : start=228593664, size=62914560, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=C690307C-36D6-9597-854B-118008ECC1CB
+/dev/sda5 : start=291508224, size=1662013440, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=157F81E0-8441-D135-7418-5874D2A07219
+[lvm]
+[mkfs]
+# guard: /dev/sda1 ext4 oldest_kernel=5.10.0 needs=none ok
+# guard: /dev/sda2 ext4 oldest_kernel=5.10.0 needs=none ok
+mkswap -U c4d5e6f7-0819-42a3-b4c5-d6e7f8091a2b -L swap /dev/sda3
+# guard: /dev/sda4 ext4 oldest_kernel=5.10.0 needs=none ok
+# guard: /dev/sda5 ext4 oldest_kernel=5.10.0 needs=none ok
+[identity]
+# spec<TAB>keep | -> new spec | remove | + fstab line to add
+UUID=a2b3c4d5-e6f7-4081-92a3-b4c5d6e7f809	keep
+UUID=f1a2b3c4-d5e6-4f70-8192-a3b4c5d6e7f8	keep
+UUID=b3c4d5e6-f708-4192-a3b4-c5d6e7f8091a	keep
+UUID=d5e6f708-192a-43b4-c5d6-e7f8091a2b3c	keep
+UUID=c4d5e6f7-0819-42a3-b4c5-d6e7f8091a2b	keep
+resume=/dev/sda7	-> resume=UUID=c4d5e6f7-0819-42a3-b4c5-d6e7f8091a2b
+[postfix]
+family=deb initramfs=initramfs-tools grub=i386-pc bls=0 lvm_devices_file=keep lvm_filter=keep selinux=none cloudinit=keep os_root=/dev/sda5 boot=/dev/sda1 esp=-
+[network]
+donor=enp3s0/00:25:90:aa:bb:cc/interfaces target=eth0 mac=b0:83:fe:00:00:21 cmdline=net.ifnames=0%20biosdevname=0 pin=1
+pins=eth0:b0:83:fe:00:00:21
+[verify]
+drivers=ahci,igb features=/dev/sda1:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3,/dev/sda2:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3,/dev/sda4:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3,/dev/sda5:ext4:features:has_journal%20ext_attr%20resize_inode%20dir_index%20filetype%20extent%2064bit%20flex_bg%20sparse_super%20large_file%20huge_file%20dir_nlink%20extra_isize%20metadata_csum|journal:journal_64bit%20journal_checksum_v3 fstab=5 swap=c4d5e6f7-0819-42a3-b4c5-d6e7f8091a2b esp=- cmdline_forbid=rd.md.uuid,rd.md=,/dev/md

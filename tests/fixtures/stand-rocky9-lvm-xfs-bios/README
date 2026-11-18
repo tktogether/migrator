@@ -1,0 +1,13 @@
+stand-rocky9-lvm-xfs-bios — the donor inventory CAPTURED by tools/reloca-test.sh (phase capture)
+from the rocky9-lvm-xfs-bios fixture (the BIOS/MBR twin of rocky9-lvm-xfs-uefi: Rocky Linux 9.8
+by anaconda/kickstart, see tools/fixtures/README.md): dos label, vda1 /boot xfs (bootable), vda2
+PV -> VG rl (swap LV, root LV xfs), no ESP, grub2-pc in the MBR, BLS entries, dracut,
+NetworkManager keyfile on ens3, SELinux enforcing, lvm.conf with the devices file.
+recipient.inv is the stand's synthetic 20 GiB bios VM (as for the debian bios fixture).
+expected.plan = plan_compute over the two: rhel/dracut/i386-pc/bls=1, devices file deleted,
+autorelabel, every fstab spec and BLS token kept, dos kept with the donor's label-id, the PV
+slot elastic, the root LV by block with grow, no grub_pkgs (bios -> bios). The firmware change
+of this donor (bios -> uefi: dos -> gpt, esp-new vda3, grub_pkgs=grub2-efi-x64,shim-x64,
+efibootmgr) is computed on the fly in tests/cases/plan.sh against the stand's uefi recipient.
+Regenerate after a re-capture: plan_compute donor.inv recipient.inv auto > expected.plan
+(swap/PV/VG/LV UUIDs are anaconda's and change with every rebuild of the fixture).

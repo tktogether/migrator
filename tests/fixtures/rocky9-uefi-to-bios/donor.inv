@@ -1,0 +1,28 @@
+# donor: Rocky 9.4, gpt, one 120 GB PERC VD: 1 ESP 600M, 2 /boot xfs 1G, 3 PV (vg rl: swap 8G, root xfs 110G used 20G), BLS, devices file, NM keyfile, enforcing (hand-written fixture)
+host	role=donor	hostname=erp3	live=2026.09.20	fw=uefi	secureboot=0	bootnic=eno1	bootmac=d0:94:66:aa:bb:01	bootip=10.0.0.53/24	gw=10.0.0.1	dmi_vendor=Dell Inc.	dmi_product=PowerEdge R650	dmi_serial=DL65001	dmi_uuid=4c4c4544-004c-3610-8035-b3c04f303031	ncpu=32	ram=137438953472	awk=mawk
+disk	dev=/dev/sda	size=128035676160	lsec=512	psec=4096	model=PERC_H755	serial=00a1b2c3d4e5f607	wwn=0x6f4ee080a1b2c3d4e5f6070809101112	byid=wwn-0x6f4ee080a1b2c3d4e5f6070809101112	tran=sas	rm=0	ro=0	pttype=gpt	ptuuid=7e6d5c4b-3a29-4180-9f8e-7d6c5b4a3928	drivers=sd,megaraid_sas	modalias=pci:v00001000d000010E2sv00001028sd00001AE0bc01sc04i00	usage=lvm:rl
+part	dev=/dev/sda1	disk=/dev/sda	num=1	start=2048	size=1228800	type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B	bootable=0	partuuid=22222222-bbbb-4ccc-8ddd-000000000001	name=EFI System Partition	fstype=vfat	ptype=primary
+part	dev=/dev/sda2	disk=/dev/sda	num=2	start=1230848	size=2097152	type=0FC63DAF-8483-4772-8E79-3D69D8477DE4	bootable=0	partuuid=22222222-bbbb-4ccc-8ddd-000000000002	name=-	fstype=xfs	ptype=primary
+part	dev=/dev/sda3	disk=/dev/sda	num=3	start=3328000	size=246740992	type=E6D6D379-F507-44C2-A23C-238F2A3DF928	bootable=0	partuuid=22222222-bbbb-4ccc-8ddd-000000000003	name=-	fstype=LVM2_member	ptype=primary
+pv	dev=/dev/sda3	uuid=Rk9pv0-1234-5678-9abc-def0-1234-56789a	vg=rl	size=126331387904	pe_start=1048576
+vg	name=rl	uuid=RkVg00-1111-2222-3333-4444-5555-666666	size=126326341632	free=0	pvs=/dev/sda3
+lv	path=/dev/rl/swap	vg=rl	name=swap	uuid=RkLv01-aaaa-bbbb-cccc-dddd-eeee-ffffff	size=8589934592	segtype=linear
+lv	path=/dev/rl/root	vg=rl	name=root	uuid=RkLv02-aaaa-bbbb-cccc-dddd-eeee-ffffff	size=117738700800	segtype=linear
+fs	dev=/dev/sda1	type=vfat	uuid=1C2D-3E4F	label=	fssize=627900416	used=12582912	inodes_used=-	inodes_total=-	min=-	state=-	bs=512	isz=-	features=-	journal_features=-	ssz=-	dirbs=-	masks=-	volid=1C2D3E4F
+fs	dev=/dev/sda2	type=xfs	uuid=c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f	label=	fssize=1072693248	used=293601280	inodes_used=380	inodes_total=524288	min=-	state=clean	bs=4096	isz=512	features=CRC,FINOBT,FTYPE,SPARSE_INODES,REFLINK,BIGTIME,INOBTCNT	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0x0,ro_compat=0xd,incompat=0xb,log_incompat=0x0	volid=-
+fs	dev=/dev/rl/root	type=xfs	uuid=d2e3f4a5-b6c7-4d8e-9f0a-1b2c3d4e5f60	label=	fssize=117738700800	used=21474836480	inodes_used=210000	inodes_total=57489408	min=-	state=clean	bs=4096	isz=512	features=CRC,FINOBT,FTYPE,SPARSE_INODES,REFLINK,BIGTIME,INOBTCNT	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0x0,ro_compat=0xd,incompat=0xb,log_incompat=0x0	volid=-
+swap	dev=/dev/rl/swap	uuid=e3f4a5b6-c7d8-4e9f-8a0b-2c3d4e5f6071	label=	size=8589934592
+nic	name=eno1	mac=d0:94:66:aa:bb:01	driver=bnxt_en	modalias=pci:v000014E4d00001751sv00001028sd00000000bc02sc00i00	pci=0000:04:00.0	speed=10000	link=up	firmware=bnxt_en/bnxt_re.fw	onboard=1
+os	root=/dev/mapper/rl-root	id=rocky	like=rhel centos fedora	version=9.4	family=rhel	pretty=Rocky Linux 9.4 (Blue Onyx)	hostname=erp3	initramfs=dracut	grub=grub2	grubcfg=/boot/efi/EFI/rocky/grub.cfg	bls=1	efidir=/boot/efi	selinux=enforcing	cloudinit=0	netcfg=nm-keyfile	primary_nic=eno1	primary_mac=d0:94:66:aa:bb:01	primary_ip=10.0.0.53/24	gw=10.0.0.1	ifnames=predictable	biosdevname=0	machine_id=4d5e6f708192a3b4c5d6e7f8091a2b3c	kernels=2
+kernel	version=5.14.0-427.13.1.el9_4.x86_64	vmlinuz=/boot/vmlinuz-5.14.0-427.13.1.el9_4.x86_64	initrd=/boot/initramfs-5.14.0-427.13.1.el9_4.x86_64.img	aliases=/lib/modules/5.14.0-427.13.1.el9_4.x86_64/modules.alias	builtin=/lib/modules/5.14.0-427.13.1.el9_4.x86_64/modules.builtin	pci_drivers=mpt3sas:mpt3sas,bnxt_en:bnxt_en,ahci:ahci
+kernel	version=5.14.0-362.24.1.el9_3.x86_64	vmlinuz=/boot/vmlinuz-5.14.0-362.24.1.el9_3.x86_64	initrd=/boot/initramfs-5.14.0-362.24.1.el9_3.x86_64.img	aliases=/lib/modules/5.14.0-362.24.1.el9_3.x86_64/modules.alias	builtin=/lib/modules/5.14.0-362.24.1.el9_3.x86_64/modules.builtin	pci_drivers=mpt3sas:mpt3sas,bnxt_en:bnxt_en,ahci:ahci
+fstab	spec=/dev/mapper/rl-root	dev=/dev/mapper/rl-root	mount=/	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f	dev=/dev/sda2	mount=/boot	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=1C2D-3E4F	dev=/dev/sda1	mount=/boot/efi	type=vfat	opts=umask=0077,shortname=winnt	dump=0	pass=2	nofail=0
+fstab	spec=/dev/mapper/rl-swap	dev=/dev/mapper/rl-swap	mount=none	type=swap	opts=defaults	dump=0	pass=0	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=crashkernel=1G-4G:192M,4G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap
+cmdline	source=bls:4d5e6f708192a3b4c5d6e7f8091a2b3c-5.14.0-427.13.1.el9_4.x86_64.conf	key=options	value=root=/dev/mapper/rl-root ro crashkernel=1G-4G:192M,4G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap
+cmdline	source=bls:4d5e6f708192a3b4c5d6e7f8091a2b3c-5.14.0-362.24.1.el9_3.x86_64.conf	key=options	value=root=/dev/mapper/rl-root ro crashkernel=1G-4G:192M,4G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap
+mdconf	file=-	arrays=0	lines=-
+lvmconf	file=/etc/lvm/lvm.conf	filter=-	global_filter=-	use_devicesfile=1	devices_file=1
+netcfg	file=/etc/NetworkManager/system-connections/eno1.nmconnection	kind=nm-keyfile	iface=eno1	mac=d0:94:66:aa:bb:01	primary=1

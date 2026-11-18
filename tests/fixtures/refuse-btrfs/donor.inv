@@ -1,0 +1,17 @@
+# donor: Debian 12 with / on btrfs: refused (hand-written fixture)
+host	role=donor	hostname=nas4	live=2026.09.20	fw=bios	secureboot=0	bootnic=eno1	bootmac=ac:1f:6b:11:22:33	bootip=10.0.0.48/24	gw=10.0.0.1	dmi_vendor=Supermicro	dmi_product=X11SSL-F	dmi_serial=S666666	dmi_uuid=6f708192-a3b4-c5d6-e7f8-091a2b3c4d5e	ncpu=4	ram=17179869184	awk=mawk
+disk	dev=/dev/sda	size=500107862016	lsec=512	psec=4096	model=Samsung SSD 860 EVO 500GB	serial=S3Z2NB0K654321X	wwn=0x5002538e40654321	byid=ata-Samsung_SSD_860_EVO_500GB_S3Z2NB0K654321X	tran=sata	rm=0	ro=0	pttype=dos	ptuuid=0x4e5f6071	drivers=sd,ahci	modalias=pci:v00008086d0000A102sv000015D9sd00000886bc01sc06i01	usage=fs:btrfs
+part	dev=/dev/sda1	disk=/dev/sda	num=1	start=2048	size=2097152	type=83	bootable=1	partuuid=4e5f6071-01	name=-	fstype=ext4	ptype=primary
+part	dev=/dev/sda2	disk=/dev/sda	num=2	start=2099200	size=974673920	type=83	bootable=0	partuuid=4e5f6071-02	name=-	fstype=btrfs	ptype=primary
+fs	dev=/dev/sda1	type=ext4	uuid=f7081920-3b4c-4d5e-96f7-08192a3b4c5d	label=	fssize=1073741824	used=209715200	inodes_used=330	inodes_total=65536	min=-	state=clean	bs=4096	isz=256	features=has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum	journal_features=journal_64bit,journal_checksum_v3	ssz=-	dirbs=-	masks=features:has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum|journal:journal_64bit journal_checksum_v3	volid=-
+fs	dev=/dev/sda2	type=btrfs	uuid=e6f70819-2a3b-4c4d-85e6-f708192a3b4c	label=	fssize=499033047040	used=85899345920	inodes_used=-	inodes_total=-	min=-	state=clean	bs=4096	isz=-	features=-	journal_features=-	ssz=-	dirbs=-	masks=-	volid=-
+nic	name=eno1	mac=ac:1f:6b:11:22:33	driver=igb	modalias=pci:v00008086d00001533sv000015D9sd00001533bc02sc00i00	pci=0000:02:00.0	speed=1000	link=up	firmware=-	onboard=1
+os	root=/dev/sda2	id=debian	like=	version=12	family=deb	pretty=Debian GNU/Linux 12 (bookworm)	hostname=nas4	initramfs=initramfs-tools	grub=grub2	grubcfg=/boot/grub/grub.cfg	bls=0	efidir=-	selinux=-	cloudinit=0	netcfg=interfaces	primary_nic=eno1	primary_mac=ac:1f:6b:11:22:33	primary_ip=10.0.0.48/24	gw=10.0.0.1	ifnames=predictable	biosdevname=0	machine_id=708192a3b4c5d6e7f8091a2b3c4d5e6f	kernels=1
+kernel	version=6.1.0-25-amd64	vmlinuz=/boot/vmlinuz-6.1.0-25-amd64	initrd=/boot/initrd.img-6.1.0-25-amd64	aliases=/lib/modules/6.1.0-25-amd64/modules.alias	builtin=/lib/modules/6.1.0-25-amd64/modules.builtin	pci_drivers=ahci:ahci,igb:igb
+fstab	spec=UUID=e6f70819-2a3b-4c4d-85e6-f708192a3b4c	dev=/dev/sda2	mount=/	type=btrfs	opts=defaults,subvol=@	dump=0	pass=0	nofail=0
+fstab	spec=UUID=f7081920-3b4c-4d5e-96f7-08192a3b4c5d	dev=/dev/sda1	mount=/boot	type=ext4	opts=defaults	dump=0	pass=2	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX_DEFAULT	value=quiet
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=
+mdconf	file=-	arrays=0	lines=-
+lvmconf	file=-	filter=-	global_filter=-	use_devicesfile=-	devices_file=0
+netcfg	file=/etc/network/interfaces	kind=interfaces	iface=eno1	mac=-	primary=1

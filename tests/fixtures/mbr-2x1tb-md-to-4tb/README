@@ -1,0 +1,13 @@
+mbr-2x1tb-md-to-4tb — the donor of debian-md-ext4-bios with the swap referenced by
+PARTUUID=5c3f1a2b-02 in fstab and resume=PARTUUID=5c3f1a2b-02 in GRUB_CMDLINE_LINUX.
+Recipient: Dell R340, one 4 TB sata (3.64 TiB, old Ubuntu on it), bios, 1 NIC igb.
+
+Exercises: R4 dos -> gpt because the recipient is > 2 TiB (WARN), new label-id and new
+partition GUIDs derived deterministically from the donor label id (sha256 of "0x5c3f1a2b:N"),
+R5 bios_grub /dev/sda128 physically first, R6 numbers kept (no logical partitions on the donor),
+pmbr_boot=1, R7 root block with grow (922 GiB md into a 3.63 TiB slot), R10 PARTUUID= -> UUID=
+in fstab, resume=PARTUUID= -> resume=UUID= in cmdline, /dev/md0 -> UUID=.
+
+Checked by hand: usable 3815445 MiB - bios_grub 1 - 1024 - 8192 = 3806228 MiB = 3991119331328
+bytes; sda1 starts at 4096; the sda1 uuid equals pl_uuid_from 0x5c3f1a2b 1 (asserted by the
+test); the swap UUID in the rewrites is the donor swap record uuid.

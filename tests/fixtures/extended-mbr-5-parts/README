@@ -1,0 +1,16 @@
+extended-mbr-5-parts — Debian 11, dos with an extended partition: sda1 /boot ext4 1 GiB, sda2
+extended, sda5 / ext4 150 GiB (label root), sda6 /var ext4 100 GiB (state=dirty), sda7 swap
+8 GiB (label swap), sda8 /home 30 GiB; fstab by UUID, resume=/dev/sda7 in GRUB_CMDLINE_LINUX.
+Recipient: Supermicro, 1 TB sata, bios, 1 NIC.
+
+Exercises: R4 five slots do not fit four primaries -> gpt (WARN), no extended or logical
+partition is ever written, dos -> gpt WARN, R5 bios_grub 128 first, root (largest fs) elastic
+last, other slots in donor order (/var, swap, /home), R6 sequential renumbering (WARN, notes
+renumbered 6->2, 7->3, 8->4; / keeps 5 by coincidence of the count), R7 all four ext4 block
+(root with grow), dirty /var -> WARN "partclone -I, fsck on the copy" and notes=dirty (no
+refusal, owner decision 2), mkswap -L swap, R10 UUID keep, resume=/dev/sda7 ->
+resume=UUID=<swap uuid>.
+
+Checked by hand: usable 953867 - 1 - 1024 - 102400 - 8192 - 30720 = 811530 MiB = 850950881280
+bytes for sda5; the six [sfdisk] lines are contiguous from sector 2048 (128) through 4096 (1),
+2101248 (2), 211816448 (3), 228593664 (4), 291508224 (5).

@@ -1,0 +1,12 @@
+# Aliases extracted from modules themselves.
+alias pci:v00001000d0000005Bsv*sd*bc*sc*i* megaraid_sas
+alias pci:v00001000d00000073sv*sd*bc*sc*i* megaraid_sas
+alias pci:v00001000d000000CEsv*sd*bc*sc*i* megaraid_sas
+alias pci:v00008086d00002922sv*sd*bc*sc*i* ahci
+alias pci:v*d*sv*sd*bc01sc06i01* ahci
+alias virtio:d00000002v* virtio_blk
+alias pci:v00001AF4d00001001sv*sd*bc*sc*i* virtio_pci
+alias pci:v00001AF4d00001041sv*sd*bc*sc*i* virtio_pci
+alias pci:v000015ADd000007C0sv*sd*bc*sc*i* vmw_pvscsi
+alias scsi:t-0x00* sd_mod
+alias pci:v000015ADd000007B0sv*sd*bc*sc*i* vmxnet3

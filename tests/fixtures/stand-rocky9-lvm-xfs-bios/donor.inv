@@ -1,0 +1,26 @@
+# captured by tools/reloca-test.sh: fixture rocky9-lvm-xfs-bios (84d27c74e099), live 20261015b, 2026-10-16
+# reloca.to inventory role=donor date=2026-10-16T08:14:26Z host=XS-Live-OS
+host	role=donor	hostname=XS-Live-OS	live=20261015b	fw=bios	secureboot=0	bootnic=eth0	bootmac=52:54:00:ab:cd:01	bootip=10.0.2.15/24	gw=10.0.2.2	dmi_vendor=QEMU	dmi_product=Standard PC (i440FX + PIIX, 1996)	dmi_serial=XS-STAND-DONOR	dmi_uuid=	ncpu=2	ram=3123261440	awk=mawk
+disk	dev=/dev/vda	size=12884901888	lsec=512	psec=512	model=	serial=XSDONOR0	wwn=	byid=virtio-XSDONOR0	tran=virtio	rm=0	ro=0	pttype=dos	ptuuid=7088cb2f	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-rocky Rocky Linux 9.8 (Blue Onyx) mtime=2026-10-16
+part	dev=/dev/vda1	disk=/dev/vda	num=1	start=2048	size=2097152	type=83	bootable=1	partuuid=7088cb2f-01	name=	fstype=xfs	ptype=primary
+part	dev=/dev/vda2	disk=/dev/vda	num=2	start=2099200	size=23066624	type=8e	bootable=0	partuuid=7088cb2f-02	name=	fstype=LVM2_member	ptype=primary
+pv	dev=/dev/vda2	uuid=0VaEs4-syn5-qDW7-Ju0j-2faV-BSMx-B9cR10	vg=rl	size=11806965760	pe_start=1048576
+vg	name=rl	uuid=94vdCB-OVvv-hJA5-jYK2-uilD-xdED-lfMa1e	size=11806965760	free=0	pvs=/dev/vda2
+lv	path=/dev/rl/root	vg=rl	name=root	uuid=tQtNwI-uegK-vqxO-sUCD-COuy-bCIt-cKX2t5	size=10733223936	segtype=linear
+lv	path=/dev/rl/swap	vg=rl	name=swap	uuid=UlHqc7-xpQE-eIK0-PixE-UQCC-Gbag-RCch3X	size=1073741824	segtype=linear
+fs	dev=/dev/vda1	type=xfs	uuid=b0070000-0000-4000-8000-0000000000c9	label=	fssize=1073741824	used=253296640	inodes_used=368	inodes_total=512	min=-	state=clean	bs=4096	isz=512	features=V5,NLINK,DIRV2,ATTR,ALIGN,LOGV2,EXTFLG,MOREBITS,ATTR2,LAZYSBCOUNT,PROJID32BIT,CRC,FTYPE,FINOBT,SPARSE_INODES,REFLINK,INOBTCNT,BIGTIME	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0,ro_compat=0xd,incompat=0xb,log_incompat=0	volid=-
+fs	dev=/dev/rl/root	type=xfs	uuid=0f500000-0000-4000-8000-0000000000c9	label=	fssize=10733223936	used=1606537216	inodes_used=34379	inodes_total=34496	min=-	state=clean	bs=4096	isz=512	features=V5,NLINK,DIRV2,ATTR,ALIGN,LOGV2,EXTFLG,MOREBITS,ATTR2,LAZYSBCOUNT,PROJID32BIT,CRC,FTYPE,FINOBT,SPARSE_INODES,REFLINK,INOBTCNT,BIGTIME	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0,ro_compat=0xd,incompat=0xb,log_incompat=0	volid=-
+swap	dev=/dev/rl/swap	uuid=283edcc0-d9f8-4254-a185-a70cfdafdb66	label=	size=1073741824
+nic	name=eth0	mac=52:54:00:ab:cd:01	driver=virtio_net	modalias=virtio:d00000001v00001AF4,pci:v00001AF4d00001000sv00001AF4sd00000001bc02sc00i00	pci=0000:00:03.0	speed=-	link=up	firmware=-	onboard=-
+os	root=/dev/mapper/rl-root	id=rocky	like=rhel centos fedora	version=9.8	family=rhel	pretty=Rocky Linux 9.8 (Blue Onyx)	hostname=fixture-rocky	initramfs=dracut	grub=grub2	grubcfg=/boot/grub2/grub.cfg	bls=1	efidir=-	selinux=enforcing	cloudinit=0	netcfg=nm-keyfile	primary_nic=ens3	primary_mac=-	primary_ip=-	gw=-	ifnames=predictable	biosdevname=0	machine_id=d79d32bf24cf47d1a036c79798cb0684	kernels=1	mdadm=0
+kernel	version=5.14.0-687.57.1.el9_8.x86_64	vmlinuz=/boot/vmlinuz-5.14.0-687.57.1.el9_8.x86_64	initrd=/boot/initramfs-5.14.0-687.57.1.el9_8.x86_64.img	aliases=/lib/modules/5.14.0-687.57.1.el9_8.x86_64/modules.alias	builtin=/lib/modules/5.14.0-687.57.1.el9_8.x86_64/modules.builtin	pci_drivers=-
+fstab	spec=/dev/mapper/rl-root	dev=/dev/mapper/rl-root	mount=/	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=b0070000-0000-4000-8000-0000000000c9	dev=/dev/vda1	mount=/boot	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=/dev/mapper/rl-swap	dev=/dev/mapper/rl-swap	mount=none	type=swap	opts=defaults	dump=0	pass=0	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=console=tty0 crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap console=ttyS0,115200
+cmdline	source=kernel-cmdline	key=options	value=root=/dev/mapper/rl-root ro console=tty0 crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap console=ttyS0,115200 
+cmdline	source=bls:d79d32bf24cf47d1a036c79798cb0684-0-rescue.conf	key=options	value=root=/dev/mapper/rl-root ro console=tty0 crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap console=ttyS0,115200 
+cmdline	source=bls:d79d32bf24cf47d1a036c79798cb0684-5.14.0-687.57.1.el9_8.x86_64.conf	key=options	value=root=/dev/mapper/rl-root ro console=tty0 crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap console=ttyS0,115200 
+mdconf	file=-	arrays=0	lines=-
+lvmconf	file=/etc/lvm/lvm.conf	filter=-	global_filter=-	use_devicesfile=-	devices_file=1
+netcfg	file=/etc/NetworkManager/system-connections/ens3.nmconnection	kind=nm-keyfile	iface=ens3	mac=-	primary=1

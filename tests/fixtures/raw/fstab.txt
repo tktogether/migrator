@@ -1,0 +1,12 @@
+#
+# /etc/fstab
+# Created by anaconda on Tue Mar  5 10:11:12 2019
+#
+/dev/mapper/centos-root /                       xfs     defaults        0 0
+UUID=5d2b1c1e-0d4e-4c0a-9b7e-7a1f2c3d4e5f /boot                   xfs     defaults        0 0
+LABEL=DATA              /data                   ext4    defaults,nofail 0 2
+PARTUUID=A1B2C3D4-0001-4000-8000-000000000001 /boot/efi vfat umask=0077,shortname=winnt 0 0
+/dev/md0                /srv                    ext4    defaults        1 2
+/dev/mapper/centos-swap swap                    swap    defaults        0 0
+/swapfile               none                    swap    sw              0 0
+tmpfs                   /tmp                    tmpfs   defaults,noatime 0 0

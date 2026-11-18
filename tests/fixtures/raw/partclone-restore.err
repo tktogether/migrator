@@ -1,0 +1,14 @@
+Partclone v0.3.36 http://partclone.org
+Starting to restore image (-) to device (e.img)
+Calculating bitmap... Please wait...
+done!
+File system:  EXTFS
+Device size:  268.4 MB = 262144 Blocks
+Space in use: 153.3 MB = 149673 Blocks
+Free Space:   115.2 MB = 112471 Blocks
+Block size:   1024 Byte
+                                                                                Elapsed: 00:00:01, Remaining: 00:01:39, Completed:   1.00%,   0.00byte/min,                                                                                Elapsed: 00:00:01, Remaining: 00:00:08, Completed:  10.26%, 943.72MB/min,                                                                                Elapsed: 00:00:02, Remaining: 00:00:07, Completed:  21.21%, 975.18MB/min,                                                                                Elapsed: 00:00:03, Remaining: 00:00:06, Completed:  32.16%, 985.66MB/min,                                                                                Elapsed: 00:00:04, Remaining: 00:00:05, Completed:  43.10%, 990.90MB/min,                                                                                Elapsed: 00:00:05, Remaining: 00:00:04, Completed:  54.05%, 994.05MB/min,                                                                                Elapsed: 00:00:06, Remaining: 00:00:03, Completed:  65.00%, 996.15MB/min,                                                                                Elapsed: 00:00:07, Remaining: 00:00:02, Completed:  75.94%, 997.65MB/min,                                                                                Elapsed: 00:00:08, Remaining: 00:00:01, Completed:  84.15%, 967.31MB/min,                                                                                Elapsed: 00:00:09, Remaining: 00:00:00, Completed:  92.36%, 943.72MB/min,                                                                                Elapsed: 00:00:10, Remaining: 00:00:00, Completed: 100.00%, Rate: 919.59MB/min,
+Total Time: 00:00:10, 100.00% completed!
+Syncing... OK!
+Partclone successfully restored the image (-) to the device (e.img)
+Cloned successfully.

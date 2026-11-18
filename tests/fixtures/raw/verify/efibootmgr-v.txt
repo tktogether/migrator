@@ -1,0 +1,6 @@
+BootCurrent: 0004
+Timeout: 1 seconds
+BootOrder: 0004,0000,0001
+Boot0000* rocky	HD(1,GPT,5d2f6e6b-3a1c-4b7e-9d0f-1a2b3c4d5e6f,0x800,0x12c000)/File(\EFI\rocky\shimx64.efi)
+Boot0001* UEFI: Built-in EFI Shell	VenMedia(5023b95c-db26-429b-a648-bd47664c8012)..BO
+Boot0004* UEFI: PXE IPv4 Intel(R) Ethernet Controller X710	PciRoot(0x0)/Pci(0x1c,0x0)/Pci(0x0,0x0)/MAC(b49691000001,1)/IPv4(0.0.0.0,0,DHCP,0.0.0.0,0.0.0.0,0.0.0.0)..BO

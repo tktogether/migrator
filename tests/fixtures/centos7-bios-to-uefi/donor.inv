@@ -1,0 +1,35 @@
+# donor: CentOS 7.9, dos, 2x2 TB, /boot xfs on md127, swap sda2 + sdb2, PV on md126 (vg centos: swap 4G, root xfs 1.8T used 150G) (hand-written fixture)
+host	role=donor	hostname=db1	live=2026.09.20	fw=bios	secureboot=0	bootnic=eno1	bootmac=3c:ec:ef:11:22:33	bootip=10.0.0.21/24	gw=10.0.0.1	dmi_vendor=Dell Inc.	dmi_product=PowerEdge R640	dmi_serial=CN12345	dmi_uuid=4c4c4544-0043-4e10-8031-b2c04f323334	ncpu=32	ram=137438953472	awk=mawk
+disk	dev=/dev/sda	size=2000398934016	lsec=512	psec=4096	model=ST2000NM0008-2F3	serial=ZDS1AAAA	wwn=0x5000c500a0000001	byid=ata-ST2000NM0008-2F3100_ZDS1AAAA	tran=sata	rm=0	ro=0	pttype=dos	ptuuid=0x000a1b2c	drivers=sd,ahci	modalias=pci:v00008086d0000A1D2sv00001028sd00000738bc01sc06i01	usage=md:2e3f4a5b:6c7d8e9f:0a1b2c3d:4e5f6a7b
+disk	dev=/dev/sdb	size=2000398934016	lsec=512	psec=4096	model=ST2000NM0008-2F3	serial=ZDS1BBBB	wwn=0x5000c500a0000002	byid=ata-ST2000NM0008-2F3100_ZDS1BBBB	tran=sata	rm=0	ro=0	pttype=dos	ptuuid=0x000a1b2d	drivers=sd,ahci	modalias=pci:v00008086d0000A1D2sv00001028sd00000738bc01sc06i01	usage=md:2e3f4a5b:6c7d8e9f:0a1b2c3d:4e5f6a7b
+part	dev=/dev/sda1	disk=/dev/sda	num=1	start=2048	size=2097152	type=fd	bootable=1	partuuid=000a1b2c-01	name=-	fstype=linux_raid_member	ptype=primary
+part	dev=/dev/sda2	disk=/dev/sda	num=2	start=2099200	size=8388608	type=82	bootable=0	partuuid=000a1b2c-02	name=-	fstype=swap	ptype=primary
+part	dev=/dev/sda3	disk=/dev/sda	num=3	start=10487808	size=3896541184	type=fd	bootable=0	partuuid=000a1b2c-03	name=-	fstype=linux_raid_member	ptype=primary
+part	dev=/dev/sdb1	disk=/dev/sdb	num=1	start=2048	size=2097152	type=fd	bootable=0	partuuid=000a1b2d-01	name=-	fstype=linux_raid_member	ptype=primary
+part	dev=/dev/sdb2	disk=/dev/sdb	num=2	start=2099200	size=8388608	type=82	bootable=0	partuuid=000a1b2d-02	name=-	fstype=swap	ptype=primary
+part	dev=/dev/sdb3	disk=/dev/sdb	num=3	start=10487808	size=3896541184	type=fd	bootable=0	partuuid=000a1b2d-03	name=-	fstype=linux_raid_member	ptype=primary
+md	dev=/dev/md127	level=raid1	uuid=9b8a7c6d:5e4f3a2b:1c0d9e8f:7a6b5c4d	name=db1:boot	metadata=1.2	size=1072693248	members=/dev/sda1,/dev/sdb1	data_offset=2048	state=clean	ro=1
+md	dev=/dev/md126	level=raid1	uuid=2e3f4a5b:6c7d8e9f:0a1b2c3d:4e5f6a7b	name=db1:pv00	metadata=1.2	size=1994894868480	members=/dev/sda3,/dev/sdb3	data_offset=262144	state=clean	ro=1
+pv	dev=/dev/md126	uuid=Zx1yQ2-abcd-efgh-ijkl-mnop-qrst-uvwxYZ	vg=centos	size=1994894868480	pe_start=1048576
+vg	name=centos	uuid=Vg0000-1111-2222-3333-4444-5555-666666	size=1994878091264	free=0	pvs=/dev/md126
+lv	path=/dev/centos/swap	vg=centos	name=swap	uuid=Lv0001-aaaa-bbbb-cccc-dddd-eeee-ffffff	size=4294967296	segtype=linear
+lv	path=/dev/centos/root	vg=centos	name=root	uuid=Lv0002-aaaa-bbbb-cccc-dddd-eeee-ffffff	size=1990583123968	segtype=linear
+fs	dev=/dev/md127	type=xfs	uuid=8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d	label=	fssize=1072693248	used=125829120	inodes_used=340	inodes_total=524288	min=-	state=clean	bs=4096	isz=512	features=CRC,FINOBT,FTYPE	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0x0,ro_compat=0x1,incompat=0x1,log_incompat=0x0	volid=-
+fs	dev=/dev/centos/root	type=xfs	uuid=d3e4f5a6-b7c8-4d9e-8f0a-1b2c3d4e5f60	label=	fssize=1990583123968	used=161061273600	inodes_used=412000	inodes_total=971800576	min=-	state=clean	bs=4096	isz=512	features=CRC,FINOBT,FTYPE	journal_features=-	ssz=512	dirbs=4096	masks=versionnum=0xb4b5,features2=0x18a,compat=0x0,ro_compat=0x1,incompat=0x1,log_incompat=0x0	volid=-
+swap	dev=/dev/sda2	uuid=b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e	label=	size=4294967296
+swap	dev=/dev/sdb2	uuid=c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f	label=	size=4294967296
+swap	dev=/dev/centos/swap	uuid=e4f5a6b7-c8d9-4e0f-9a1b-2c3d4e5f6071	label=	size=4294967296
+nic	name=eno1	mac=3c:ec:ef:11:22:33	driver=igb	modalias=pci:v00008086d00001521sv00001028sd00001F60bc02sc00i00	pci=0000:01:00.0	speed=1000	link=up	firmware=-	onboard=1
+nic	name=eno2	mac=3c:ec:ef:11:22:34	driver=igb	modalias=pci:v00008086d00001521sv00001028sd00001F60bc02sc00i00	pci=0000:01:00.1	speed=-	link=down	firmware=-	onboard=2
+os	root=/dev/mapper/centos-root	id=centos	like=rhel fedora	version=7	family=rhel	pretty=CentOS Linux 7 (Core)	hostname=db1	initramfs=dracut	grub=grub2	grubcfg=/boot/grub2/grub.cfg	bls=0	efidir=-	selinux=enforcing	cloudinit=0	netcfg=ifcfg	primary_nic=eno1	primary_mac=3c:ec:ef:11:22:33	primary_ip=10.0.0.21/24	gw=10.0.0.1	ifnames=predictable	biosdevname=1	machine_id=1a2b3c4d5e6f708192a3b4c5d6e7f809	kernels=2
+kernel	version=3.10.0-1160.118.1.el7.x86_64	vmlinuz=/boot/vmlinuz-3.10.0-1160.118.1.el7.x86_64	initrd=/boot/initramfs-3.10.0-1160.118.1.el7.x86_64.img	aliases=/lib/modules/3.10.0-1160.118.1.el7.x86_64/modules.alias	builtin=/lib/modules/3.10.0-1160.118.1.el7.x86_64/modules.builtin	pci_drivers=megaraid_sas:megaraid_sas,igb:igb
+kernel	version=3.10.0-1160.el7.x86_64	vmlinuz=/boot/vmlinuz-3.10.0-1160.el7.x86_64	initrd=/boot/initramfs-3.10.0-1160.el7.x86_64.img	aliases=/lib/modules/3.10.0-1160.el7.x86_64/modules.alias	builtin=/lib/modules/3.10.0-1160.el7.x86_64/modules.builtin	pci_drivers=megaraid_sas:megaraid_sas,igb:igb
+fstab	spec=/dev/mapper/centos-root	dev=/dev/mapper/centos-root	mount=/	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d	dev=/dev/md127	mount=/boot	type=xfs	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=/dev/mapper/centos-swap	dev=/dev/mapper/centos-swap	mount=swap	type=swap	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e	dev=/dev/sda2	mount=swap	type=swap	opts=defaults	dump=0	pass=0	nofail=0
+fstab	spec=UUID=c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f	dev=/dev/sdb2	mount=swap	type=swap	opts=defaults	dump=0	pass=0	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=rd.md.uuid=9b8a7c6d:5e4f3a2b:1c0d9e8f:7a6b5c4d rd.md.uuid=2e3f4a5b:6c7d8e9f:0a1b2c3d:4e5f6a7b rd.lvm.lv=centos/root rd.lvm.lv=centos/swap crashkernel=auto rhgb quiet
+mdconf	file=/etc/mdadm.conf	arrays=2	lines=ARRAY /dev/md/boot level=raid1 num-devices=2 UUID=9b8a7c6d:5e4f3a2b:1c0d9e8f:7a6b5c4d;ARRAY /dev/md/pv00 level=raid1 num-devices=2 UUID=2e3f4a5b:6c7d8e9f:0a1b2c3d:4e5f6a7b
+lvmconf	file=/etc/lvm/lvm.conf	filter=[ "a|^/dev/md.*|", "r|.*|" ]	global_filter=-	use_devicesfile=-	devices_file=0
+netcfg	file=/etc/sysconfig/network-scripts/ifcfg-eno1	kind=ifcfg	iface=eno1	mac=3c:ec:ef:11:22:33	primary=1

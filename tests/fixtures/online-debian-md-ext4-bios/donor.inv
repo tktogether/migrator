@@ -1,0 +1,29 @@
+# captured by tools/reloca-test.sh: fixture debian-md-ext4-bios (10eb41ce60d9), live 20260922c, 2026-09-30
+# reloca.to inventory role=donor date=2026-09-30T13:22:05Z host=XS-Live-OS
+host	role=donor	hostname=XS-Live-OS	live=20260922c	fw=bios	secureboot=0	bootnic=eth0	bootmac=52:54:00:ab:cd:01	bootip=10.0.2.15/24	gw=10.0.2.2	dmi_vendor=QEMU	dmi_product=Standard PC (i440FX + PIIX, 1996)	dmi_serial=XS-STAND-DONOR	dmi_uuid=	ncpu=2	ram=3123257344	awk=mawk	online=1
+disk	dev=/dev/vda	size=8589934592	lsec=512	psec=512	model=	serial=XSDONOR0	wwn=	byid=virtio-XSDONOR0	tran=virtio	rm=0	ro=0	pttype=dos	ptuuid=432b9631	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-debian Debian GNU/Linux 11 (bullseye) mtime=2026-09-29
+disk	dev=/dev/vdb	size=8589934592	lsec=512	psec=512	model=	serial=XSDONOR1	wwn=	byid=virtio-XSDONOR1	tran=virtio	rm=0	ro=0	pttype=dos	ptuuid=8a640434	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-debian Debian GNU/Linux 11 (bullseye) mtime=2026-09-29
+part	dev=/dev/vda1	disk=/dev/vda	num=1	start=2048	size=2097152	type=fd	bootable=1	partuuid=432b9631-01	name=	fstype=linux_raid_member	ptype=primary
+part	dev=/dev/vda2	disk=/dev/vda	num=2	start=2099200	size=4194304	type=82	bootable=0	partuuid=432b9631-02	name=	fstype=swap	ptype=primary
+part	dev=/dev/vda3	disk=/dev/vda	num=3	start=6293504	size=10483712	type=fd	bootable=0	partuuid=432b9631-03	name=	fstype=linux_raid_member	ptype=primary
+part	dev=/dev/vdb1	disk=/dev/vdb	num=1	start=2048	size=2097152	type=fd	bootable=1	partuuid=8a640434-01	name=	fstype=linux_raid_member	ptype=primary
+part	dev=/dev/vdb2	disk=/dev/vdb	num=2	start=2099200	size=4194304	type=82	bootable=0	partuuid=8a640434-02	name=	fstype=swap	ptype=primary
+part	dev=/dev/vdb3	disk=/dev/vdb	num=3	start=6293504	size=10483712	type=fd	bootable=0	partuuid=8a640434-03	name=	fstype=linux_raid_member	ptype=primary
+md	dev=/dev/md126	level=raid1	uuid=21422b8e:6e58604b:368cc1d7:0699304b	name=fixture-debian:0	metadata=1.2	size=1071644672	members=/dev/vdb1,/dev/vda1	data_offset=4096	state=clean	ro=1
+md	dev=/dev/md127	level=raid1	uuid=af3c7edd:88ed4780:b9ebe855:da9d6a1a	name=fixture-debian:1	metadata=1.2	size=5362417664	members=/dev/vdb3,/dev/vda3	data_offset=10240	state=clean	ro=1
+fs	dev=/dev/md126	type=ext4	uuid=766ce09c-da55-4d91-90c5-8b5541a7b3be	label=boot	fssize=1071644672	used=87527424	inodes_used=352	inodes_total=65408	min=88969216	state=clean	bs=4096	isz=256	features=has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum	journal_features=journal_64bit,journal_checksum_v3	ssz=-	dirbs=-	masks=features:has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum|journal:journal_64bit journal_checksum_v3	volid=-
+fs	dev=/dev/md127	type=ext4	uuid=32431f84-84c8-46b5-bcc0-3e1e93c22618	label=root	fssize=5362417664	used=908873728	inodes_used=16208	inodes_total=327680	min=1407352832	state=dirty	bs=4096	isz=256	features=has_journal,ext_attr,resize_inode,dir_index,filetype,extent,64bit,flex_bg,sparse_super,large_file,huge_file,dir_nlink,extra_isize,metadata_csum	journal_features=journal_incompat_revoke,journal_64bit,journal_checksum_v3	ssz=-	dirbs=-	masks=features:has_journal ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum|journal:journal_incompat_revoke journal_64bit journal_checksum_v3	volid=-
+swap	dev=/dev/vda2	uuid=231753ee-4ef0-48a7-9f6d-19a3e1b26951	label=swap0	size=2147483648
+swap	dev=/dev/vdb2	uuid=129f6d9f-179a-4b12-b100-bc56202e6541	label=swap1	size=2147483648
+nic	name=eth0	mac=52:54:00:ab:cd:01	driver=virtio_net	modalias=virtio:d00000001v00001AF4,pci:v00001AF4d00001000sv00001AF4sd00000001bc02sc00i00	pci=0000:00:03.0	speed=-	link=up	firmware=-	onboard=-
+os	root=/dev/md127	id=debian	like=	version=11	family=deb	pretty=Debian GNU/Linux 11 (bullseye)	hostname=fixture-debian	initramfs=initramfs-tools	grub=grub2	grubcfg=/boot/grub/grub.cfg	bls=0	efidir=-	selinux=-	cloudinit=0	netcfg=interfaces	primary_nic=ens3	primary_mac=-	primary_ip=-	gw=-	ifnames=predictable	biosdevname=0	machine_id=bd7b8aa0e92940cf983a3aa8925fb464	kernels=1
+kernel	version=5.10.0-32-amd64	vmlinuz=/boot/vmlinuz-5.10.0-32-amd64	initrd=/boot/initrd.img-5.10.0-32-amd64	aliases=/lib/modules/5.10.0-32-amd64/modules.alias	builtin=/lib/modules/5.10.0-32-amd64/modules.builtin	pci_drivers=-
+fstab	spec=UUID=32431f84-84c8-46b5-bcc0-3e1e93c22618	dev=/dev/md127	mount=/	type=ext4	opts=errors=remount-ro	dump=0	pass=1	nofail=0
+fstab	spec=UUID=766ce09c-da55-4d91-90c5-8b5541a7b3be	dev=/dev/md126	mount=/boot	type=ext4	opts=defaults	dump=0	pass=2	nofail=0
+fstab	spec=UUID=231753ee-4ef0-48a7-9f6d-19a3e1b26951	dev=/dev/vda2	mount=none	type=swap	opts=sw	dump=0	pass=0	nofail=0
+fstab	spec=UUID=129f6d9f-179a-4b12-b100-bc56202e6541	dev=/dev/vdb2	mount=none	type=swap	opts=sw	dump=0	pass=0	nofail=0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX	value=console=ttyS0,115200 console=tty0
+cmdline	source=grub-default	key=GRUB_CMDLINE_LINUX_DEFAULT	value=
+mdconf	file=/etc/mdadm/mdadm.conf	arrays=2	lines=ARRAY /dev/md0 metadata=1.2 UUID=21422b8e:6e58604b:368cc1d7:0699304b;ARRAY /dev/md1 metadata=1.2 UUID=af3c7edd:88ed4780:b9ebe855:da9d6a1a
+lvmconf	file=/etc/lvm/lvm.conf	filter=-	global_filter=-	use_devicesfile=-	devices_file=0
+netcfg	file=/etc/network/interfaces	kind=interfaces	iface=ens3	mac=-	primary=1

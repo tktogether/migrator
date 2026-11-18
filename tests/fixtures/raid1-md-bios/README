@@ -1,0 +1,8 @@
+raid1-md-bios — the debian-md-ext4-bios donor (md RAID1 /boot and /, a plain swap partition)
+onto the two-disk recipient of refuse-two-disks-auto (two 960 GB virtio disks + a USB stick),
+with raid=1 (R16): both disks get the same dos table (own label-id on the second), every slot
+is an md RAID1 pair numbered after its partition (/dev/md1 /boot, /dev/md2 swap, /dev/md3 /),
+the donor's arrays keep their md UUIDs, new ones (the swap) get a derived UUID, every slot is
+8 MiB larger than its volume (--data-offset=8M), PARTUUID references are rewritten to UUID=.
+Also asserted here: two candidates without raid=1 or -d are refused naming both options,
+-d A,B without raid=1 is refused, raid=1 with one disk is refused.

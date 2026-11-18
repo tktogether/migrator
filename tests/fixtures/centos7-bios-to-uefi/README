@@ -1,0 +1,11 @@
+centos7-bios-to-uefi — the centos7-md-lvm-xfs-bios donor (rhel, bios, dos label, md /boot +
+md PV, no BLS) onto the same Dell R740 booted through UEFI, Secure Boot off.
+
+Exercises R2 on the rhel family in the bios -> uefi direction (no refusal since 2026-10-16):
+WARN "grub2 for uefi (grub2-efi-x64 shim-x64 efibootmgr) is installed ... by dnf in postfix",
+[postfix] grub_pkgs=grub2-efi-x64,shim-x64,efibootmgr, grub=x86_64-efi, no grub_from_live=;
+R4 dos -> gpt (uefi) with a new label-id; R5 a new 512 MiB ESP physically first as sda4 (esp=4,
+esp-new, mkfs.vfat -i C5F3802F), no bios_grub; R10 the ESP fstab line the rhel way:
+"+ /boot/efi vfat umask=0077,shortname=winnt 0 2" (deb: "umask=0077 0 1"); the renumbering
+and the second disk's swap as in centos7-md-lvm-xfs-bios. Secure Boot ON would be refused
+(no shim on a bios donor), see the sb.inv case in tests/cases/plan.sh.

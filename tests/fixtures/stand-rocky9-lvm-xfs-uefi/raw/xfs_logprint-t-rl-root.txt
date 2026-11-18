@@ -1,0 +1,6 @@
+xfs_logprint:
+    data device: 0xfd00
+    log device: 0xfd00 daddr: 9867312 length: 131072
+
+    log tail: 118410 head: 118410 state: <CLEAN>
+

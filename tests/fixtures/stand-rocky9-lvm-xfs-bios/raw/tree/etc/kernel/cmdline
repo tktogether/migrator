@@ -1,0 +1,1 @@
+root=/dev/mapper/rl-root ro console=tty0 crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap console=ttyS0,115200 

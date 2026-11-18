@@ -1,0 +1,8 @@
+online-debian-md-ext4-bios — the stand-debian-md-ext4-bios capture as an ON-LINE donor
+(host online=1: the inventory was taken on the donor's running OS, lib/inventory.sh
+--online) with the root fs "not clean" the way a mounted ext4 always is (state=dirty on
+/dev/md127). Asserts the planner's on-line rules: [target] carries mode=online, the
+mounted root gets NO dirty note (the copy is taken frozen and is clean, the block copy
+is the agent's, not partclone -I), the on-line WARN is printed, and root=files is
+accepted with a WARN (tar incremental passes, L3). Everything else equals the off-line plan of
+stand-debian-md-ext4-bios. Hand-derived: awk over the captured donor.inv.

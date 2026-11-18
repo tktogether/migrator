@@ -1,0 +1,15 @@
+versionnum [0xb4a5+0x18a] = V5,NLINK,DIRV2,ALIGN,LOGV2,EXTFLG,MOREBITS,ATTR2,LAZYSBCOUNT,PROJID32BIT,CRC,FTYPE,FINOBT,SPARSE_INODES,RMAPBT,REFLINK,INOBTCNT,BIGTIME,NREXT64
+blocksize = 4096
+sectsize = 512
+inodesize = 512
+dirblklog = 0
+dblocks = 76800
+fdblocks = 60380
+icount = 64
+ifree = 61
+versionnum = 0xb4a5
+features2 = 0x18a
+features_compat = 0
+features_ro_compat = 0xf
+features_incompat = 0x2b
+features_log_incompat = 0

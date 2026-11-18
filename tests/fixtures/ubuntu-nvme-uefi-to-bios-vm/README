@@ -1,0 +1,16 @@
+ubuntu-nvme-uefi-to-bios-vm — Ubuntu 22.04, gpt, one NVMe 512 GB: p1 ESP vfat 512 MiB (volid
+A1B2C3D4), p2 /boot ext4 2 GiB, p3 / ext4 474 GiB used 120 GiB, /swapfile, fstab by UUID (ESP by
+UUID=A1B2-C3D4), netplan with match macaddress, cloud-init present, two kernels WITHOUT
+pci_drivers.  Recipient: KVM virtio 400 GB (372 GiB), bios, 1 NIC.
+
+Exercises: R2 uefi -> bios on deb = WARN + grub_from_live=1 (not a refusal), R4 gpt kept (donor
+gpt), R5 bios_grub 1 MiB as /dev/vda128 physically first, donor ESP kept as a slot on the bios
+recipient (WARN), R6 gpt keeps donor numbers and partition uuids, pmbr_boot=1, R7 esp method
+with mkfs.vfat -F32 -i <volid>, root files (fs 474 GiB > 370 GiB slot), R9 pci_drivers=- ->
+WARN "not checked", drivers still listed, R10 /swapfile keep, UUID keep, R11 postfix
+grub=i386-pc, cloudinit=disable, esp=/dev/vda1, R13 verify esp=/dev/vda1, swap=-.
+
+Checked by hand: usable = floor(400000000000/MiB) - 2 = 381467 MiB, minus bios_grub 1, ESP 512,
+/boot 2048 -> vda3 = 378906 MiB = 397311737856 bytes; requirement 120 GiB x 1.10 + 512 MiB =
+142270791680 fits; vda1 starts at 4096 (after the 1 MiB bios_grub at 2048); NVMe pN names map
+to vdaN; the swapfile is not a volume; label-id is the donor ptuuid.

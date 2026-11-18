@@ -1,0 +1,22 @@
+centos7-md-lvm-xfs-bios — CentOS 7.9, dos, 2x2 TB, /boot xfs on md127, swap partitions sda2 AND
+sdb2 (both in fstab by UUID), PV on md126 (vg centos: swap LV 4 GiB, root LV xfs 1.81 TiB used
+150 GiB), fstab /dev/mapper/centos-root, GRUB_CMDLINE_LINUX with rd.md.uuid x2 + rd.lvm.lv x2,
+lvm.conf with a filter, selinux enforcing, ifcfg-eno1 with HWADDR, biosdevname=1, two kernels
+with pci_drivers.  Recipient: Dell R740 PERC H730P (megaraid_sas), 1 TB VD with wwn, bios,
+4 NICs igb (eno1..eno4).
+
+Exercises: R1 id=wwn:, currently=old-os, R3 sdb2 (own swap on another disk) appended as an extra
+slot with WARN and note from-other-disk, sdb1/sdb3 mirrors dropped, R5 PV slot elastic last,
+R6 dos renumbering (PV 3 -> 4, sdb2 2 -> 3) with WARN, fd -> 83/8e, R7 [lvm] pvcreate --uuid /
+vgcreate / lvcreate -L for swap / -l 100%FREE for root, swap LV under the cap (4 GiB < max(2 GiB,
+10% of disk)), root LV tsize = floor((PV - others - 4 MiB) / 4 MiB) x 4 MiB, root files (1.81 TiB
+> 918 GiB), R8 mkfs.xfs crc=1 finobt=1 reflink=0 rmapbt=0 bigtime=0 inobtcount=0 sparse=0
+nrext64=0 ftype=1, R9 megaraid_sas + igb resolved in both kernels, R10 rd.md.uuid=* remove,
+rd.lvm.lv=* keep, /dev/mapper/* keep, R11 rhel/dracut/autorelabel/lvm_filter=neutralise,
+R12 pins eth0 + eth1x..eth3x by PCI address and the multi-NIC WARN, R13 verify swap uuids x3
+and xfs masks with %2C, R14 pv row first, root last.
+
+Checked by hand: usable 953332 MiB; PV = 953332 - 1024 - 4096 - 4096 = 944116 MiB =
+989987864576 bytes; root LV = floor((989987864576 - 4294967296 - 4194304) / 4194304) x 4194304
+= 985686605824; files requirement 150 GiB x 1.10 + 512 MiB = 177704271872 fits; three mkswap
+lines, one mkfs.xfs, no mkfs for the block /boot; identity has 9 lines (5 fstab + 4 cmdline).

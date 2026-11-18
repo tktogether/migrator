@@ -1,0 +1,21 @@
+# This is the network config written by 'subiquity'
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp3s0:
+      dhcp4: true
+      nameservers:
+        addresses: [9.9.9.9]
+    ens1f0:
+      match:
+        macaddress: "AC:1F:6B:11:22:33"
+      set-name: ens1f0
+      addresses:
+        - 46.4.5.6/27
+      routes:
+        - to: default
+          via: 46.4.5.1
+      nameservers:
+        addresses:
+          - 8.8.8.8

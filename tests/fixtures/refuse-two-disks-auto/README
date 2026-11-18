@@ -1,0 +1,5 @@
+refuse-two-disks-auto — the debian-md-ext4-bios donor; recipient with two 960 GB virtio disks
+and a USB stick (rm=1, tran=usb: never a candidate).
+Exercises R1: DISK=auto with two candidates -> exit 4 listing both with size/model/tran/usage
+and naming the two ways out (-o raid=1 for a mirror, -d DISK for one of them);
+the test also runs the same fixture with DISK=/dev/vdb (accepted) and /dev/sdz (refused).

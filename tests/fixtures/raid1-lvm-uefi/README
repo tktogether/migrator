@@ -1,0 +1,6 @@
+raid1-lvm-uefi — the stand's Debian 12 uefi donor (ESP, ext4 /boot, LVM PV with xfs root and
+swap LV) onto the stand's uefi recipient with TWO identical 20 GiB virtio disks, raid=1 (R16):
+gpt on both (own label-id and partition GUIDs on the second), the ESP stays a plain vfat on
+BOTH disks with the same volume id (esp-mirror row for /dev/vdb1, filled by postfix), /boot
+and the PV become /dev/md2 and /dev/md3, the VG sits on /dev/md3 (its tsize = slot - 8 MiB),
+[postfix] carries raid=1 disk2= esp2=, [verify] md= and esp2=.

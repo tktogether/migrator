@@ -1,0 +1,14 @@
+debian-boot-root-swap-bios — Debian 12, dos, one 500 GB sata: sda1 /boot ext4 1 GiB, sda2 / ext4
+460 GiB used 40 GiB (orphan_file feature, kernel 6.1), sda3 swap 4 GiB LAST on the donor, fstab
+by UUID, GRUB_CMDLINE_LINUX resume=UUID=<swap>.  Recipient: Supermicro, 1 TB sata with wwn (old
+Debian on it), bios, 1 NIC igb.
+
+Exercises: R5 the elastic root moves physically last (swap before it), R6 dos renumbering in
+physical order: swap 3 -> 2, root 2 -> 3 (WARN, notes renumbered), R7 root block with grow (fs
+460 GiB into a 926 GiB slot), R8 guard comment: orphan_file needs 5.15, oldest kernel 6.1 -> ok,
+R10 fstab by UUID -> every spec keep, resume=UUID= keep (no PARTUUID or /dev refs to rewrite),
+R11 boot=/dev/sda1 os_root=/dev/sda3.
+
+Checked by hand: usable 953867 MiB, sda3 = 953867 - 1024 - 4096 = 948747 MiB = 994833334272
+bytes; sda2 (swap) starts right after sda1 at 2099200, sda3 at 10487808; one bootable flag on
+sda1; one mkswap line and no mkfs (both ext4 volumes are block).
