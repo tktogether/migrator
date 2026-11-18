@@ -1,33 +1,32 @@
 #!/bin/bash
 # rig/build-donor.sh — build the donor machine's disk: a minimal Debian bookworm
 # system (partition table + ext4 root with kernel/initramfs/services/payload).
-# Pure userspace on the build host: mkfs.ext4 -d populates the filesystem, the
-# image is dd'd into the partition; no loop mounts. GRUB is NOT installed here —
-# reloca.to's postfix installs it on the target from the migrated rootfs.
+# D13: mmdebstrap (unprivileged containers cannot mknod, debootstrap fails).
+# Pure userspace: mkfs.ext4 -d populates the filesystem, the image is dd'd into
+# the partition; no loop mounts. GRUB is NOT installed here — reloca.to's
+# postfix installs it on the target from the migrated rootfs.
 # Output: $HOME/rig/donor-disk.raw (2 GiB, sparse)
 set -euo pipefail
 OUT=${RIG_OUT:-$HOME/rig}
 MIRROR=http://deb.debian.org/debian
 SUITE=bookworm
 DISKMIB=2048; PARTMIB=2046
-UUID=$(uuidgen || python3 -c 'import uuid; print(uuid.uuid4())')
+UUID=$(cat /proc/sys/kernel/random/uuid)
 ROOT=$OUT/donor-rootfs
 FSIMG=$OUT/donor-fs.img
 IMG=$OUT/donor-disk.raw
 
 rm -rf "$ROOT" "$FSIMG" "$IMG"
 
-echo "[donor] debootstrap $SUITE (minbase + kernel/ssh)..."
-debootstrap --variant=minbase \
+echo "[donor] mmdebstrap $SUITE (minbase + kernel/ssh/payload tools)..."
+mmdebstrap --variant=minbase \
 	--include="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny" \
 	"$SUITE" "$ROOT" "$MIRROR"
 
-# stop services starting inside the chroot; then configure the guest system
-echo exit 101 > "$ROOT/usr/sbin/policy-rc.d"; chmod +x "$ROOT/usr/sbin/policy-rc.d"
+# configure the guest system (plain file ops + systemctl enable; no /dev needed)
+printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > "$ROOT/etc/network/interfaces"
 mount -t proc proc "$ROOT/proc" 2>/dev/null || mount --bind /proc "$ROOT/proc"
-mount --bind /sys "$ROOT/sys" 2>/dev/null || true
 mount --bind /dev "$ROOT/dev" 2>/dev/null || true
-cp /etc/resolv.conf "$ROOT/etc/resolv.conf"
 
 chroot "$ROOT" /bin/bash -es <<CHROOT
 	echo "root:rigpass" | chpasswd
@@ -52,14 +51,12 @@ ExecStart=/usr/local/bin/heartbeat.sh
 WantedBy=multi-user.target
 UNIT
 	systemctl enable ssh heartbeat.service 2>/dev/null || true
-	systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
+	# grub preferences so postfix's grub2-mkconfig emits a serial console (E4 asserts on it)
+	mkdir -p /etc/default
+	printf 'GRUB_CMDLINE_LINUX="console=ttyS0,115200n8 console=tty0"\nGRUB_DISABLE_OS_PROBER=true\n' > /etc/default/grub
 CHROOT
-# network: DHCP via dhcpd-style config for common setups (recipient/donor NIC is virtio/eth0)
-rm -f "$ROOT/etc/network/interfaces.d/"* 2>/dev/null || true
-printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > "$ROOT/etc/network/interfaces"
 : > "$ROOT/etc/machine-id"
-rm -f "$ROOT/usr/sbin/policy-rc.d"
-umount "$ROOT/proc" "$ROOT/sys" "$ROOT/dev" 2>/dev/null || true
+umount "$ROOT/proc" "$ROOT/dev" 2>/dev/null || true
 
 echo "[donor] mkfs.ext4 -d -> fs image ($PARTMIB MiB)..."
 truncate -s "$PARTMIB"M "$FSIMG"

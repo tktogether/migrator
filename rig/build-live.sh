@@ -1,7 +1,8 @@
 #!/bin/bash
-# rig/build-live.sh — build the migrator rescue Live ISO (D4/D7; D12: hand-rolled,
-# no live-build — debootstrap chroot + live-boot initramfs + squashfs + xorriso, BIOS).
-# Runs on a Debian/Ubuntu build host. Produces $HOME/rig/migrator-live.iso.
+# rig/build-live.sh — build the migrator rescue Live ISO (D4/D7; D12: no live-build;
+# D13: mmdebstrap instead of debootstrap — unprivileged containers cannot mknod).
+# debootstrap-equivalent chroot (mmdebstrap) + live-boot initramfs + squashfs +
+# xorriso (BIOS). Produces $HOME/rig/migrator-live.iso.
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${RIG_OUT:-$HOME/rig}
@@ -14,31 +15,14 @@ ISO=$OUT/migrator-live.iso
 mkdir -p "$OUT"
 rm -rf "$CH" "$ISODIR"
 
-# rig ssh keypair: generated once, pubkey injected as root's authorized_keys (D10: privkey never baked)
+# rig ssh keypair: generated once, pubkey injected as root's authorized_keys (D10)
 KEY=$OUT/rig_ed25519
 [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C migrator-rig -f "$KEY"
 
-echo "[live] debootstrap $SUITE (minbase)..."
-debootstrap --variant=minbase \
-	--include="systemd-sysv,openssh-server,rsync,curl,ca-certificates,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,nano,less,bsdextrautils" \
+echo "[live] mmdebstrap $SUITE (minbase + full toolset, D7: baked in)..."
+mmdebstrap --variant=minbase \
+	--include="systemd-sysv,linux-image-amd64,live-boot,live-config,initramfs-tools,openssh-server,rsync,partclone,xfsprogs,e2fsprogs,dosfstools,mdadm,lvm2,fdisk,parted,gdisk,efibootmgr,grub-common,grub2-common,grub-pc-bin,grub-efi-amd64-bin,lz4,zstd,pv,tmux,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,curl,ca-certificates,nano,less,bsdextrautils" \
 	"$SUITE" "$CH" "$MIRROR"
-
-echo exit 101 > "$CH/usr/sbin/policy-rc.d"; chmod +x "$CH/usr/sbin/policy-rc.d"
-mount -t proc proc "$CH/proc" 2>/dev/null || mount --bind /proc "$CH/proc"
-mount --bind /sys "$CH/sys" 2>/dev/null || true
-mount --bind /dev "$CH/dev" 2>/dev/null || true
-cp /etc/resolv.conf "$CH/etc/resolv.conf"
-printf 'deb %s %s main contrib non-free non-free-firmware\n' "$MIRROR" "$SUITE" > "$CH/etc/apt/sources.list"
-
-echo "[live] apt install the migration toolset (D7: baked in, bootstrap stays a no-op)..."
-chroot "$CH" /bin/bash -es <<CHROOT
-	apt-get update -qq
-	DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-		linux-image-amd64 live-boot live-config initramfs-tools \
-		partclone xfsprogs e2fsprogs dosfstools mdadm lvm2 fdisk parted gdisk efibootmgr \
-		grub-common grub2-common grub-pc-bin grub-efi-amd64-bin lz4 zstd pv tmux
-	apt-get clean
-CHROOT
 
 echo "[live] install the tool + marker + network config..."
 SHORT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -59,8 +43,6 @@ else
 fi
 install -m0644 "$REPO"/lib/*.sh "$CH/usr/local/lib/reloca.to/"
 [ -f "$REPO/lib/VERSION" ] && install -m0644 "$REPO/lib/VERSION" "$CH/usr/local/lib/reloca.to/" || true
-rm -f "$CH/usr/sbin/policy-rc.d"
-umount "$CH/proc" "$CH/sys" "$CH/dev" 2>/dev/null || true
 
 echo "[live] squashfs..."
 mkdir -p "$ISODIR/live" "$ISODIR/isolinux"
