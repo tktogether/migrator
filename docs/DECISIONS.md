@@ -13,3 +13,6 @@
 | D7 | 11-19 | Live 里直接烘焙 reloca.to 全部运行时依赖（partclone/xfsprogs/lvm2/mdadm/grub 双固件/sshd/rsync/lz4/zstd/pv/tmux），bootstrap 运行时 apt 仅作兜底 | 运行时才装（上游 Live 的做法） | 容器构建时可联网，烘焙比运行时装可靠且快；bootstrap_missing 检查通过即零依赖 | 已定 |
 | D8 | 11-19 | rig 布局：recipient=2 盘（vda=Live 盘 + vdb=空目标盘），donor=2 盘（vda=Live 盘 + vdb=被迁系统盘）；同一 Live 镜像双角色复用 | donor 真盘直迁（在线模式优先） | 离线模式先闭环（上游默认全链路）；在线模式作为 rig 第二阶段 | 进行中 |
 | D9 | 11-19 | 决策留痕制度：所有决策记入本簿（用户指示） | 只在会话里口头汇报 | 用户明确要求可追溯 | 常设 |
+| D10 | 11-19 | rig 密钥处理：私钥不烘焙进 Live ISO；构建脚本只注入公钥（donor/recipient 的 root authorized_keys），私钥由 run 脚本 scp 进 recipient VM | 私钥烘焙进 ISO | ISO 可能被复制分发，私钥入镜像违背最小暴露；scp 一步成本可忽略 | 已定 |
+| D11 | 11-19 | Live 经 ISO/CD-ROM 引导（`-boot order=d`），两侧真盘均为 vda（donor=vda 被迁盘、recipient=vda 空目标盘）；修订 D8 的"Live 装盘"布局 | Live 装到 vda 引导 | 省去 Live 磁盘镜像构建与引导配置；QEMU `-cdrom` 直接可用；D8 其余（同一 Live 双角色复用）不变 | 已定 |
+| D12 | 11-19 | **教训+方案**：Ubuntu 容器上构建 Debian Live，live-build 不用 apt 跨套件安装（`-t bookworm` 曾把 libc6 半升级到 2.36，dpkg audit 爆炸，已完整恢复到 jammy 2.35）；改为从 Debian pool 下载 deb → `dpkg-deb -x /opt/lb` 零污染解包 → `LIVE_BUILD=/opt/lb/usr/share/live/build PATH=/opt/lb/usr/bin:$PATH` 调用（live-build 原生支持该 env） | `-t bookworm` apt 安装；沿用 jammy 的 3.0~a57 | 跨套件 apt 会连带升级 libc，已实证出事故；dpkg-deb -x 不碰 dpkg 数据库；3.0~a57 太老不支持 bookworm 构建 | 已定 |
