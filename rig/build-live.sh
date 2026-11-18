@@ -63,7 +63,7 @@ APPEND initrd=/live/initrd.img boot=live components console=ttyS0,115200n8 conso
 CFG
 
 echo "[live] xorriso..."
-xorriso -as mkisofs -quiet -o "$ISO" -isolevel 3 -J -joliet-long -V MIGRATOR_LIVE \
+xorriso -as mkisofs -quiet -o "$ISO" -J -V MIGRATOR_LIVE \
 	-b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table \
 	"$ISODIR"
 [ -s "$ISO" ] || { echo "FAIL: no ISO" >&2; exit 1; }
