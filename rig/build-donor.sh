@@ -53,7 +53,7 @@ UNIT
 	systemctl enable ssh heartbeat.service 2>/dev/null || true
 	# grub preferences so postfix's grub2-mkconfig emits a serial console (E4 asserts on it)
 	mkdir -p /etc/default
-	printf 'GRUB_CMDLINE_LINUX="console=ttyS0,115200n8 console=tty0"\nGRUB_DISABLE_OS_PROBER=true\n' > /etc/default/grub
+	printf 'GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 console=ttyS0,115200n8 console=tty0"\nGRUB_DISABLE_OS_PROBER=true\n' > /etc/default/grub
 CHROOT
 : > "$ROOT/etc/machine-id"
 umount "$ROOT/proc" "$ROOT/dev" 2>/dev/null || true
