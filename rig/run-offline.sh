@@ -26,7 +26,7 @@ sleep 1
 
 [ -s "$ISO" ] || { echo "no ISO at $ISO (rig/build-live.sh)" >&2; exit 1; }
 [ -s "$DONOR_DISK" ] || { echo "no donor disk at $DONOR_DISK (rig/build-donor.sh)" >&2; exit 1; }
-: > "$TARGET_DISK"; truncate -s 2G "$TARGET_DISK"
+: > "$TARGET_DISK"; truncate -s 20G "$TARGET_DISK"   # sparse; reloca.to's plan rule R1 wants >= 20 GiB
 
 echo "[rig] starting donor VM..."
 qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 512 \
