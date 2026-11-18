@@ -1,0 +1,48 @@
+# migrator — 任意两台 Linux 主机间的整机迁移
+
+Fork 自 [reloca.to](https://github.com/Vitalium/reloca.to) 1.2（MIT，XServer 出品）并按四大扩展点改造的通用主机迁移系统：物理机 / VPS / 内网机之间自由迁移，Linux→Linux（x86_64）先行。设计文档见 `docs/DESIGN.md`，全部决策见 `docs/DECISIONS.md`（D1–D17），调研证据见 workspace `research/FINDINGS.md`。
+
+## Fork 相对上游的改动
+
+| 扩展 | 内容 | 代码位置 | 状态 |
+|---|---|---|---|
+| **E1 去 XServer 化** | 自有 Live 标记 `/etc/reloca-live-release`（兼容接受上游标记）；bootstrap 默认镜像 deb.debian.org/bookworm；自建 Debian bookworm Live（手搓：mmdebstrap + live-boot + squashfs + xorriso），烘焙全部运行时依赖与工具本体 | `lib/common.sh` `live_release_file()`、`lib/bootstrap.sh`、`lib/ssh.sh`、`lib/inventory.sh`、`bin/reloca.to`（8 处触点）+ `rig/build-live.sh` | ✅ 已实现；ISO 316M 实测可引导 |
+| **E4 试启动验证** | `-o boottest=1`：verify 全绿后用 qcow2 overlay 把目标盘在 qemu 里试启动（direct kernel boot + 串口断言 multi-user），目标盘零写入；qemu 缺失优雅降级 | `lib/verify.sh`（verify_boottest_*、vf_boottest_* seams）、`lib/bootstrap.sh`（boottest 工具组） | ✅ 已实现，契约测试 20/20；待烘焙 qemu 的 Live 实测 |
+| **E2 中继模式** | `-o relay=USER@HOST[:SSHPORT]`：donor 侧 `tools/relay-tunnel.sh` 反向隧道（中继:2222/2223 ← donor:22/2222），recipient 以 `root@RELAY:2222 -o sshd-port=2223` 迁移；recipient 的 cutover 反向隧道走中继（在线 poller 可达）。传输层零改动 | `lib/ssh.sh`（relay_spec/ssh_relay_start）、`lib/transfer.sh`（poller 覆盖）、`tools/relay-tunnel.sh` | ✅ 已实现，解析与接线 17 断言全绿；rig 中继拓扑 E2E 待跑 |
+| **E3 状态持久化** | 跨 run 多轮增量 + 字节级续传：agent 位图落盘 + 目标端检查点令牌 + 失效降级全量（migratekit 不变量） | `agent/tracker.c` `agent/main.c` `lib/transfer.sh` | 📐 设计定稿（D16），实现排 M3 |
+
+测试基线：`tests/run.sh` 2302 断言，2 失败与上游纯净树完全一致（环境性 mawk 差异），**零回归**；新增 relay.sh 17 断言全绿。
+
+## 快速开始（QEMU rig，单机即可做端到端验证）
+
+容器/构建机上（root，8G+ 可用盘，能访问 deb.debian.org）：
+
+```bash
+make agent                       # agent/reloca-agent（静态 C 二进制）
+bash rig/build-live.sh           # → ~/rig/migrator-live.iso + ~/rig/rig_ed25519（密钥对）
+bash rig/build-donor.sh          # → ~/rig/donor-disk.raw（最小 Debian + 服务/负载）
+setsid nohup bash rig/run-offline.sh > ~/rig/run-offline.log 2>&1 &
+                                 # 双 VM 迁移（QEMU TCG，无需 KVM）
+bash rig/verify-target.sh        # 独立启动迁移后的盘：断言 hostname/负载哈希/服务
+RELOCA_EXTRA_OPTS="-o boottest=1" bash rig/run-offline.sh   # 带 E4 试启动的迁移
+bash rig/clean.sh                # 清理全部 rig 进程
+```
+
+真机两台时（无 rig）：目标机引导 Live ISO 后运行
+`reloca.to -y [-o relay=...] -i KEY [-d DISK] root@DONOR[:2222]`，donor 侧见 `tools/relay-tunnel.sh` 头注释。
+
+## rig 历史坑位（新环境部署前必读，D17）
+
+1. bookworm 可预测网卡命名会把 eth0→ens3：Live APPEND 与 donor grub 都已加 `net.ifnames=0 biosdevname=0`；
+2. `/dev/console` 归最后一个 `console=` 所有：串口调试时 `console=ttyS0` 必须放最后；
+3. TCG 慢引导会撞 systemd 默认 90s 服务超时：APPEND 已带 `systemd.default_timeout_start_sec=600`；
+4. mmdebstrap 会把构建机 hostname 泄漏进镜像：build-live.sh 已显式覆盖；
+5. `pkill -f` 的模式若出现在同一条命令行里会自杀：清理一律走 `rig/clean.sh`。
+
+## 路线图（M0–M4，见 DESIGN.md）
+
+- ✅ M1=E1（自建 Live） · ✅ M2 代码=E2（中继） · ✅ M4 代码=E4（boottest）
+- ⏳ M0 验收：rig 离线 E2E + verify-target（进行中）
+- ⏳ E2 的中继拓扑 E2E · E4 烘焙 qemu 实测轮
+- 📐 M3=E3：按 D16 实现（agent 位图持久化 + 检查点令牌 + 降级全量）
+- 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）
