@@ -19,7 +19,7 @@ rm -rf "$ROOT" "$FSIMG" "$IMG"
 
 echo "[donor] debootstrap $SUITE (minbase + kernel/ssh)..."
 debootstrap --variant=minbase \
-	--include="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,rsync,vim-tiny" \
+	--include="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny" \
 	"$SUITE" "$ROOT" "$MIRROR"
 
 # stop services starting inside the chroot; then configure the guest system
@@ -31,7 +31,6 @@ cp /etc/resolv.conf "$ROOT/etc/resolv.conf"
 
 chroot "$ROOT" /bin/bash -es <<CHROOT
 	echo "root:rigpass" | chpasswd
-	hostname donor
 	echo donor > /etc/hostname
 	printf '127.0.0.1\tlocalhost donor\n' > /etc/hosts
 	install -d -m0700 /root/.ssh
