@@ -32,6 +32,7 @@ chroot "$ROOT" /bin/bash -es <<CHROOT
 	echo "root:rigpass" | chpasswd
 	echo donor > /etc/hostname
 	printf '127.0.0.1\tlocalhost donor\n' > /etc/hosts
+	printf 'UUID=%s / ext4 defaults 0 1\n' "$UUID" > /etc/fstab
 	install -d -m0700 /root/.ssh
 	cat > /root/.ssh/authorized_keys <<'KEYS'
 $(cat "$OUT/rig_ed25519.pub")
