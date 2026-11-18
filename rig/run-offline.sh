@@ -13,6 +13,7 @@ DONOR_DISK=$OUT/donor-disk.raw
 TARGET_DISK=$OUT/target-disk.raw
 KEY=$OUT/rig_ed25519
 LOGS=$OUT/logs; mkdir -p "$LOGS"
+exec 9>"$OUT/.run.lock"; flock -n 9 || { echo "another run-offline.sh is already active (lock: $OUT/.run.lock)" >&2; exit 1; }
 SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10"
 
 # kill leftovers from a previous run

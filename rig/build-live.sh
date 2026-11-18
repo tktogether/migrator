@@ -32,6 +32,7 @@ CODENAME=$SUITE
 MIRROR=$MIRROR
 EOF
 printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > "$CH/etc/network/interfaces"
+echo migrator-live > "$CH/etc/hostname"
 install -d -m0700 "$CH/root/.ssh"
 install -m0600 "$KEY.pub" "$CH/root/.ssh/authorized_keys"
 install -d -m0755 "$CH/usr/local/sbin" "$CH/usr/local/lib/reloca.to"
