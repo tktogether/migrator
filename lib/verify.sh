@@ -78,6 +78,7 @@ VF_CHECKS="boot initramfs fstab cmdline filesystems bootloader network md misc"
 VF_OK=0; VF_WARN=0; VF_FAIL=0
 VF_ROOT=; VF_PLAN=
 VF_KERNEL=; VF_INITRD=; VF_CMDLINE=; VF_SOURCE=; VF_KVER=
+VF_BOOTTEST_K=; VF_BOOTTEST_I=; VF_BOOTTEST_CMD=; VF_BOOTTEST_DISK=; VF_BOOTTEST_WAIT=300
 # cutover timing, seconds (tests shorten them)
 : "${RELOCA_CUTOVER_WAIT_S:=5}"       # after the donor command, before the first ping
 : "${RELOCA_CUTOVER_TIMEOUT_S:=30}"   # pings per address before "still answers"
@@ -894,6 +895,82 @@ vf_run_checks() {
 	VF_OK=0; VF_WARN=0; VF_FAIL=0
 	for c in $VF_CHECKS; do "vf_check_$c"; done
 }
+# --- boottest (E4, -o boottest=1): boot a qcow2 overlay of the target disk in ---
+# qemu with direct kernel boot and a serial console; the target disk itself is
+# never written (the overlay absorbs every write). Asserts the migrated system
+# reaches multi-user, or fails verify with the serial log as evidence. qemu is
+# installed on demand (bootstrap set boottest) and a missing qemu degrades the
+# check to a warning, never a failure.
+verify_boottest_capture() {   # the tree is mounted read-only: copy the boot bits out
+	[ -n "$VF_KERNEL" ] && [ "$VF_KERNEL" != "-" ] && [ -f "$VF_ROOT$VF_KERNEL" ] \
+		|| { vf_warn "boottest: the boot check found no kernel; skipping the boot test"; return 0; }
+	[ -n "$VF_INITRD" ] && [ "$VF_INITRD" != "-" ] && [ -f "$VF_ROOT$VF_INITRD" ] \
+		|| { vf_warn "boottest: the boot check found no initrd; skipping the boot test"; return 0; }
+	mkdir -p "$RUN/boottest"
+	cp "$VF_ROOT$VF_KERNEL" "$RUN/boottest/vmlinuz" 2>/dev/null \
+		|| { vf_warn "boottest: cannot copy the kernel out of the tree; skipping the boot test"; return 0; }
+	cp "$VF_ROOT$VF_INITRD" "$RUN/boottest/initrd.img" 2>/dev/null \
+		|| { vf_warn "boottest: cannot copy the initrd out of the tree; skipping the boot test"; return 0; }
+	VF_BOOTTEST_DISK=$(vf_boottest_disk) || { vf_warn "boottest: cannot resolve the target disk; skipping the boot test"; return 0; }
+	VF_BOOTTEST_K=$RUN/boottest/vmlinuz; VF_BOOTTEST_I=$RUN/boottest/initrd.img
+	VF_BOOTTEST_CMD=$VF_CMDLINE
+	say "boottest: captured kernel+initrd of $VF_BOOTTEST_DISK, $(du -sh "$RUN/boottest" | cut -f1)"
+}
+vf_boottest_disk() {          # seam: the disk the plan wrote (apply_target_disk)
+	local disk
+	disk=$(apply_target_disk 2>/dev/null) || return 2
+	[ -n "$disk" ] && [ -b "$disk" ] && { echo "$disk"; return 0; }
+	return 2
+}
+vf_boottest_run() {           # seam: DISK KERNEL INITRD CMDLINE -> 0 = reached multi-user
+	local disk=$1 k=$2 i=$3 cmdline=$4
+	local dir=$RUN/boottest overlay serial pid marker= rc=1 wait=${VF_BOOTTEST_WAIT}
+	if ! { [ -x /usr/bin/qemu-system-x86_64 ] && [ -x /usr/bin/qemu-img ]; }; then
+		vf_warn "boottest: qemu is not installed; skipping the boot test"; return 0
+	fi
+	rm -rf "$dir/overlay.qcow2" "$dir/serial.log"
+	qemu-img create -q -f qcow2 -F raw -b "$disk" "$dir/overlay.qcow2" \
+		|| { vf_warn "boottest: cannot create the overlay of $disk; skipping the boot test"; return 0; }
+	: > "$serial"
+	[ "$cmdline" = "-" ] && cmdline=
+	qemu-system-x86_64 -machine accel=kvm:tcg -m 384 -smp 1 \
+		-display none -monitor none -serial file:"$serial" -pidfile "$dir/qemu.pid" \
+		-drive file="$dir/overlay.qcow2",if=virtio,format=qcow2 \
+		-kernel "$k" -initrd "$i" -append "$cmdline console=ttyS0,115200n8" \
+		-no-reboot &
+	pid=$!
+	while [ "$wait" -gt 0 ]; do
+		grep -q "Kernel panic" "$serial" 2>/dev/null && { marker=panic; break; }
+		grep -Eq "Reached target (Basic|Multi-User) System|systemd\[1\]: Startup finished" "$serial" 2>/dev/null && { marker=up; break; }
+		kill -0 "$pid" 2>/dev/null || { marker=exited; break; }
+		sleep 5; wait=$((wait - 5))
+	done
+	kill "$pid" 2>/dev/null || true
+	pkill -P "$pid" 2>/dev/null || true
+	wait "$pid" 2>/dev/null; rc=$?
+	case $marker in
+		up)     vf_ok "boottest: the migrated system reached multi-user (qemu overlay of $disk, serial: $serial)"; return 0 ;;
+		panic)  vf_fail "boottest: kernel panic on boot (serial log: $serial)"; return 1 ;;
+		exited) vf_fail "boottest: qemu exited before multi-user (rc=$rc; serial log: $serial)"; return 1 ;;
+		*)      vf_fail "boottest: no multi-user within ${VF_BOOTTEST_WAIT}s (serial log: $serial)"; return 1 ;;
+	esac
+}
+verify_boottest_run() {       # runs after the target was unmounted; never writes it
+	local missing pkgs
+	missing=$(bootstrap_missing boottest)
+	if [ -n "$missing" ]; then
+		if [ "$(opt offline)" = 1 ]; then
+			vf_warn "boottest: qemu missing and offline=1; skipping the boot test"; return 0
+		fi
+		pkgs=$(_bootstrap_pkgs_for $missing)
+		say "boottest: installing $pkgs"
+		_bootstrap_apt_local "$pkgs"
+		missing=$(bootstrap_missing boottest)
+		[ -z "$missing" ] || { vf_warn "boottest: qemu still missing after apt ($missing); skipping the boot test"; return 0; }
+	fi
+	vf_boottest_run "$VF_BOOTTEST_DISK" "$VF_BOOTTEST_K" "$VF_BOOTTEST_I" "$VF_BOOTTEST_CMD"
+}
+
 verify_summary() {
 	local plan=${VF_PLAN:-$RUN/plan} inv=$RUN/recipient.inv pins p name mac live fu item target
 	[ -r "$plan" ] || return 0
@@ -943,7 +1020,9 @@ verify_run() {
 	fi
 	VF_ROOT=$root
 	vf_run_checks
+	if [ "$VF_FAIL" -eq 0 ] && [ "$(opt boottest 0)" = 1 ]; then verify_boottest_capture; fi
 	[ -z "$mounted" ] || target_umount
+	if [ "$VF_FAIL" -eq 0 ] && [ -n "${VF_BOOTTEST_K:-}" ]; then verify_boottest_run; fi
 	say "verify: $VF_OK ok, $VF_WARN warnings, $VF_FAIL failures"
 	if [ "$VF_FAIL" -gt 0 ]; then
 		[ -n "$DRY" ] || state_set phase.verify failed

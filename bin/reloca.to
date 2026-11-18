@@ -32,6 +32,9 @@
 #                  key is refused, so a typo cannot silently do nothing
 #      both modes: root=auto|block|files label=auto|gpt|dos nic=eth0 donor-nic=IFACE
 #         nic-pin=1|0 driver=MOD console=... redo=N cloudinit=disable|keep bootorder=pxe|local
+#         boottest=1|0 (verify boots a qcow2 overlay of the target disk in qemu and asserts
+#            the system reaches multi-user on a serial console; needs qemu-system-x86,
+#            installed on demand; target disk is never written)
 #         fsck=quick|full boot-part=SIZE cutover=netdown|poweroff|kexec|none offline=1
 #         expect=SERIAL|MAC force=1 raw=DIR cipher=aes128-gcm@openssh.com mode=online|offline
 #         raid=1 (two identical disks on this box: md RAID1 pairs; -d DISK,DISK2 names them, or the only two)

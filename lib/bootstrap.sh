@@ -30,6 +30,7 @@ bootstrap_missing() {
 		base)  need="partclone.extfs partclone.xfs mkfs.xfs xfs_db xfs_repair tmux pv lz4 zstd mdadm sfdisk sgdisk lsblk blkid wipefs mkswap pvcreate lsinitramfs" ;;
 		grub)  need="grub-install grub-probe /usr/lib/grub/i386-pc /usr/lib/grub/x86_64-efi" ;;
 		donor) need="partclone.extfs partclone.xfs xfs_db lz4 zstd mdadm sfdisk lsblk blkid dumpe2fs resize2fs pvs tar" ;;
+		boottest) need="qemu-system-x86_64 qemu-img" ;;
 		*) echo "bootstrap_missing: unknown set '$set'" >&2; return 2 ;;
 	esac
 	for d in $need; do
@@ -52,6 +53,8 @@ _bootstrap_pkg_of() {
 		zstd)                              echo zstd ;;
 		mdadm)                             echo mdadm ;;
 		sgdisk)                            echo gdisk ;;
+		qemu-system-x86_64)                echo qemu-system-x86 ;;
+		qemu-img)                          echo qemu-utils ;;
 		pvcreate|pvs)                      echo lvm2 ;;
 		sfdisk|lsblk|blkid|wipefs|mkswap)  echo util-linux ;;
 		lsinitramfs)                       echo initramfs-tools ;;
