@@ -34,7 +34,8 @@ qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 512 \
 	-cdrom "$ISO" -boot order=d \
 	-drive file="$DONOR_DISK",if=virtio,format=raw \
 	-netdev user,id=n0,hostfwd=tcp:127.0.0.1:2233-:22,hostfwd=tcp:127.0.0.1:2222-:2222 \
-	-device virtio-net-pci,netdev=n0 \
+	-device virtio-net-pci,netdev=n0,mac=52:54:00:aa:00:22 \
+	-smbios type=1,serial=RIG-DONOR-0001 \
 	-daemonize -pidfile "$OUT/donor.pid"
 
 echo "[rig] starting recipient VM..."
@@ -43,7 +44,8 @@ qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 768 \
 	-cdrom "$ISO" -boot order=d \
 	-drive file="$TARGET_DISK",if=virtio,format=raw \
 	-netdev user,id=n0,hostfwd=tcp:127.0.0.1:2255-:22 \
-	-device virtio-net-pci,netdev=n0 \
+	-device virtio-net-pci,netdev=n0,mac=52:54:00:aa:00:33 \
+	-smbios type=1,serial=RIG-RECIP-0002 \
 	-daemonize -pidfile "$OUT/recipient.pid"
 
 wait_ssh() { # port label
