@@ -937,6 +937,12 @@ EOF
 	cut_port=$(opt cutover-port 2223)
 	# shellcheck disable=SC2016  # SSH_CONNECTION expands on the donor: "client_ip client_port server_ip server_port"
 	cut_host=$(rsh_sh 'echo "$SSH_CONNECTION"' </dev/null 2>/dev/null | awk '{print $1}')
+	if [ -n "$(opt relay)" ]; then
+		# E2: the donor cannot dial this box; the poller goes back through the
+		# relay, onto the reverse tunnel ssh_relay_start put up at connect time
+		cut_host=$(state_get relay.host); cut_port=$(state_get relay.cut_port)
+		say "cutover poller: through the relay ($cut_host:$cut_port)"
+	fi
 	[ -n "$cut_host" ] || cut_host=$(ip -o route get "$DONOR_HOST" 2>/dev/null | sed -n 's/.* src \([^ ]*\).*/\1/p')
 	[ -n "$cut_host" ] || die "$EX_ENV" "cannot tell which address of this box the donor sees (SSH_CONNECTION empty): -o cutover-port= and a reachable address are needed for the cutover poller"
 	if [ -n "$YES" ] || ! is_tty; then fmode=auto; else fmode=ask; fi

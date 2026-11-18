@@ -37,6 +37,9 @@
 #            installed on demand; target disk is never written)
 #         fsck=quick|full boot-part=SIZE cutover=netdown|poweroff|kexec|none offline=1
 #         expect=SERIAL|MAC force=1 raw=DIR cipher=aes128-gcm@openssh.com mode=online|offline
+#         relay=USER@HOST[:SSHPORT] (E2: the donor forwards :22/:2222 onto the relay via
+#            tools/relay-tunnel.sh; pass the relay as DONOR "USER@RELAY:2222" with
+#            -o sshd-port=2223; this box forwards its cutover port back via the relay)
 #         raid=1 (two identical disks on this box: md RAID1 pairs; -d DISK,DISK2 names them, or the only two)
 #         compress=auto|zstd[:LEVEL]|lz4|none  on-line: each data frame is compressed on the
 #            donor and auto (the default) picks the level from the measured donor cpu and link
@@ -175,6 +178,7 @@ connect_donor() {   # $1 = DONOR
 		*) die "$EX_ENV" "bad -o mode=$want (want online or offline)";;
 	esac
 	RELOCA_MODE=$found; export RELOCA_MODE; state_set mode "$found"
+	ssh_relay_start
 	if [ "$found" = online ]; then
 		ssh_require_online_donor
 		ssh_guard_same_box

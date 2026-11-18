@@ -209,6 +209,47 @@ ssh_donor_mode() {
 	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
 	if [ $rc -eq 0 ]; then echo offline; else echo online; fi
 }
+
+# --- relay (E2, -o relay=USER@HOST[:SSHPORT]) ------------------------------------
+# Both ends may sit behind NAT. The operator starts tools/relay-tunnel.sh on the
+# DONOR (it forwards donor :22/:2222 onto the relay's :2222/:2223) and passes the
+# relay as the donor argument ("reloca.to root@RELAY:2222 -o sshd-port=2223").
+# This side forwards its own cutover port onto the relay's :2224 so the on-line
+# poller (transfer.sh) reaches the recipient even though nobody can dial it.
+relay_spec() {   # SPEC -> "user<TAB>host<TAB>port" of the relay; 2 = malformed
+	local spec=$1 user= rest= host= port=
+	rest=$spec
+	case $spec in
+		*@*) user=${spec%%@*}; rest=${spec#*@} ;;
+		*)   user=root ;;
+	esac
+	host=$rest; port=22
+	case $rest in
+		*:*) port=${rest#*:}; host=${rest%:*} ;;
+	esac
+	case $port in ''|*[!0-9]*) return 2 ;; esac
+	case $host in ''|*[!A-Za-z0-9._-]*) return 2 ;; esac
+	[ -n "$user" ] || return 2
+	printf '%s\n%s\n%s\n' "$user" "$host" "$port"
+}
+ssh_relay_start() {   # idempotent; needs -i KEYFILE — the relay must carry its pubkey
+	local spec r_user r_host r_port key
+	spec=$(opt relay)
+	[ -n "$spec" ] || return 0
+	[ -n "$DRY" ] && return 0
+	relay_spec "$spec" || die "$EX_ENV" "bad -o relay=$spec (want USER@HOST[:SSHPORT])"
+	[ -n "$(state_get relay.pid)" ] && kill -0 "$(state_get relay.pid)" 2>/dev/null && return 0
+	key=${SSH_KEYFILE:-}
+	[ -n "$key" ] || die "$EX_ENV" "-o relay needs -i KEYFILE: the relay must carry the same public key (this box forwards its cutover port through it)"
+	{ read -r r_user; read -r r_host; read -r r_port; } < <(relay_spec "$spec")
+	nohup ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+		-o StrictHostKeyChecking=accept-new -o BatchMode=yes -i "$key" -p "$r_port" \
+		-R 2224:localhost:2223 "$r_user@$r_host" >"$RUN/relay.log" 2>&1 &
+	echo $! > "$RUN/relay.pid"
+	state_set relay.pid "$(cat "$RUN/relay.pid")"; state_set relay.host "$r_host"; state_set relay.cut_port 2224
+	say "relay: cutover reverse tunnel up ($r_host :2224 -> this box :2223, pid $(cat "$RUN/relay.pid"))"
+}
+
 ssh_require_online_donor() {
 	local facts
 	# shellcheck disable=SC2016  # the $(...) expand on the donor, not here

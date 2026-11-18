@@ -82,7 +82,7 @@ opt() { local v=${OPT[$1]-}; if [ -n "$v" ]; then echo "$v"; else echo "${2-}"; 
 # window the operator believed he had raised. Keys are spelled with hyphens;
 # an underscore is accepted and normalised, so scripts written before the
 # spelling settled keep working.
-RELOCA_OPTS_BOTH="boot-part bootorder boottest cipher cloudinit compress console cutover donor-nic driver expect force fsck label mode nic nic-pin offline raid raw redo root"
+RELOCA_OPTS_BOTH="boot-part bootorder boottest cipher cloudinit compress console cutover donor-nic driver expect force fsck label mode nic nic-pin offline raid raw redo relay root"
 RELOCA_OPTS_OFFLINE="data sshd-port watchdog"
 RELOCA_OPTS_ONLINE="chunk converge cutover-port max-est passes patience precheck precheck-cow precheck-dir settle stall tracker verify-hash"
 # opt_check — refuse unknown -o keys, naming the near miss when there is one
