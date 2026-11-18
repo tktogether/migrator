@@ -60,7 +60,7 @@ DEFAULT linux
 TIMEOUT 20
 LABEL linux
 KERNEL /live/vmlinuz
-APPEND initrd=/live/initrd.img boot=live components console=tty0 console=ttyS0,115200n8
+APPEND initrd=/live/initrd.img boot=live components net.ifnames=0 biosdevname=0 systemd.default_timeout_start_sec=600 console=tty0 console=ttyS0,115200n8
 CFG
 
 echo "[live] xorriso..."
