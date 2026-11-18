@@ -95,11 +95,12 @@ _bootstrap_record_versions() {
 # file so a Live built for another suite keeps working. Self-contained: the donor
 # runs its own copy and may be a different Live build.
 _bootstrap_sources_line() {
-	local codename mirror
-	codename=$(sed -n 's/^CODENAME=//p' /etc/xserver-live-release 2>/dev/null)
+	local rf codename mirror
+	rf=$(live_release_file)
+	codename=$(sed -n 's/^CODENAME=//p' "$rf" 2>/dev/null)
 	[ -n "$codename" ] || codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release 2>/dev/null)
-	mirror=$(sed -n 's/^MIRROR=//p' /etc/xserver-live-release 2>/dev/null)
-	echo "deb ${mirror:-http://mirror.xserver.cloud/debian} ${codename:-trixie} main contrib non-free non-free-firmware"
+	mirror=$(sed -n 's/^MIRROR=//p' "$rf" 2>/dev/null)
+	echo "deb ${mirror:-http://deb.debian.org/debian} ${codename:-bookworm} main contrib non-free non-free-firmware"
 }
 # _bootstrap_apt_opts LIST [protect]: the Debian partclone package carries its own
 # partclone.extfs (0.3.36) and would overwrite the custom 0.3.48 the image ships;

@@ -191,13 +191,13 @@ ssh_disconnect() {
 # --- who is on the other end -----------------------------------------------------
 ssh_require_full_live_donor() {
 	local rc id
-	rsh test -r /etc/xserver-live-release; rc=$?
+	rsh sh -c 'test -r /etc/reloca-live-release || test -r /etc/xserver-live-release'; rc=$?
 	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
-	[ $rc -eq 0 ] || die "$EX_ENV" "donor $DONOR_HOST is not an XServer Live OS (no /etc/xserver-live-release)"
+	[ $rc -eq 0 ] || die "$EX_ENV" "donor $DONOR_HOST is not a full Live OS (no /etc/reloca-live-release)"
 	# the base Live is busybox only: no bash for rsh_fn, no apt-get for bootstrap
 	rsh sh -c 'command -v bash >/dev/null && command -v apt-get >/dev/null' \
 		|| die "$EX_ENV" "donor $DONOR_HOST runs the base Live (busybox only); boot it into the full Live"
-	id=$(rsh sed -n 's/^BUILD_ID=//p' /etc/xserver-live-release)
+	id=$(rsh sh -c 'sed -n "s/^BUILD_ID=//p" /etc/reloca-live-release 2>/dev/null; sed -n "s/^BUILD_ID=//p" /etc/xserver-live-release 2>/dev/null' | head -1)
 	state_set donor.live "$id"
 	say "donor Live build ${id:-?}, this box $(live_build_id)"
 }
@@ -205,7 +205,7 @@ ssh_require_full_live_donor() {
 # on-line relocation: the donor is not a Live at all but the running OS itself
 ssh_donor_mode() {
 	local rc
-	rsh test -r /etc/xserver-live-release; rc=$?
+	rsh sh -c 'test -r /etc/reloca-live-release || test -r /etc/xserver-live-release'; rc=$?
 	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
 	if [ $rc -eq 0 ]; then echo offline; else echo online; fi
 }

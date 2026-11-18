@@ -146,12 +146,12 @@ fresh_sh "cleanup_add false; exit 0"; rc=$?
 assert_eq "a failing snippet does not change the exit code" 0 "$rc"
 
 # --- environment ----------------------------------------------------------------
-if [ -r /etc/xserver-live-release ]; then
+if [ -r /etc/reloca-live-release ] || [ -r /etc/xserver-live-release ]; then
 	skip "require_full_live off-Live" "this host is a Live"
 else
 	( require_full_live ) >"$RUN/rfl.out" 2>/dev/null; rc=$?
 	assert_eq  "require_full_live off-Live exits 2" 2 "$rc"
-	assert_has "require_full_live off-Live says why" "not an XServer Live OS" "$(cat "$RUN/rfl.out")"
+	assert_has "require_full_live off-Live says why" "not a Live OS" "$(cat "$RUN/rfl.out")"
 fi
 mkdir -p "$RUN/lib"; echo 1.2.3 > "$RUN/lib/VERSION"
 assert_eq "reloca_version without lib/VERSION" dev   "$(RELOCA_LIB=$RUN/nolib reloca_version)"

@@ -42,13 +42,13 @@ assert_has "-o without = says so"      "bad -o badopt" "$out"
 out=$(bash "$M" -z -V 2>&1); rc=$?
 assert_eq  "unknown flag exits 2"      2 "$rc"
 
-if [ -r /etc/xserver-live-release ]; then
+if [ -r /etc/reloca-live-release ] || [ -r /etc/xserver-live-release ]; then
 	skip "all off-Live" "this host is a Live"
 else
 	rm -f "$RUN/failure" "$RUN/lock"
 	out=$(bash "$M" 10.0.0.12 2>&1); rc=$?
 	assert_eq   "all on a non-Live host exits 2"     2 "$rc"
-	assert_has  "all on a non-Live host says why"    "not an XServer Live OS" "$out"
+	assert_has  "all on a non-Live host says why"    "not a Live OS" "$out"
 	assert_ok   "the gate recorded \$RUN/failure"    grep -q '^exit=2 ' "$RUN/failure"
 	assert_fail "the gate fires before the lock"     test -e "$RUN/lock"
 	out=$(bash "$M" --step plan 10.0.0.12 2>&1); rc=$?

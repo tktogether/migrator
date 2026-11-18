@@ -161,11 +161,17 @@ run_cleanup() {
 trap run_cleanup EXIT
 
 # --- environment --------------------------------------------------------------
+live_release_file() {   # marker file of a full Live: ours first, upstream's kept for compatibility (D4)
+	if   [ -r /etc/reloca-live-release ];  then echo /etc/reloca-live-release
+	elif [ -r /etc/xserver-live-release ]; then echo /etc/xserver-live-release
+	else echo; fi
+}
 require_full_live() {
-	[ -r /etc/xserver-live-release ] || die "$EX_ENV" "not an XServer Live OS (no /etc/xserver-live-release)"
+	local rf; rf=$(live_release_file)
+	[ -n "$rf" ] || die "$EX_ENV" "not a Live OS (no /etc/reloca-live-release)"
 	if ! { have systemctl && have bash && have apt-get; }; then die "$EX_ENV" "this needs the full Live OS, not boot=base"; fi
 }
-live_build_id() { sed -n 's/^BUILD_ID=//p' /etc/xserver-live-release 2>/dev/null; }
+live_build_id() { local rf; rf=$(live_release_file); [ -n "$rf" ] && sed -n 's/^BUILD_ID=//p' "$rf" 2>/dev/null; return 0; }
 reloca_version() {
 	local v=dev
 	[ -r "$RELOCA_LIB/VERSION" ] && v=$(cat "$RELOCA_LIB/VERSION")

@@ -116,7 +116,7 @@ HOST_TO=destination.reloca.to; HOST_FROM=source.reloca.to
 set_roles() {
 	ROLE_TAG=destination; export ROLE_TAG
 	# only a Live gets renamed: "reloca.to -s check" on the build host must not touch it
-	if [ -z "$DRY" ] && [ -r /etc/xserver-live-release ] && have hostnamectl; then
+	if [ -z "$DRY" ] && [ -n "$(live_release_file)" ] && have hostnamectl; then
 		hostnamectl --transient set-hostname "$HOST_TO" 2>/dev/null || true
 	fi
 }

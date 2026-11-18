@@ -830,7 +830,7 @@ inv_lv_path() {
 inv_emit_host() {
 	local role=$1 hn live fw sb=0 v bootnic bootmac bootip gw ncpu ram awkv
 	hn=$(cat /proc/sys/kernel/hostname 2>/dev/null || hostname 2>/dev/null); : "${hn:=-}"
-	live=$(sed -n 's/^BUILD_ID=//p' /etc/xserver-live-release 2>/dev/null | head -1); : "${live:=-}"
+	live=$({ sed -n 's/^BUILD_ID=//p' /etc/reloca-live-release 2>/dev/null; sed -n 's/^BUILD_ID=//p' /etc/xserver-live-release 2>/dev/null; } | head -1); : "${live:=-}"
 	if [ -d /sys/firmware/efi ]; then fw=uefi; else fw=bios; fi
 	if [ "$fw" = uefi ]; then
 		# efivar layout: 4 bytes of attributes, then the value
