@@ -59,7 +59,7 @@ DEFAULT linux
 TIMEOUT 20
 LABEL linux
 KERNEL /live/vmlinuz
-APPEND initrd=/live/initrd.img boot=live components console=ttyS0,115200n8 console=tty0
+APPEND initrd=/live/initrd.img boot=live components console=tty0 console=ttyS0,115200n8
 CFG
 
 echo "[live] xorriso..."
