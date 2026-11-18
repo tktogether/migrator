@@ -59,7 +59,7 @@ wait_ssh 2255 recipient || exit 1
 echo "[rig] pushing the rig key into the recipient VM and starting the migration under tmux..."
 scp $SSH_OPTS -P 2255 "$KEY" root@127.0.0.1:/root/rig-key >/dev/null
 ssh $SSH_OPTS -p 2255 root@127.0.0.1 \
-	"tmux new-session -d -s mig 'reloca.to -y -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/reloca-run.log 2>&1' \
+	"tmux new-session -d -s mig 'reloca.to -y -o boottest=1 -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/reloca-run.log 2>&1' \
 	 && echo migration started"
 
 # follow the run until reloca.to exits (the tmux wrapper records the rc)
