@@ -434,11 +434,15 @@ static int S_spawn_poller(const char *host, const char *port, const char *token)
 	if (pid < 0) return -1;
 	if (pid == 0) {
 		/* detach: a new session, no terminal, no inherited fds; the second fork
-		 * leaves no zombie for serve to reap */
+		 * leaves no zombie for serve to reap. stdout/stderr go to a log on the
+		 * donor's tmpfs: a poller that never came up is otherwise invisible
+		 * (D24: serve said poll=started but no poller existed minutes later) */
 		setsid();
 		if (fork() != 0) _exit(0);
 		int fd = open("/dev/null", O_RDWR);
-		if (fd >= 0) { dup2(fd, 0); dup2(fd, 1); dup2(fd, 2); if (fd > 2) close(fd); }
+		if (fd >= 0) { dup2(fd, 0); if (fd > 2) close(fd); }
+		int lg = open("/run/reloca.to/poller.log", O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+		if (lg >= 0) { dup2(lg, 1); dup2(lg, 2); if (lg > 2) close(lg); }
 		for (i = 3; i < 1024; i++) close(i);
 		execv(exe, argv);
 		_exit(127);
@@ -515,6 +519,7 @@ static int cmd_poll(int argc, char **argv)
 	if (argc < 4) die("usage: reloca-agent poll HOST PORT TOKEN [MOUNTPOINT...]");
 	host = argv[1]; port = atoi(argv[2]); token = argv[3];
 	{ const char *e = getenv("RELOCA_POLL_THAW_AFTER"); if (e && atol(e) > 0) thaw_after = atol(e); }
+	fprintf(stderr, "poll: start host=%s port=%d mounts=%d thaw_after=%ld\n", host, port, argc - 4, thaw_after);
 	signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
 	for (;;) {
 		char line[512]; int fd, n, bad;
