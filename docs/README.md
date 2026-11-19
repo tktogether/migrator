@@ -42,7 +42,7 @@ bash rig/clean.sh                # 清理全部 rig 进程
 ## 路线图（M0–M4，见 DESIGN.md）
 
 - ✅ M1=E1（自建 Live，316M ISO 双角色实测可引导） · ✅ M2 代码=E2（中继，17 断言） · ✅ M4 代码=E4（boottest，契约 20/20）
-- ◐ M0 验收：rig 离线 E2E 已实证至 transfer（759M@~100MB/min）+ postfix（initramfs 重建实测），收尾（verify→cutover→独立盘引导）被**宿主机超载**（load 15↔74 波动饿死 TCG vCPU）阻断；阶段幂等，环境恢复后 `bash rig/clean.sh && bash rig/run-offline.sh` 续跑即验收（详见 DECISIONS D19）
-- ⏳ E2 的中继拓扑 E2E · E4 烘焙 qemu 实测轮（build-live.sh 已含 qemu，重建 ISO 即可）
+- ✅ M0 验收（D20，真机双 VM 在线模式）：plan→check→apply→在线 transfer（3 轮收敛，8.22G，冻结 0.63s）→postfix（双内核 initramfs、grub i386-pc）→verify（19 ok，E4 boottest 到 multi-user）→cutover=poweroff→**独立固件引导成功**（systemd running、eth0 DHCP、SSH/数据/swap 在位）。同轮修复 verify.sh 三处缺陷（boottest serial 变量、ANSI 色码/内存、netplan+NM 误判）
+- ✅ E4 实测轮（Live 内置 qemu，boottest 真机跑通） · ⏳ E2 中继拓扑 E2E（需第三台可达机） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - 📐 M3=E3：按 D16 实现（agent 位图持久化 + 检查点令牌 + 降级全量）
 - 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）
