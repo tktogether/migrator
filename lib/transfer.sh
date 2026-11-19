@@ -745,7 +745,7 @@ tx_ol_hook() {
 			while IFS= read -r row; do
 				[ -n "$row" ] || continue
 				src=$(pl_field "$row" src); ddir=$TX_MNT/dst/$(tx_vol_id "$row"); sdir=$(tx_vol_state "$src.srcdir")
-				TX_SRC_RUN=tx_ol_cmd tx_verify_files "$sdir" "$ddir" "$(tx_swap_excludes "$(pl_field "$row" mount)" | wc -l)" "$(tx_swap_excludes "$(pl_field "$row" mount)" | awk '{ s += $2 } END { print s + 0 }')"
+				TX_SRC_RUN=tx_ol_cmd tx_verify_files "$sdir" "$ddir" "$(tx_swap_excludes "$(pl_field "$row" mount)" | wc -l)" "$(tx_swap_excludes "$(pl_field "$row" mount)" | awk '{ s += $2 } END { printf "%.0f\n", s }')"
 			done < <(tx_ol_rows) ;;
 	esac
 }
