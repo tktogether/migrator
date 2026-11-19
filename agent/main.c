@@ -430,6 +430,31 @@ static int S_spawn_poller(const char *host, const char *port, const char *token)
 	argv[argc++] = exe; argv[argc++] = "poll"; argv[argc++] = (char *)host; argv[argc++] = (char *)port; argv[argc++] = (char *)token;
 	{ const char *list[2 * MAX_VOLS]; int n = S_freeze_list(list); for (i = 0; i < n && argc < 7 + 2 * MAX_VOLS; i++) argv[argc++] = (char *)list[i]; }
 	argv[argc] = NULL;
+	/* systemd donors: a transient service is not tied to the ssh session that
+	 * spawned us. The double-fork below survived manual tests, yet the poller
+	 * of a real run logged its start and then vanished before the cutover
+	 * (D24); systemd-run puts it in its own unit and cgroup. */
+	if (access("/run/systemd/system", F_OK) == 0) {
+		const char *sr = access("/usr/bin/systemd-run", X_OK) == 0 ? "/usr/bin/systemd-run" :
+		                 access("/bin/systemd-run", X_OK) == 0 ? "/bin/systemd-run" : NULL;
+		if (sr) {
+			char unit[64]; char *sa[16 + 2 * MAX_VOLS]; int k = 0, st = 0; pid_t sp;
+			snprintf(unit, sizeof unit, "reloca-poller-%d", (int)getpid());
+			sa[k++] = (char *)sr;
+			sa[k++] = "--unit"; sa[k++] = unit;
+			sa[k++] = "--collect";
+			sa[k++] = "--service-type=exec";
+			sa[k++] = "--property=StandardOutput=file:/run/reloca.to/poller.log";
+			sa[k++] = "--property=StandardError=file:/run/reloca.to/poller.log";
+			sa[k++] = "--";
+			for (i = 0; i < argc && k < (int)(sizeof sa / sizeof *sa) - 1; i++) sa[k++] = argv[i];
+			sa[k] = NULL;
+			sp = fork();
+			if (sp == 0) { execv(sr, sa); _exit(127); }
+			if (sp > 0 && waitpid(sp, &st, 0) == sp && WIFEXITED(st) && WEXITSTATUS(st) == 0) return 0;
+			/* fall through to the double-fork when systemd-run refused */
+		}
+	}
 	pid = fork();
 	if (pid < 0) return -1;
 	if (pid == 0) {
@@ -533,6 +558,7 @@ static int cmd_poll(int argc, char **argv)
 		}
 		fd = connect_numeric(host, port);
 		if (fd < 0) { sleep(3); continue; }
+		{ static int logged; if (!logged) { fprintf(stderr, "poll: connected to %s:%d\n", host, port); logged = 1; } }
 		last_ok = time(NULL);
 		snprintf(line, sizeof line, "RELOCA-POLL %s\n", token);
 		if (write_all(fd, line, strlen(line)) < 0 || (n = read_line_fd(fd, line, sizeof line, 30)) < 0) { close(fd); sleep(3); continue; }
