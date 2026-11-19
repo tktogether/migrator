@@ -267,12 +267,16 @@ pc_target_disk() {
 # so nothing of the Live can serve it). SecureBoot needs a shim on the donor ESP.
 pc_firmware() {
 	local r
-	D_FW=bios; D_ESP_DEV=
+	# the firmware the donor actually booted (inventory host.fw), not "does it have an ESP":
+	# a bios machine with a leftover ESP (Ubuntu creates one) is still bios, and calling it
+	# uefi used to skip grub_from_live for a bios -> uefi recipient and fail there (D23)
+	D_FW=$(pc_f "$D_HOST" fw bios)
+	D_ESP_DEV=
 	for r in "${D_FSTAB[@]}"; do
-		if [ "$(pc_f "$r" mount)" = /boot/efi ] && [ "$(pc_f "$r" type)" = vfat ]; then D_FW=uefi; D_ESP_DEV=$(pc_f "$r" dev); fi
+		if [ "$(pc_f "$r" mount)" = /boot/efi ] && [ "$(pc_f "$r" type)" = vfat ]; then D_ESP_DEV=$(pc_f "$r" dev); fi
 	done
 	for r in "${D_PART[@]}"; do
-		case $(pc_f "$r" type) in ef|EF|"$PL_GPT_ESP"|"$(echo "$PL_GPT_ESP" | tr A-F a-f)") D_FW=uefi; [ -n "$D_ESP_DEV" ] || D_ESP_DEV=$(pc_f "$r" dev);; esac
+		case $(pc_f "$r" type) in ef|EF|"$PL_GPT_ESP"|"$(echo "$PL_GPT_ESP" | tr A-F a-f)") [ -n "$D_ESP_DEV" ] || D_ESP_DEV=$(pc_f "$r" dev);; esac
 	done
 	GRUB_FROM_LIVE=0; GRUB_PKGS=-
 	if [ "$D_FW" != "$R_FW" ]; then

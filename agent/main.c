@@ -499,8 +499,12 @@ static int poll_thaw(int argc, char **argv)
 	int bad = 0, i;
 	for (i = 4; i < argc; i++) {
 		int m = open(argv[i], O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-		if (m < 0 || ioctl(m, FITHAW, 0) < 0) bad++;
-		if (m >= 0) close(m);
+		/* the list names every mountpoint the transfer looked at, including the
+		 * vfat ESP that cannot be frozen at all: a failed FITHAW there is not a
+		 * failed rollback (seen on a bios donor with /boot/efi, D23) */
+		if (m < 0) { bad++; continue; }
+		if (ioctl(m, FITHAW, 0) < 0 && errno != EOPNOTSUPP && errno != ENOTTY) bad++;
+		close(m);
 	}
 	return bad;
 }
