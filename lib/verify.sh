@@ -949,8 +949,16 @@ vf_boottest_run() {           # seam: DISK KERNEL INITRD CMDLINE -> 0 = reached 
 		vf_warn "boottest: qemu is not installed; skipping the boot test"; return 0
 	fi
 	# the trial guest takes its RAM out of the Live's own: on a small recipient the
-	# OOM killer would take the Live down mid-migration (seen on a 2 GiB Live)
-	local memav; memav=$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)
+	# OOM killer would take the Live down mid-migration (seen on a 2 GiB Live; the
+	# availability figure alone lies there, because reclaimable page cache is counted)
+	local memtotal memav
+	memtotal=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo)
+	memav=$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)
+	if [ -n "$memtotal" ] && [ "$memtotal" -lt 3072 ]; then
+		vf_warn "boottest: ${memtotal} MiB RAM in this Live cannot also host a 1 GiB trial guest: skipped" \
+			"run the migration with -o boottest=0, or verify later on a box with more RAM"
+		return 0
+	fi
 	if [ -n "$memav" ] && [ "$memav" -lt 1536 ]; then
 		vf_warn "boottest: only ${memav} MiB available (a 1 GiB trial guest and this Live): skipped" \
 			"run the migration with -o boottest=0, or verify later on a box with more RAM"
