@@ -7,7 +7,7 @@ Fork 自 [reloca.to](https://github.com/Vitalium/reloca.to) 1.2（MIT，XServer 
 | 扩展 | 内容 | 代码位置 | 状态 |
 |---|---|---|---|
 | **E1 去 XServer 化** | 自有 Live 标记 `/etc/reloca-live-release`（兼容接受上游标记）；bootstrap 默认镜像 deb.debian.org/bookworm；自建 Debian bookworm Live（手搓：mmdebstrap + live-boot + squashfs + xorriso），烘焙全部运行时依赖与工具本体 | `lib/common.sh` `live_release_file()`、`lib/bootstrap.sh`、`lib/ssh.sh`、`lib/inventory.sh`、`bin/reloca.to`（8 处触点）+ `rig/build-live.sh` | ✅ 已实现；ISO 316M 实测可引导 |
-| **E4 试启动验证** | `-o boottest=1`：verify 全绿后用 qcow2 overlay 把目标盘在 qemu 里试启动（direct kernel boot + 串口断言 multi-user），目标盘零写入；qemu 缺失优雅降级 | `lib/verify.sh`（verify_boottest_*、vf_boottest_* seams）、`lib/bootstrap.sh`（boottest 工具组） | ✅ 已实现，契约测试 20/20；待烘焙 qemu 的 Live 实测 |
+| **E4 试启动验证** | `-o boottest=1`：verify 全绿后用 qcow2 overlay 把目标盘在 qemu 里试启动（direct kernel boot + 串口断言 multi-user），目标盘零写入；qemu 缺失/小内存优雅降级 | `lib/verify.sh`（verify_boottest_*、vf_boottest_* seams）、`lib/bootstrap.sh`（boottest 工具组） | ✅ 实现并在真机跑通（D20）；slim Live 按内存门控自动跳过（D23） |
 | **E2 中继模式** | `-o relay=USER@HOST[:SSHPORT]`：donor 侧 `tools/relay-tunnel.sh` 反向隧道（中继:2222/2223 ← donor:22/2222），recipient 以 `root@RELAY:2222 -o sshd-port=2223` 迁移；recipient 的 cutover 反向隧道走中继（在线 poller 可达）。传输层零改动 | `lib/ssh.sh`（relay_spec/ssh_relay_start）、`lib/transfer.sh`（poller 覆盖）、`tools/relay-tunnel.sh` | ✅ 已实现，解析与接线 17 断言全绿；rig 中继拓扑 E2E 待跑 |
 | **E3 状态持久化** | 跨 run 多轮增量 + 字节级续传：agent 位图落盘 + 目标端检查点令牌 + 失效降级全量（migratekit 不变量） | `agent/tracker.c` `agent/main.c` `lib/transfer.sh` | 📐 设计定稿（D16），实现排 M3 |
 
@@ -43,6 +43,11 @@ bash rig/clean.sh                # 清理全部 rig 进程
 
 - ✅ M1=E1（自建 Live，316M ISO 双角色实测可引导） · ✅ M2 代码=E2（中继，17 断言） · ✅ M4 代码=E4（boottest，契约 20/20）
 - ✅ M0 验收（D20，真机双 VM 在线模式）：plan→check→apply→在线 transfer（3 轮收敛，8.22G，冻结 0.63s）→postfix（双内核 initramfs、grub i386-pc）→verify（19 ok，E4 boottest 到 multi-user）→cutover=poweroff→**独立固件引导成功**（systemd running、eth0 DHCP、SSH/数据/swap 在位）。同轮修复 verify.sh 三处缺陷（boottest serial 变量、ANSI 色码/内存、netplan+NM 误判）
-- ✅ E4 实测轮（Live 内置 qemu，boottest 真机跑通） · ⏳ E2 中继拓扑 E2E（需第三台可达机） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
+- ✅ E4 实测轮（Live 内置 qemu，boottest 真机跑通；slim profile 下按 MemTotal/可用内存门控自动跳过）
+- ✅ **1C/1G 收端**（D23）：slim Live（444M ISO，去 qemu + xz + zram + `reloca.ip=`）在 .117（1C/955MiB/40G/UEFI）完成 13.18G 迁移、UEFI 独立引导，7 服务全绿
+- ✅ **2G BIOS→UEFI 无人工**（D24）：修复 plan 的固件判定（改用 inventory `host.fw`）后，`grub_from_live=1` 生效，postfix 从 Live 装 UEFI grub/NVRAM，verify 19 ok，目标 UEFI 启动
+- ◐ **四机任意互传矩阵**：已完成 .115→.117（1G 收端）、.115→.116（2G/UEFI）；待 .117→.116（LVM 源 + 1G 源机，需恢复 .117 快照）、.116→.115/.111（40G→30G，用 `-o root=files` 缩容）
+- ⚠ 遗留：cutover 的 poller 派生进程存活（serve 报 poll=started 但随后无进程；手工 poller 与监听器互通），已加 `/run/reloca.to/poller.log`（514e8fd）；现存机器：.116/.117 已是迁移系统，.115/.111 原系统在跑
+- ⏳ E2 中继拓扑 E2E（需第三台可达机） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - 📐 M3=E3：按 D16 实现（agent 位图持久化 + 检查点令牌 + 降级全量）
 - 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）
