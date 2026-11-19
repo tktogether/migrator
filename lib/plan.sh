@@ -819,9 +819,18 @@ pc_ident_add() {   # SPEC ACTION (deduplicated on SPEC)
 	local x; for x in "${IDENT[@]}"; do [ "${x%%$'\t'*}" != "$1" ] || return 0; done
 	IDENT+=("$1"$'\t'"$2")
 }
+# pc_dev_uuid DEV: the filesystem (or swap) UUID the inventory knows for DEV,
+# canonicalized the way pc_resolve canonicalizes its DEV
+pc_dev_uuid() {
+	local r
+	for r in "${D_FS[@]}" "${D_SWAP[@]}"; do
+		[ "$(pc_canon "$(pc_f "$r" dev)")" = "$1" ] && { pc_f "$r" uuid; return 0; }
+	done
+	return 1
+}
 # pc_resolve SPEC DEV -> keep | -> NEWSPEC | MISSING   (DEV = the inventory's resolution of SPEC)
 pc_resolve() {
-	local spec=$1 dev m p
+	local spec=$1 dev m p u
 	dev=$(pc_canon "$2")
 	case $spec in
 		UUID=*|LABEL=*)
@@ -833,6 +842,15 @@ pc_resolve() {
 			m=${MIG[$p]}
 			case $m in member|-) echo MISSING;; keep) echo keep;;
 				*) if [ "$NUMBERING_CHANGED" = 0 ]; then echo keep; else echo "-> $m"; fi;; esac;;
+		/dev/disk/by-id/dm-uuid-*)
+			# a dm-uuid encodes the donor's VG and LV UUIDs; apply creates new ones,
+			# so the path never exists on the recipient even when the VG/LV names are
+			# kept. The mkfs preserves the filesystem UUID: name the volume by that (D28).
+			[ "$dev" != - ] && [ -n "${MIG[$dev]:-}" ] && [ "${MIG[$dev]}" != member ] && [ "${MIG[$dev]}" != - ] || { echo MISSING; return; }
+			m=${MIG[$dev]}
+			if [ "$m" = keep ]; then
+				if u=$(pc_dev_uuid "$dev") && [ -n "$u" ]; then echo "-> UUID=$u"; else echo "-> $dev"; fi
+			else echo "-> $m"; fi;;
 		/dev/*)
 			[ "$dev" != - ] && [ -n "${MIG[$dev]:-}" ] || { echo MISSING; return; }
 			m=${MIG[$dev]}
