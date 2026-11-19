@@ -539,6 +539,20 @@ pf_efi_id() {   # EFIDIR
 # ==============================================================================
 # the steps (deb family)
 # ==============================================================================
+# the file copy prunes the trees it must not descend into (TX_EXCL_DIRS: they are
+# live mounts on the donor); on the target they have to exist as plain directories,
+# because services mount onto them -- lxcfs refused to start without /var/lib/lxcfs
+# and left a failed unit on .111 (D27). The ESP is mounted by apply/target_mount.
+pf_step_mountpoints() {
+	say "--- excluded mountpoints"
+	local d
+	for d in $TX_EXCL_DIRS; do
+		[ -d "$TARGET_MNT/$d" ] && continue
+		say "creating /$d (a mountpoint on the donor, missing in the copy)"
+		[ -n "$DRY" ] || mkdir -p "$TARGET_MNT/$d"
+		PF_CHANGED=$((PF_CHANGED + 1))
+	done
+}
 pf_step_fstab() {
 	say "--- fstab"
 	local swaps v
@@ -1141,6 +1155,7 @@ postfix_run() {
 		if pf_raid && declare -F md_sync_resume_plan >/dev/null; then md_sync_resume_plan "$RUN/plan"; fi
 	fi
 
+	pf_step_mountpoints
 	pf_step_fstab
 	pf_step_mdadm
 	pf_step_cmdline
