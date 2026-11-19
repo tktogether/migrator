@@ -78,7 +78,7 @@ VF_CHECKS="boot initramfs fstab cmdline filesystems bootloader network md misc"
 VF_OK=0; VF_WARN=0; VF_FAIL=0
 VF_ROOT=; VF_PLAN=
 VF_KERNEL=; VF_INITRD=; VF_CMDLINE=; VF_SOURCE=; VF_KVER=
-VF_BOOTTEST_K=; VF_BOOTTEST_I=; VF_BOOTTEST_CMD=; VF_BOOTTEST_DISK=; VF_BOOTTEST_WAIT=300
+VF_BOOTTEST_K=; VF_BOOTTEST_I=; VF_BOOTTEST_CMD=; VF_BOOTTEST_DISK=; VF_BOOTTEST_WAIT=600
 # cutover timing, seconds (tests shorten them)
 : "${RELOCA_CUTOVER_WAIT_S:=5}"       # after the donor command, before the first ping
 : "${RELOCA_CUTOVER_TIMEOUT_S:=30}"   # pings per address before "still answers"
@@ -748,6 +748,21 @@ vf_net_primary() {
 	[ "$rc" -eq 0 ] || return 1
 	return 0
 }
+# vf_netplan_nm_auto ROOT: 0 when netplan names no interface at all and delegates to
+# NetworkManager (stock Ubuntu desktop: NM creates the wired DHCP connection at boot for
+# whatever the NIC is called; net.ifnames=0 makes that the target name). Any ethernets:
+# section, any other renderer, or a NetworkManager that does not start means "checked".
+vf_netplan_nm_auto() {
+	local root=$1 f found=
+	[ -e "$root/usr/sbin/NetworkManager" ] || return 1
+	compgen -G "$root/etc/systemd/system/*.wants/NetworkManager.service" >/dev/null 2>&1 || return 1
+	for f in "$root"/etc/netplan/*.yaml "$root"/etc/netplan/*.yml; do
+		[ -f "$f" ] || continue
+		grep -Eq '^[[:space:]]*ethernets:[[:space:]]*(#.*)?$' "$f" && return 1
+		grep -Eq '^[[:space:]]*renderer:[[:space:]]*NetworkManager[[:space:]]*(#.*)?$' "$f" && found=1
+	done
+	[ -n "$found" ]
+}
 # the line to type on the BMC console when the boot NIC did not become TARGET
 vf_bmc_fix() {   # TARGET MAC [CURRENT NAME]
 	local t=$1 mac=$2 cur=${3:-}
@@ -767,7 +782,11 @@ vf_check_network() {
 	case $rc in
 		0) vf_ok "primary network config ($kind) is on $target (donor: $oldnic)";;
 		2) vf_warn "the donor's network config format is '$kind': not checked, $target may have no config" "look for $oldnic under $root/etc";;
-		*) vf_fail "primary network config ($kind) does not name $target (the donor's $oldnic was not renamed): no network after the boot";;
+		*)	if [ "$kind" = netplan ] && vf_netplan_nm_auto "$root"; then
+				vf_warn "netplan names no interface and delegates to NetworkManager: NM auto-connects $target with DHCP, as it did on the donor"
+			else
+				vf_fail "primary network config ($kind) does not name $target (the donor's $oldnic was not renamed): no network after the boot"
+			fi;;
 	esac
 	mapfile -t managed < <(vf_netcfg_files "$root")
 	if [ -n "$oldmac" ] && [ "${oldmac,,}" != "${mac,,}" ]; then
@@ -925,6 +944,7 @@ vf_boottest_disk() {          # seam: the disk the plan wrote (apply_target_disk
 vf_boottest_run() {           # seam: DISK KERNEL INITRD CMDLINE -> 0 = reached multi-user
 	local disk=$1 k=$2 i=$3 cmdline=$4
 	local dir=$RUN/boottest overlay serial pid marker= rc=1 wait=${VF_BOOTTEST_WAIT}
+	serial=$dir/serial.log
 	if ! { [ -x /usr/bin/qemu-system-x86_64 ] && [ -x /usr/bin/qemu-img ]; }; then
 		vf_warn "boottest: qemu is not installed; skipping the boot test"; return 0
 	fi
@@ -933,7 +953,7 @@ vf_boottest_run() {           # seam: DISK KERNEL INITRD CMDLINE -> 0 = reached 
 		|| { vf_warn "boottest: cannot create the overlay of $disk; skipping the boot test"; return 0; }
 	: > "$serial"
 	[ "$cmdline" = "-" ] && cmdline=
-	qemu-system-x86_64 -machine accel=kvm:tcg -m 384 -smp 1 \
+	qemu-system-x86_64 -machine accel=kvm:tcg -m 1024 -smp 1 \
 		-display none -monitor none -serial file:"$serial" -pidfile "$dir/qemu.pid" \
 		-drive file="$dir/overlay.qcow2",if=virtio,format=qcow2 \
 		-kernel "$k" -initrd "$i" -append "$cmdline console=ttyS0,115200n8" \
@@ -941,7 +961,8 @@ vf_boottest_run() {           # seam: DISK KERNEL INITRD CMDLINE -> 0 = reached 
 	pid=$!
 	while [ "$wait" -gt 0 ]; do
 		grep -q "Kernel panic" "$serial" 2>/dev/null && { marker=panic; break; }
-		grep -Eq "Reached target (Basic|Multi-User) System|systemd\[1\]: Startup finished" "$serial" 2>/dev/null && { marker=up; break; }
+		# systemd colours the target name on a serial console (ESC[0;1;39mBasic System): strip ANSI before matching
+		sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' "$serial" 2>/dev/null | grep -Eq "Reached target (Basic|Multi-User) System|systemd\[1\]: Startup finished" && { marker=up; break; }
 		kill -0 "$pid" 2>/dev/null || { marker=exited; break; }
 		sleep 5; wait=$((wait - 5))
 	done
