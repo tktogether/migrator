@@ -46,7 +46,7 @@ bash rig/clean.sh                # 清理全部 rig 进程
 - ✅ E4 实测轮（Live 内置 qemu，boottest 真机跑通；slim profile 下按 MemTotal/可用内存门控自动跳过）
 - ✅ **1C/1G 收端**（D23）：slim Live（444M ISO，去 qemu + xz + zram + `reloca.ip=`）在 .117（1C/955MiB/40G/UEFI）完成 13.18G 迁移、UEFI 独立引导，7 服务全绿
 - ✅ **2G BIOS→UEFI 无人工**（D24）：修复 plan 的固件判定（改用 inventory `host.fw`）后，`grub_from_live=1` 生效，postfix 从 Live 装 UEFI grub/NVRAM，verify 19 ok，目标 UEFI 启动
-- ✅ **四机任意互传矩阵（主要方向）**：.115→.117（1G 收端）、.115→.116（2G/UEFI）、.116→.117（40G/40G UEFI→UEFI）、.116→.111（40G→30G 缩容 + UEFI→BIOS + 1G，D27）、**.117 LVM→.116（D28：verify 21 ok、冻结 1.63s、独立引导）**。file 方法、缩容、LVM 源均已闭环；多盘→单盘与单盘→双盘 RAID1 未验证
+- ✅ **四机任意互传矩阵（主要方向）**：.115→.117（1G 收端）、.115→.116（2G/UEFI）、.116→.117（40G/40G UEFI→UEFI）、.116→.111（40G→30G 缩容 + UEFI→BIOS + 1G，D27）、**.117 LVM→.116（D28：verify 21 ok、冻结 1.63s、独立引导）**。file 方法、缩容、LVM 源、**多盘→单盘（D29：两源盘 5 卷合并到 30G 单盘，/data 数据 md5 一致）**均已闭环；单盘→双盘 RAID1（R16）未验证
 - ✅ cutover poller 闭环（D27）：systemd-run 瞬态服务（d4b638b）在 .116→.111 上首次实测存活并连回，rollback thaw 成功；同轮修掉四个交付级缺陷（条目计数口径、mawk 科学计数、FITHAW EINVAL、postfix 重建被剪挂载点，015cb8f/68d4da2/796f341/d8d6b66）。⚠ 宿主 TK-Nas 内存不足会 OOM 杀 qemu（D26），开跑前先降 VM 内存/少开 VM；现存机器：.111/.117 已是迁移系统，.116 原系统，.115 原系统在线（重建最终 Live 中）
 - ⏳ E2 中继拓扑 E2E（需第三台可达机） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - 📐 M3=E3：按 D16 实现（agent 位图持久化 + 检查点令牌 + 降级全量）
