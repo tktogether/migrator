@@ -46,8 +46,8 @@ bash rig/clean.sh                # 清理全部 rig 进程
 - ✅ E4 实测轮（Live 内置 qemu，boottest 真机跑通；slim profile 下按 MemTotal/可用内存门控自动跳过）
 - ✅ **1C/1G 收端**（D23）：slim Live（444M ISO，去 qemu + xz + zram + `reloca.ip=`）在 .117（1C/955MiB/40G/UEFI）完成 13.18G 迁移、UEFI 独立引导，7 服务全绿
 - ✅ **2G BIOS→UEFI 无人工**（D24）：修复 plan 的固件判定（改用 inventory `host.fw`）后，`grub_from_live=1` 生效，postfix 从 Live 装 UEFI grub/NVRAM，verify 19 ok，目标 UEFI 启动
-- ◐ **四机任意互传矩阵**：已完成 .115→.117（1G 收端）、.115→.116（2G/UEFI）、.116→.117（40G/40G UEFI→UEFI）；待 .117→.116（LVM 源 + 1G 源机，需恢复 .117 的 LVM 快照）、.116→.111（40G→30G，`-o root=files`，需先恢复 .111 快照）。两次“file 方法 pull 静默 exit 0”已查明是 .111 的 agent 被失败上传截成 0 字节（D26，非 file 方法缺陷），加了 version 守卫（58dde9d）；file 方法本身仍待首次真实跑通
-- ⚠ 遗留：cutover 的 poller 派生进程存活（serve 报 poll=started 但随后无进程；手工 poller 与监听器互通），systemd-run 瞬态服务修复已提交（d4b638b），需含修复的 Live 才能闭环（新 Live 正在 .115 重建）；宿主 TK-Nas 内存不足会 OOM 杀 qemu（D26），开跑前先降 VM 内存/少开 VM；现存机器：.116/.117 已是迁移系统，.115 原系统在线，.111 离线（磁盘被上次 apply 清空，待恢复快照）
+- ◐ **四机任意互传矩阵**：已完成 .115→.117（1G 收端）、.115→.116（2G/UEFI）、.116→.117（40G/40G UEFI→UEFI）、**.116→.111（40G→30G 缩容 + UEFI→BIOS + 1G，D27）**；file 方法与缩容已闭环（tar 增量+冻结窗口 5.9s，verify 19 ok，独立引导）。待 .117→.116（LVM 源 + 1G 源机，需恢复 .117 的 LVM 快照）
+- ✅ cutover poller 闭环（D27）：systemd-run 瞬态服务（d4b638b）在 .116→.111 上首次实测存活并连回，rollback thaw 成功；同轮修掉四个交付级缺陷（条目计数口径、mawk 科学计数、FITHAW EINVAL、postfix 重建被剪挂载点，015cb8f/68d4da2/796f341/d8d6b66）。⚠ 宿主 TK-Nas 内存不足会 OOM 杀 qemu（D26），开跑前先降 VM 内存/少开 VM；现存机器：.111/.117 已是迁移系统，.116 原系统，.115 原系统在线（重建最终 Live 中）
 - ⏳ E2 中继拓扑 E2E（需第三台可达机） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - 📐 M3=E3：按 D16 实现（agent 位图持久化 + 检查点令牌 + 降级全量）
 - 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）
