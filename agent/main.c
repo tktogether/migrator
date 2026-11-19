@@ -28,7 +28,11 @@
  * keeps connecting to the recipient's HOST:PORT; "reloca-agent cutover --port
  * PORT --token TOKEN netdown|poweroff|thaw|ping|exit" on the recipient answers
  * the next poll with that command. The donor's firewall is no obstacle: the
- * connection goes out from the donor.
+ * connection goes out from the donor. A recipient that never comes back must
+ * not leave the donor frozen until someone visits its console: when the poller
+ * has not reached the recipient for RELOCA_POLL_THAW_AFTER seconds (default
+ * 1800), or for the one-week cap at the latest, it thaws the mountpoints it was
+ * given and exits.
  *
  * pull runs the whole thing from the recipient (docs/DEVLOG.md 2026-10-21):
  * pass 1 = full copy of every volume; then epochs: the dirty bytes of the
@@ -490,24 +494,43 @@ static void ifaces_down(void)
 	if (s >= 0) close(s);
 	closedir(d);
 }
+static int poll_thaw(int argc, char **argv)
+{
+	int bad = 0, i;
+	for (i = 4; i < argc; i++) {
+		int m = open(argv[i], O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+		if (m < 0 || ioctl(m, FITHAW, 0) < 0) bad++;
+		if (m >= 0) close(m);
+	}
+	return bad;
+}
 static int cmd_poll(int argc, char **argv)
 {
-	const char *host, *token; int port, i; time_t t0 = time(NULL);
+	const char *host, *token; int port; time_t t0 = time(NULL), last_ok = time(NULL);
+	long thaw_after = 1800;
 	if (argc < 4) die("usage: reloca-agent poll HOST PORT TOKEN [MOUNTPOINT...]");
 	host = argv[1]; port = atoi(argv[2]); token = argv[3];
+	{ const char *e = getenv("RELOCA_POLL_THAW_AFTER"); if (e && atol(e) > 0) thaw_after = atol(e); }
 	signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
 	for (;;) {
-		char line[512]; int fd, n;
-		if (time(NULL) - t0 > 7 * 24 * 3600) return 1;    /* a week: nobody is coming */
+		char line[512]; int fd, n, bad;
+		/* the recipient crashed or was never rebooted: nobody will send a cutover
+		 * command, so thaw rather than keep the donor frozen for a week */
+		if (time(NULL) - last_ok > thaw_after || time(NULL) - t0 > 7 * 24 * 3600) {
+			bad = poll_thaw(argc, argv);
+			fprintf(stderr, "poll: no recipient for %ld s: thawed (%d mountpoint(s) failed)\n",
+				(long)(time(NULL) - last_ok), bad);
+			return bad ? 1 : 0;
+		}
 		fd = connect_numeric(host, port);
 		if (fd < 0) { sleep(3); continue; }
+		last_ok = time(NULL);
 		snprintf(line, sizeof line, "RELOCA-POLL %s\n", token);
 		if (write_all(fd, line, strlen(line)) < 0 || (n = read_line_fd(fd, line, sizeof line, 30)) < 0) { close(fd); sleep(3); continue; }
 		if (!strcmp(line, "ping")) { write_all(fd, "ok ping\n", 8); close(fd); sleep(3); continue; }
 		if (!strcmp(line, "exit")) { write_all(fd, "ok exit\n", 8); close(fd); return 0; }
 		if (!strcmp(line, "thaw")) {
-			int bad = 0;
-			for (i = 4; i < argc; i++) { int m = open(argv[i], O_RDONLY | O_DIRECTORY | O_CLOEXEC); if (m < 0 || ioctl(m, FITHAW, 0) < 0) bad++; if (m >= 0) close(m); }
+			bad = poll_thaw(argc, argv);
 			if (bad) snprintf(line, sizeof line, "err thaw: %d mountpoint(s) failed\n", bad); else snprintf(line, sizeof line, "ok thaw\n");
 			write_all(fd, line, strlen(line)); close(fd);
 			return bad ? 1 : 0;
