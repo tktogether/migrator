@@ -93,11 +93,23 @@ tx_local_block_cmd() {   # FS DST COMP LOG
 	[ -f "$2" ] && o=-O
 	echo "$dec | $pc -r -s - $o $2 -L $4 -f $TX_POLL_S -B"
 }
+# tar exit 1 means warnings. These are expected on a real tree and do not mean
+# data was lost: sockets cannot be archived, --one-file-system reports every
+# mount it skipped, and FUSE/squashfs mounts have no xattrs. Anything else is a
+# real warning and fails the volume (D25: lxcfs/snap mounts on an 18.04 donor).
+tx_tar_warn_ok() {   # FILE -> 0 when only those warnings
+	local f=$1
+	[ -s "$f" ] || return 0
+	! grep -vE 'socket ignored|directory is on a different filesystem; not dumped|Cannot flistxattr: Operation not supported' "$f" | grep -q '[^[:space:]]'
+}
+# virtual/pseudo filesystems that must never enter a file copy (the block method
+# never sees them); explicit excludes keep tar from warning about them too
+TX_TAR_EXCLUDES='--exclude=./dev --exclude=./proc --exclude=./sys --exclude=./run --exclude=./boot/efi --exclude=./snap --exclude=./var/lib/lxcfs'
 # tar reads the donor's read-only mount; xattrs carry ACLs and SELinux labels
 # (Debian's tar has no --acls/--selinux); the ESP (vfat) has neither owners nor
 # xattrs. EXCLUDES = ready "--exclude=./path" words (quoted by the caller).
 tx_remote_files_cmd() {   # SRCDIR COMP EXCLUDES [vfat] [SINK]
-	local comp x=${3:+ $3} xattrs=' --xattrs --xattrs-include=\*' sink=${5:+ | $5}
+	local comp x=" $TX_TAR_EXCLUDES${3:+ $3}" xattrs=' --xattrs --xattrs-include=\*' sink=${5:+ | $5}
 	[ "${4:-}" = vfat ] && xattrs=
 	comp=$(tx_comp "$2") || return 1
 	printf "bash -o pipefail -c 'cd %s && tar --one-file-system --numeric-owner%s --sparse%s -cf - . | %s%s; echo \${PIPESTATUS[0]} > %s'\n" \
@@ -487,8 +499,8 @@ transfer_files() {   # ROW [vfat]
 	fi
 	tx_collect "$vid"
 	nsock=$(grep -c 'socket ignored' "$RUN/vol-$vid.remote.err" 2>/dev/null || true)
-	if [ "$TX_RC_REMOTE" = 1 ] && ! grep -v 'socket ignored' "$RUN/vol-$vid.remote.err" | grep -q '[^[:space:]]'; then
-		say "  donor tar exit 1: only 'socket ignored' warnings ($nsock sockets skipped), accepted"
+	if [ "$TX_RC_REMOTE" = 1 ] && tx_tar_warn_ok "$RUN/vol-$vid.remote.err"; then
+		say "  donor tar exit 1: only expected warnings ($nsock sockets skipped), accepted"
 		TX_RC_REMOTE=0
 	fi
 	if [ "$TX_RC_SSH" != 0 ] || [ "$TX_RC_LOCAL" != 0 ] || [ "$TX_RC_REMOTE" != 0 ]; then
@@ -588,7 +600,7 @@ tx_ol_files_pass() {
 		TX_SRC=$src; TX_VID=$vid
 		# shellcheck disable=SC2034  # what die() records in $RUN/failure
 		VOLUME=$src
-		excl=''
+		excl=$TX_TAR_EXCLUDES
 		while read -r rel sz; do [ -n "$rel" ] || continue; excl="${excl:+$excl }--exclude=$(printf '%q' "./$rel")"; done < <(tx_swap_excludes "$mount")
 		# the target is mounted for the passes only: a dm-snapshot (pre-check) needs it unmounted
 		if ! mountpoint -q "$ddir" 2>/dev/null; then
@@ -618,7 +630,7 @@ tx_ol_files_pass() {
 		if [ "$TX_RC_REMOTE" = 1 ]; then
 			if [ "$kind" = frozen ]; then
 				nsock=$(grep -c 'socket ignored' "$RUN/ol.tar.err.$idx.$round" 2>/dev/null || true)
-				grep -v 'socket ignored' "$RUN/ol.tar.err.$idx.$round" 2>/dev/null | grep -q '[^[:space:]]' && tx_fail "files $src: the final tar on the frozen tree warned beyond 'socket ignored' (see $RUN/ol.tar.err.$idx.$round)"
+				tx_tar_warn_ok "$RUN/ol.tar.err.$idx.$round" || tx_fail "files $src: the final tar on the frozen tree warned beyond the expected lines (see $RUN/ol.tar.err.$idx.$round)"
 				: "${nsock:=0}"
 			fi
 			TX_RC_REMOTE=0
