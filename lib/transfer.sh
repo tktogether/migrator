@@ -103,8 +103,11 @@ tx_tar_warn_ok() {   # FILE -> 0 when only those warnings
 	! grep -vE 'socket ignored|directory is on a different filesystem; not dumped|Cannot flistxattr: Operation not supported' "$f" | grep -q '[^[:space:]]'
 }
 # virtual/pseudo filesystems that must never enter a file copy (the block method
-# never sees them); explicit excludes keep tar from warning about them too
-TX_TAR_EXCLUDES='--exclude=./dev --exclude=./proc --exclude=./sys --exclude=./run --exclude=./boot/efi --exclude=./snap --exclude=./var/lib/lxcfs'
+# never sees them); explicit excludes keep tar from warning about them too.
+# TX_EXCL_DIRS is the single source: tar gets --exclude words, the count check
+# in tx_verify_files prunes the same trees (plus sockets, which tar ignores)
+TX_EXCL_DIRS='dev proc sys run boot/efi snap var/lib/lxcfs'
+TX_TAR_EXCLUDES=$(printf '%s\n' $TX_EXCL_DIRS | sed 's|^|--exclude=./|' | tr '\n' ' ')
 # tar reads the donor's read-only mount; xattrs carry ACLs and SELinux labels
 # (Debian's tar has no --acls/--selinux); the ESP (vfat) has neither owners nor
 # xattrs. EXCLUDES = ready "--exclude=./path" words (quoted by the caller).
@@ -529,15 +532,25 @@ tx_empty_dir() {   # DIR TARGET: everything but lost+found, only when no mkfs li
 	[ -z "$(tx_mkfs_line_for "$2")" ] || return 0
 	tx_must_sh "find $(printf '%q' "$1") -mindepth 1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +"
 }
+# tx_find_count_cmd DIR: the donor-side entry count must see exactly the set tar
+# copies -- the pruned trees and no sockets (tar ignores them). Counting the raw
+# tree made the pseudofs mountpoints, /snap and lxcfs's cgroup stubs (thousands on
+# a container host) count on the donor and nowhere else.
+tx_find_count_cmd() {
+	local s=${1%/} f i
+	f="find $(printf '%q' "${s:-/}") -xdev \\("
+	for i in $TX_EXCL_DIRS; do f="$f -path $(printf '%q' "$s/$i") -o"; done
+	printf '%s' "${f% -o} \\) -prune -o ! -type s -print | wc -l"
+}
 # tx_verify_files SRCDIR DSTDIR [EXTRA_ENTRIES] [EXTRA_BYTES]: entry counts must
-# agree within 5 + EXTRA_ENTRIES (excluded swapfiles, ignored sockets), the
+# agree within 5 + EXTRA_ENTRIES (excluded swapfiles), the
 # apparent sizes within 1% after EXTRA_BYTES (the swapfiles) is taken off the
 # donor's; used blocks differ by design (sparse files, journal) — WARN only.
 # The donor side runs through $TX_SRC_RUN (rsh_sh; a local runner in tests).
 tx_verify_files() {
 	local s=$1 d=$2 extra=${3:-0} xbytes=${4:-0} sc dc ss ds su du diff allowed q
 	q=$(printf '%q' "$s")
-	sc=$($TX_SRC_RUN "find $q -xdev | wc -l" </dev/null | tr -cd '0-9')
+	sc=$($TX_SRC_RUN "$(tx_find_count_cmd "$s")" </dev/null | tr -cd '0-9')
 	dc=$(find "$d" -xdev 2>/dev/null | wc -l)
 	[ -n "$sc" ] || tx_fail "cannot count entries under $s on the donor"
 	diff=$((sc - dc)); [ $diff -lt 0 ] && diff=$((-diff))
