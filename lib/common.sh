@@ -107,6 +107,19 @@ opt_check() {
 		die "$EX_ENV" "-o $k=$v: each option is passed on its own, not joined by commas (a comma belongs to the value, as in driver=mod1,mod2): use -o $k=${v%%,*} -o $cand=${rest#*=}"
 	done
 }
+# low_mem_defaults — a 1 GiB Live cannot also hold the pre-check COW and a
+# chroot rebuild next to the migration itself; on small RAM drop precheck (and
+# the boot test, which has its own guard) unless the operator insists (D23)
+low_mem_defaults() {
+	local mt
+	mt=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null)
+	[ -n "$mt" ] && [ "$mt" -lt 1536 ] || return 0
+	if [ -z "${OPT[precheck]:-}" ]; then
+		OPT[precheck]=0
+		warn "low memory (${mt} MiB): precheck disabled (force with -o precheck=1)"
+	fi
+	if [ -z "${OPT[boottest]:-}" ]; then OPT[boottest]=0; fi
+}
 is_tty() { [ -t 0 ] && [ -t 1 ]; }
 # confirm PROMPT [EXPECTED]
 #   -y answers yes to everything (unattended). Without a terminal and without

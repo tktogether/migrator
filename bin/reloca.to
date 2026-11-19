@@ -106,6 +106,7 @@ export DRY YES RUN
 # shellcheck source=lib/common.sh
 . "$RELOCA_LIB/common.sh"
 opt_check
+low_mem_defaults
 for f in ssh bootstrap inventory plan apply transfer target postfix netfix verify; do
 	# shellcheck disable=SC1090  # the libs are known, listed just above
 	[ -r "$RELOCA_LIB/$f.sh" ] && . "$RELOCA_LIB/$f.sh"
