@@ -948,6 +948,14 @@ vf_boottest_run() {           # seam: DISK KERNEL INITRD CMDLINE -> 0 = reached 
 	if ! { [ -x /usr/bin/qemu-system-x86_64 ] && [ -x /usr/bin/qemu-img ]; }; then
 		vf_warn "boottest: qemu is not installed; skipping the boot test"; return 0
 	fi
+	# the trial guest takes its RAM out of the Live's own: on a small recipient the
+	# OOM killer would take the Live down mid-migration (seen on a 2 GiB Live)
+	local memav; memav=$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)
+	if [ -n "$memav" ] && [ "$memav" -lt 1536 ]; then
+		vf_warn "boottest: only ${memav} MiB available (a 1 GiB trial guest and this Live): skipped" \
+			"run the migration with -o boottest=0, or verify later on a box with more RAM"
+		return 0
+	fi
 	rm -rf "$dir/overlay.qcow2" "$dir/serial.log"
 	qemu-img create -q -f qcow2 -F raw -b "$disk" "$dir/overlay.qcow2" \
 		|| { vf_warn "boottest: cannot create the overlay of $disk; skipping the boot test"; return 0; }
