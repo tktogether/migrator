@@ -530,9 +530,11 @@ static int poll_thaw(int argc, char **argv)
 		int m = open(argv[i], O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 		/* the list names every mountpoint the transfer looked at, including the
 		 * vfat ESP that cannot be frozen at all: a failed FITHAW there is not a
-		 * failed rollback (seen on a bios donor with /boot/efi, D23) */
+		 * failed rollback (seen on a bios donor with /boot/efi, D23). EINVAL is
+		 * what FITHAW returns for a filesystem that is not frozen -- the ESP was
+		 * never frozen, so it must not count as a failed thaw either (D27). */
 		if (m < 0) { bad++; continue; }
-		if (ioctl(m, FITHAW, 0) < 0 && errno != EOPNOTSUPP && errno != ENOTTY) bad++;
+		if (ioctl(m, FITHAW, 0) < 0 && errno != EOPNOTSUPP && errno != ENOTTY && errno != EINVAL) bad++;
 		close(m);
 	}
 	return bad;
