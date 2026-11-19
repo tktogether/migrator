@@ -833,7 +833,10 @@ transfer_online_run() {
 	[ -s "$plan" ] || die "$EX_ENV" "no plan at $plan: run 'reloca.to -s plan DONOR' first"
 	[ "$(plan_get "$plan" target mode)" = online ] || die "$EX_PLAN" "the plan is not an on-line one ([target] has no mode=online): plan again against the running donor"
 	agent=${RELOCA_AGENT:-$(state_get agent.path)}
-	[ -x "$agent" ] || die "$EX_ENV" "no reloca-agent on this box (state agent.path='$agent'): the bootstrap did not run?"
+	# an empty or truncated file still has +x: the shell then runs it as an empty
+	# script, exits 0 without a word and nothing is frozen (seen on .111, 2026-11-19)
+	[ -n "$agent" ] && [ -x "$agent" ] && [ -n "$("$agent" version 2>/dev/null)" ] \
+		|| die "$EX_ENV" "reloca-agent at '${agent:-unset}' does not run (missing, empty or truncated?): reinstall it from the Live's own build"
 	# Two different things are compressed two different ways here.
 	# Block volumes: the agent compresses THE PAYLOAD OF EACH FRAME with zstd
 	# (statically linked in, so the donor needs nothing installed). A stream
