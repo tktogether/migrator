@@ -14,12 +14,12 @@
 #                           else mounted: 'rescue', a test directory): the steps only.
 #                           Under -n: diffs and "(dry)" commands, nothing is written.
 #   postfix_record [ROOT]   after a green verify: plan, log, state and inventories into
-#                           <root>/root/reloca.to-<date>/ and the stamp /etc/reloca-migrated
+#                           <root>/root/migrator-<date>/ and the stamp /etc/migrator-migrated
 #
 # How a file is changed (one way only, so a run is a reviewable patch):
 #   a PURE rewriter (stdin -> stdout, parameters as arguments) computes the new
 #   content; pf_apply compares, prints a unified diff (stdout + $RUN/log), keeps
-#   the original ONCE under <root>/var/lib/reloca.to/orig/<path> and writes by
+#   the original ONCE under <root>/var/lib/migrator/orig/<path> and writes by
 #   truncating in place (same inode: owner, mode and SELinux label stay).
 #   pf_apply PATH < content     change an existing file (creates it 0644 when absent)
 #   pf_new PATH MODE < content  the same with the mode of a new file
@@ -41,7 +41,7 @@
 #   pf_bls_rewrite                    a BLS entry (boot/loader/entries/*.conf): its options line
 #                                     (a line built from $kernelopts is only stripped; the values live in grubenv)
 #   pf_grubenv_rewrite                grubenv (the 1024-byte block): kernelopts=, re-padded
-#   pf_dracut_conf DRIVERS [PIN]      /etc/dracut.conf.d/90-reloca.conf
+#   pf_dracut_conf DRIVERS [PIN]      /etc/dracut.conf.d/90-migrator.conf
 #   pf_modules_rewrite DRIVERS        /etc/initramfs-tools/modules
 #   pf_initramfs_conf_rewrite         MODULES=dep -> most
 #   pf_efi_labelled LABEL, pf_efi_order_new NEW [DELETED...]   efibootmgr output parsers
@@ -67,7 +67,7 @@ PF_PLAN=
 PF_IDENT=            # the [identity] section as a file: spec<TAB>action
 PF_ADD=              # tokens every kernel command line must carry ([network] cmdline=)
 PF_CONSOLE=          # -o console=VALUE
-PF_OSPROBER_CFG=/etc/default/grub.d/99-reloca-osprober.cfg
+PF_OSPROBER_CFG=/etc/default/grub.d/99-migrator-osprober.cfg
 PF_RESOLV_SAVED=      # the target's resolv.conf symlink set aside during an apt run
 
 # --- small helpers -----------------------------------------------------------------
@@ -106,10 +106,10 @@ pf_has() { [ -f "$(_pf_real "$1")" ]; }
 pf_cat() { cat "$(_pf_real "$1")" 2>/dev/null; }
 
 # --- the one way files change ----------------------------------------------------------
-_pf_created() { grep -qxF -- "$1" "$TARGET_MNT/var/lib/reloca.to/created" 2>/dev/null; }
+_pf_created() { grep -qxF -- "$1" "$TARGET_MNT/var/lib/migrator/created" 2>/dev/null; }
 # _pf_backup REL FILE: keep the ORIGINAL once; a file we created ourselves has no original
 _pf_backup() {
-	local o=$TARGET_MNT/var/lib/reloca.to/orig$1
+	local o=$TARGET_MNT/var/lib/migrator/orig$1
 	if [ -e "$o" ] || [ -L "$o" ] || _pf_created "$1"; then return 0; fi
 	mkdir -p "$(dirname "$o")" && cp -a "$2" "$o" || die "$EX_FAIL" "cannot back up $2 to $o"
 }
@@ -135,10 +135,10 @@ pf_new() {   # PATH [MODE]  (new content on stdin)
 		_pf_backup "$rel" "$f"
 		cat "$tmp" > "$f" || die "$EX_FAIL" "cannot write $f"
 	else
-		mkdir -p "$(dirname "$f")" "$TARGET_MNT/var/lib/reloca.to" || die "$EX_FAIL" "cannot create the directory of $f"
+		mkdir -p "$(dirname "$f")" "$TARGET_MNT/var/lib/migrator" || die "$EX_FAIL" "cannot create the directory of $f"
 		( umask 077; : > "$f" ) && chmod "$mode" "$f" && cat "$tmp" > "$f" || die "$EX_FAIL" "cannot create $f"
 		chown 0:0 "$f" 2>/dev/null || true
-		_pf_created "$rel" || printf '%s\n' "$rel" >> "$TARGET_MNT/var/lib/reloca.to/created"
+		_pf_created "$rel" || printf '%s\n' "$rel" >> "$TARGET_MNT/var/lib/migrator/created"
 	fi
 	rm -f "$tmp"
 	log "wrote $rel"
@@ -150,10 +150,10 @@ pf_remove() {   # PATH
 	[ -f "$f" ] || [ -L "$f" ] || return 0
 	_pf_inside "$f" || { pf_warn "$rel resolves outside the target ($f): not removed"; return 0; }
 	PF_CHANGED=$((PF_CHANGED + 1))
-	if [ -n "$DRY" ]; then say "(dry) would remove $rel (kept as /var/lib/reloca.to/orig$rel)"; return 0; fi
+	if [ -n "$DRY" ]; then say "(dry) would remove $rel (kept as /var/lib/migrator/orig$rel)"; return 0; fi
 	_pf_backup "$rel" "$f"
 	rm -f "$f" || die "$EX_FAIL" "cannot remove $f"
-	say "removed $rel (kept as /var/lib/reloca.to/orig$rel)"
+	say "removed $rel (kept as /var/lib/migrator/orig$rel)"
 }
 # _pf_edit PATH REWRITER ARGS...: PATH through a pure rewriter. A rewriter that
 # fails, or returns nothing for a file that had content, changes nothing: an
@@ -202,7 +202,7 @@ pf_fstab_rewrite() {
 		lead = line; sub(/[^ \t].*$/, "", lead)
 		rest = substr(line, length(lead) + length(spec) + 1)
 		a = (spec in act) ? act[spec] : "keep"
-		if (a == "remove") { print "# reloca.to: removed (no target): " line; next }
+		if (a == "remove") { print "# migrator: removed (no target): " line; next }
 		if (a ~ /^-> /) line = lead substr(a, 4) rest
 		if (NF >= 2) mounted[$2] = 1
 		print line
@@ -244,7 +244,7 @@ pf_mdadm_conf_rewrite() {
 		if (line ~ /^[ \t]*ARRAY([ \t]|$)/) {
 			s = line; sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
 			hit = 0; for (i = 1; i <= n; i++) if (s == want[i]) { hit = 1; seen[i] = 1 }
-			if (hit) print line; else print "# reloca.to: " s
+			if (hit) print line; else print "# migrator: " s
 			next
 		}
 		print line
@@ -253,7 +253,7 @@ pf_mdadm_conf_rewrite() {
 }
 # pf_md_conf_new ARRAYS: the file for a donor that had none (Debian layout, HOMEHOST <system>)
 pf_md_conf_new() {
-	printf '%s\n' '# mdadm.conf written by reloca.to: the md RAID1 arrays of this (migrated) system' \
+	printf '%s\n' '# mdadm.conf written by migrator: the md RAID1 arrays of this (migrated) system' \
 		'# instruct the monitoring daemon where to send mail alerts' 'MAILADDR root' \
 		'# automatically tag new arrays as belonging to the local system' 'HOMEHOST <system>' ''
 	grep '^ARRAY ' "$1"
@@ -262,7 +262,7 @@ pf_md_conf_new() {
 # recipient it would hide the PV. A value spanning lines goes as a whole.
 pf_lvm_conf_rewrite() {
 	awk '
-	function off(s,   lead) { lead = s; sub(/[^ \t].*$/, "", lead); return lead "# reloca.to: " substr(s, length(lead) + 1) }
+	function off(s,   lead) { lead = s; sub(/[^ \t].*$/, "", lead); return lead "# migrator: " substr(s, length(lead) + 1) }
 	cont { print off($0); if ($0 ~ /\]/) cont = 0; next }
 	/^[ \t]*(global_)?filter[ \t]*=/ { print off($0); if ($0 !~ /\]/) cont = 1; next }
 	{ print }'
@@ -361,7 +361,7 @@ pf_grub_default_rewrite() {
 		elif [[ $line =~ $re_fpu ]]; then
 			v=${BASH_REMATCH[2]}; v=${v%%[[:space:]]*}; v=${v//[\"\']/}; v=${v,,}
 			if [ "$fpu" = comment ] || { [ -n "$valid" ] && [[ " $valid " != *" $v "* ]]; }; then
-				printf '# reloca.to: %s\n' "$line"
+				printf '# migrator: %s\n' "$line"
 			else printf '%s\n' "$line"; fi
 		else
 			printf '%s\n' "$line"
@@ -410,7 +410,7 @@ pf_grubenv_rewrite() {
 }
 # pf_dracut_conf DRIVERS(csv) [PIN]: the drop-in that makes every dracut image fit this recipient
 pf_dracut_conf() {
-	printf '%s\n' '# reloca.to: this system was migrated; the recipient needs these drivers in every initramfs'
+	printf '%s\n' '# migrator: this system was migrated; the recipient needs these drivers in every initramfs'
 	printf 'add_drivers+=" %s "\n' "$(printf '%s' "${1:-}" | tr ',' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
 	printf '%s\n' '# the command line comes from the boot entry, never baked into the image' 'hostonly_cmdline="no"'
 	[ "${2:-0}" != 1 ] || printf '%s\n' '# the udev pin of eth0 (netfix) must act before the network comes up in the initramfs' 'install_items+=" /etc/udev/rules.d/70-persistent-net.rules "'
@@ -425,7 +425,7 @@ pf_kernel_cmdline_rewrite() {
 # pf_modules_rewrite DRIVERS(csv): one line per driver that is not listed yet
 # (virtio-blk and virtio_blk are the same module)
 pf_modules_rewrite() {
-	awk -v drv="${1:-}" -v hdr="# reloca.to: storage/network drivers of the recipient" '
+	awk -v drv="${1:-}" -v hdr="# migrator: storage/network drivers of the recipient" '
 	{ print }
 	/^[ \t]*#/ { if (index($0, hdr)) hashdr = 1; next }
 	NF { m = $1; gsub(/-/, "_", m); have[m] = 1 }
@@ -577,14 +577,14 @@ _pf_resolv_begin() {
 	PF_RESOLV_SAVED=
 	[ -n "$DRY" ] && return 0
 	[ -L "$f" ] || return 0
-	mv "$f" "$f.reloca-tmp" && cp /etc/resolv.conf "$f" || { mv -f "$f.reloca-tmp" "$f" 2>/dev/null; return 0; }
+	mv "$f" "$f.migrator-tmp" && cp /etc/resolv.conf "$f" || { mv -f "$f.migrator-tmp" "$f" 2>/dev/null; return 0; }
 	PF_RESOLV_SAVED=y
-	cleanup_add "[ -L $(printf '%q' "$f.reloca-tmp") ] && mv -f $(printf '%q' "$f.reloca-tmp") $(printf '%q' "$f")"
+	cleanup_add "[ -L $(printf '%q' "$f.migrator-tmp") ] && mv -f $(printf '%q' "$f.migrator-tmp") $(printf '%q' "$f")"
 }
 _pf_resolv_end() {
 	local f=$TARGET_MNT/etc/resolv.conf
 	[ -n "$PF_RESOLV_SAVED" ] || return 0
-	rm -f "$f"; mv -f "$f.reloca-tmp" "$f"; PF_RESOLV_SAVED=
+	rm -f "$f"; mv -f "$f.migrator-tmp" "$f"; PF_RESOLV_SAVED=
 }
 # _pf_apt_install PKG: apt in the chroot with the target's own sources, services kept
 # from starting (policy-rc.d); the package is what the migrated system boots with
@@ -616,7 +616,7 @@ pf_step_mdadm() {
 		if pf_has /usr/sbin/mdadm || pf_has /sbin/mdadm; then say "mdadm is in the target"
 		else
 			say "the donor OS has no mdadm: installing it into the target (apt, the target's own sources)"
-			_pf_apt_install mdadm || die "$EX_FAIL" "apt-get install mdadm failed in the target: the arrays cannot be assembled at boot. By hand: 'rescue', chroot <root>, apt-get install mdadm (check /etc/resolv.conf and the sources), then repeat 'reloca.to -s postfix'"
+			_pf_apt_install mdadm || die "$EX_FAIL" "apt-get install mdadm failed in the target: the arrays cannot be assembled at boot. By hand: 'rescue', chroot <root>, apt-get install mdadm (check /etc/resolv.conf and the sources), then repeat 'migrator -s postfix'"
 			{ pf_has /usr/sbin/mdadm || pf_has /sbin/mdadm; } || [ -n "$DRY" ] || die "$EX_FAIL" "mdadm is still missing in the target after apt-get install"
 		fi
 		# 2. mdadm.conf: exactly our arrays (the donor's, if any, are commented out)
@@ -675,7 +675,7 @@ pf_step_initramfs_dracut() {
 	local drv pin rec ver initrd n=0
 	drv=$(plan_get "$PF_PLAN" target driver); [ "$drv" != - ] || drv=
 	pin=$(plan_get "$PF_PLAN" network pin)
-	pf_new /etc/dracut.conf.d/90-reloca.conf 0644 < <(pf_dracut_conf "$drv" "$pin")
+	pf_new /etc/dracut.conf.d/90-migrator.conf 0644 < <(pf_dracut_conf "$drv" "$pin")
 	while IFS= read -r rec; do
 		ver=$(pl_field "$rec" version); initrd=$(pl_field "$rec" initrd)
 		[ -n "$ver" ] || continue
@@ -685,7 +685,7 @@ pf_step_initramfs_dracut() {
 		fi
 		n=$((n + 1))
 		target_chroot dracut --force "$initrd" "$ver" \
-			|| die "$EX_FAIL" "dracut failed for kernel $ver in the target: run 'rescue', then 'chroot <root> dracut --force $initrd $ver' by hand, fix what it reports and repeat 'reloca.to -s postfix'"
+			|| die "$EX_FAIL" "dracut failed for kernel $ver in the target: run 'rescue', then 'chroot <root> dracut --force $initrd $ver' by hand, fix what it reports and repeat 'migrator -s postfix'"
 	done < <(pl_records "$PF_DIR/donor.inv" kernel 2>/dev/null)
 	[ "$n" -gt 0 ] || pf_warn "no kernel of the donor inventory has modules in the tree: no initramfs was rebuilt"
 }
@@ -702,7 +702,7 @@ pf_step_initramfs() {
 		_pf_edit "${f#"$TARGET_MNT"}" pf_initramfs_conf_rewrite
 	done
 	target_chroot update-initramfs -u -k all \
-		|| die "$EX_FAIL" "update-initramfs failed in the target: run 'rescue', then 'chroot <root> update-initramfs -u -k all' by hand, fix what it reports and repeat 'reloca.to postfix'"
+		|| die "$EX_FAIL" "update-initramfs failed in the target: run 'rescue', then 'chroot <root> update-initramfs -u -k all' by hand, fix what it reports and repeat 'migrator postfix'"
 }
 
 # os-prober mounts every foreign filesystem it finds (the other disks of this
@@ -713,7 +713,7 @@ _pf_osprober_off() {
 	_pf_inside "$f" || die "$EX_FAIL" "$PF_OSPROBER_CFG resolves outside the target"
 	mkdir -p "$(dirname "$f")" || die "$EX_FAIL" "cannot create $(dirname "$f")"
 	cleanup_add "rm -f $(printf '%q' "$f")"
-	printf '%s\n' '# reloca.to: temporary, removed when postfix ends' 'GRUB_DISABLE_OS_PROBER=true' > "$f" || die "$EX_FAIL" "cannot write $f"
+	printf '%s\n' '# migrator: temporary, removed when postfix ends' 'GRUB_DISABLE_OS_PROBER=true' > "$f" || die "$EX_FAIL" "cannot write $f"
 	log "wrote $PF_OSPROBER_CFG (temporary)"
 }
 _pf_osprober_restore() {
@@ -723,7 +723,7 @@ _pf_osprober_restore() {
 }
 _pf_update_grub() {
 	target_chroot update-grub \
-		|| die "$EX_FAIL" "update-grub failed in the target: run 'rescue', then 'chroot <root> update-grub' by hand, fix what it reports and repeat 'reloca.to postfix'"
+		|| die "$EX_FAIL" "update-grub failed in the target: run 'rescue', then 'chroot <root> update-grub' by hand, fix what it reports and repeat 'migrator postfix'"
 }
 # debconf keeps the disk grub-pc reinstalls itself to on every upgrade: left at
 # the donor's disk the next 'apt upgrade' fails or writes the wrong device
@@ -748,7 +748,7 @@ _pf_grub_bios() {   # DISK FROM_LIVE [DISK2]: the boot code on every disk, the c
 	for d in $disk $disk2; do
 		if [ -z "$live" ]; then
 			target_chroot grub-install --target=i386-pc --recheck "$d" \
-				|| die "$EX_FAIL" "grub-install failed in the target: run 'rescue', then 'chroot <root> grub-install --target=i386-pc --recheck $d' by hand and repeat 'reloca.to postfix'"
+				|| die "$EX_FAIL" "grub-install failed in the target: run 'rescue', then 'chroot <root> grub-install --target=i386-pc --recheck $d' by hand and repeat 'migrator postfix'"
 		else
 			# uefi -> bios: the donor OS has no grub-pc; the Live's grub writes the boot
 			# code and its modules into the target's /boot/grub
@@ -801,7 +801,7 @@ _pf_efi_nvram() {   # DISK ESPNUM ID EFIDIR [LABELSUFFIX]
 # the second ESP of a mirror: a copy of the first, the loaders installed into it the same
 # way, mounted for the duration under the Live's /run (visible in the chroot as /run/…)
 _pf_esp2() {   # ESP2DEV FROM_LIVE ID EFIDIR DISK2 ESPNUM
-	local dev=$1 live=$2 id=$3 efidir=$4 disk2=$5 num=$6 m=/run/reloca-esp2 mnt=$TARGET_MNT/run/reloca-esp2
+	local dev=$1 live=$2 id=$3 efidir=$4 disk2=$5 num=$6 m=/run/migrator-esp2 mnt=$TARGET_MNT/run/migrator-esp2
 	[ -n "$dev" ] && [ "$dev" != - ] || { pf_warn "raid=1 on uefi but the plan names no second ESP (esp2=): disk 2 cannot boot on its own"; return 0; }
 	if [ -n "$DRY" ]; then
 		say "(dry) would mount $dev at $m, copy $efidir onto it, grub-install --target=x86_64-efi --efi-directory=$m (+ --removable) into it, and register it in NVRAM"
@@ -814,14 +814,14 @@ _pf_esp2() {   # ESP2DEV FROM_LIVE ID EFIDIR DISK2 ESPNUM
 	run cp -r "$TARGET_MNT$efidir/." "$mnt/" || pf_warn "copying $efidir onto $dev was not complete ($?)"
 	if [ -z "$live" ]; then
 		target_chroot grub-install --target=x86_64-efi "--efi-directory=$m" "--bootloader-id=$id" --recheck --no-nvram \
-			|| { umount "$mnt"; die "$EX_FAIL" "grub-install into the second ESP $dev failed: run 'rescue', mount $dev, 'chroot <root> grub-install --target=x86_64-efi --efi-directory=<mount> --bootloader-id=$id --recheck --no-nvram' and repeat 'reloca.to -s postfix'"; }
+			|| { umount "$mnt"; die "$EX_FAIL" "grub-install into the second ESP $dev failed: run 'rescue', mount $dev, 'chroot <root> grub-install --target=x86_64-efi --efi-directory=<mount> --bootloader-id=$id --recheck --no-nvram' and repeat 'migrator -s postfix'"; }
 		target_chroot grub-install --target=x86_64-efi "--efi-directory=$m" "--bootloader-id=$id" --recheck --no-nvram --removable \
 			|| { umount "$mnt"; die "$EX_FAIL" "grub-install --removable into the second ESP $dev failed"; }
 	else
 		must grub-install --target=x86_64-efi "--efi-directory=$mnt" "--boot-directory=$TARGET_MNT/boot" --removable --no-nvram --recheck
 	fi
 	sync
-	_pf_efi_nvram "$disk2" "$num" "$id" /run/reloca-esp2 " (disk 2)"
+	_pf_efi_nvram "$disk2" "$num" "$id" /run/migrator-esp2 " (disk 2)"
 	must umount "$mnt"; rmdir "$mnt" 2>/dev/null || true
 	say "second ESP $dev: loaders installed, a copy of $efidir"
 }
@@ -831,7 +831,7 @@ _pf_grub_uefi() {   # DISK FROM_LIVE [DISK2 ESP2DEV]
 	[ -n "$DRY" ] || [ -d "$TARGET_MNT$efidir" ] || die "$EX_FAIL" "the ESP mount point $efidir is missing in the target"
 	if [ -z "$live" ]; then
 		target_chroot grub-install --target=x86_64-efi "--efi-directory=$efidir" "--bootloader-id=$id" --recheck --no-nvram \
-			|| die "$EX_FAIL" "grub-install failed in the target: run 'rescue', then 'chroot <root> grub-install --target=x86_64-efi --efi-directory=$efidir --bootloader-id=$id --recheck --no-nvram' by hand and repeat 'reloca.to postfix'"
+			|| die "$EX_FAIL" "grub-install failed in the target: run 'rescue', then 'chroot <root> grub-install --target=x86_64-efi --efi-directory=$efidir --bootloader-id=$id --recheck --no-nvram' by hand and repeat 'migrator postfix'"
 		# the removable path is what boots when the NVRAM entry is lost (or never written)
 		target_chroot grub-install --target=x86_64-efi "--efi-directory=$efidir" "--bootloader-id=$id" --recheck --no-nvram --removable \
 			|| die "$EX_FAIL" "grub-install --removable failed in the target (the fallback \\EFI\\BOOT\\BOOTX64.EFI was not written)"
@@ -889,7 +889,7 @@ _pf_dnf_install() {
 	return 0
 }
 _pf_dnf_die() {   # PKGS WHAT: the disk is written, the OS is there: the manual path is dnf in a chroot
-	die "$EX_FAIL" "installing $1 into the target failed: $2 cannot be set up. By hand: 'rescue', chroot <root>, check /etc/resolv.conf and the repositories (dnf repolist; a RHEL without a subscription needs a reachable repo or the rpms by hand), dnf -y install $1, then repeat 'reloca.to -s postfix'"
+	die "$EX_FAIL" "installing $1 into the target failed: $2 cannot be set up. By hand: 'rescue', chroot <root>, check /etc/resolv.conf and the repositories (dnf repolist; a RHEL without a subscription needs a reachable repo or the rpms by hand), dnf -y install $1, then repeat 'migrator -s postfix'"
 }
 # pf_fs_uuid_of PATH: the UUID of the filesystem PATH of the target lives on (a seam for the tests)
 pf_fs_uuid_of() { findmnt -no UUID -T "$TARGET_MNT$1" 2>/dev/null | head -1; }
@@ -934,7 +934,7 @@ _pf_grub2_mkconfig() {   # CFG (path inside the target)
 	# os-prober would mount every foreign disk of this box; rhel's grub2-mkconfig reads no
 	# /etc/default/grub.d, so the switch goes in through the environment
 	target_chroot env GRUB_DISABLE_OS_PROBER=true grub2-mkconfig -o "$1" \
-		|| die "$EX_FAIL" "grub2-mkconfig failed in the target: run 'rescue', then 'chroot <root> grub2-mkconfig -o $1' by hand, fix what it reports and repeat 'reloca.to -s postfix'"
+		|| die "$EX_FAIL" "grub2-mkconfig failed in the target: run 'rescue', then 'chroot <root> grub2-mkconfig -o $1' by hand, fix what it reports and repeat 'migrator -s postfix'"
 }
 _pf_grub2_bios() {   # DISK
 	local pkgs; pkgs=$(pf_grub_pkgs)
@@ -948,7 +948,7 @@ _pf_grub2_bios() {   # DISK
 		pf_followup "grub2 for BIOS ($pkgs) was installed by dnf; the uefi packages (grub2-efi-x64, shim-x64) stay and may be removed"
 	fi
 	target_chroot grub2-install --target=i386-pc --recheck "$1" \
-		|| die "$EX_FAIL" "grub2-install failed in the target: run 'rescue', then 'chroot <root> grub2-install --target=i386-pc --recheck $1' by hand and repeat 'reloca.to -s postfix'"
+		|| die "$EX_FAIL" "grub2-install failed in the target: run 'rescue', then 'chroot <root> grub2-install --target=i386-pc --recheck $1' by hand and repeat 'migrator -s postfix'"
 	_pf_grub2_mkconfig /boot/grub2/grub.cfg
 }
 _pf_grub2_uefi() {   # DISK
@@ -1044,8 +1044,8 @@ pf_step_cloudinit() {
 		*) say "cloud-init: left as is"; return 0;;
 	esac
 	if [ ! -d "$TARGET_MNT/etc/cloud" ]; then say "cloud-init: no /etc/cloud in the target"; return 0; fi
-	pf_new /etc/cloud/cloud.cfg.d/99-reloca.cfg 0644 < <(printf '%s\n' \
-		'# reloca.to: this system was migrated; its network config is final and its hostname stays' \
+	pf_new /etc/cloud/cloud.cfg.d/99-migrator.cfg 0644 < <(printf '%s\n' \
+		'# migrator: this system was migrated; its network config is final and its hostname stays' \
 		'network: {config: disabled}' \
 		'preserve_hostname: true')
 }
@@ -1063,8 +1063,8 @@ pf_step_selinux() {
 # the IP moved to another MAC: announce it on link-up so the neighbours relearn it
 pf_step_sysctl() {
 	say "--- sysctl"
-	pf_new /etc/sysctl.d/99-reloca.conf 0644 < <(printf '%s\n' \
-		'# reloca.to: gratuitous ARP on link-up (the MAC behind this IP changed with the migration)' \
+	pf_new /etc/sysctl.d/99-migrator.conf 0644 < <(printf '%s\n' \
+		'# migrator: gratuitous ARP on link-up (the MAC behind this IP changed with the migration)' \
 		'net.ipv4.conf.all.arp_notify = 1')
 }
 
@@ -1107,7 +1107,7 @@ _pf_outline() {
 	say "(dry)   kernel cmdline: add '$PF_ADD'${PF_CONSOLE:+ console=$PF_CONSOLE}, drop rd.md.*"
 	say "(dry)   lvm: devices file $(plan_get "$p" postfix lvm_devices_file), filter $(plan_get "$p" postfix lvm_filter)"
 	say "(dry)   network: $(plan_get "$p" network donor) -> $(plan_get "$p" network target) @ $(plan_get "$p" network mac), pin=$(plan_get "$p" network pin)"
-	if [ "$(plan_get "$p" postfix initramfs)" = dracut ]; then say "(dry)   initramfs: /etc/dracut.conf.d/90-reloca.conf (add_drivers ${drv//,/ }, hostonly_cmdline=no); chroot dracut --force per donor kernel ($(pl_records "$PF_DIR/donor.inv" kernel 2>/dev/null | grep -c .))"
+	if [ "$(plan_get "$p" postfix initramfs)" = dracut ]; then say "(dry)   initramfs: /etc/dracut.conf.d/90-migrator.conf (add_drivers ${drv//,/ }, hostonly_cmdline=no); chroot dracut --force per donor kernel ($(pl_records "$PF_DIR/donor.inv" kernel 2>/dev/null | grep -c .))"
 	else say "(dry)   initramfs: /etc/initramfs-tools/modules += ${drv//,/ }; MODULES=dep -> most; chroot update-initramfs -u -k all"; fi
 	[ "$(plan_get "$p" postfix raid)" != 1 ] || disk="$disk and $(plan_get "$p" postfix disk2)$([ "$(plan_get "$p" postfix esp2)" != - ] && echo " (second ESP $(plan_get "$p" postfix esp2))")"
 	if [ "$(plan_get "$p" postfix family)" = rhel ]; then
@@ -1126,7 +1126,7 @@ _pf_outline() {
 postfix_run() {
 	local root=${1:-} family initramfs grub
 	PF_FOLLOWUPS=(); PF_WARNS=(); PF_CHANGED=0
-	[ -s "$RUN/plan" ] || die "$EX_ENV" "no plan at $RUN/plan: run 'reloca.to -s plan DONOR' first"
+	[ -s "$RUN/plan" ] || die "$EX_ENV" "no plan at $RUN/plan: run 'migrator -s plan DONOR' first"
 	family=$(plan_get "$RUN/plan" postfix family)
 	case $family in
 		deb|rhel) ;;
@@ -1148,7 +1148,7 @@ postfix_run() {
 		[ "$(readlink -f "$root")" != / ] || die "$EX_ENV" "postfix ROOT: refusing to work on / of this box"
 		TARGET_MNT=$root
 		if [ -z "$DRY" ]; then
-			pf_chroot_ready || die "$EX_ENV" "postfix ROOT: $root has no /proc bound, the chroot steps would fail: for m in dev proc sys run; do mount --rbind /\$m $root/\$m && mount --make-rslave $root/\$m; done (after 'mount --make-private $root'), or run 'reloca.to postfix' without ROOT"
+			pf_chroot_ready || die "$EX_ENV" "postfix ROOT: $root has no /proc bound, the chroot steps would fail: for m in dev proc sys run; do mount --rbind /\$m $root/\$m && mount --make-rslave $root/\$m; done (after 'mount --make-private $root'), or run 'migrator postfix' without ROOT"
 			TARGET_BINDS=y
 		fi
 		say "postfix on the tree at $TARGET_MNT (mounted by the operator: it stays mounted)"
@@ -1181,14 +1181,14 @@ postfix_run() {
 	[ -n "$root" ] || target_umount
 	if [ -n "$DRY" ]; then say "(dry) postfix: $PF_CHANGED file(s) would change, nothing was written"; return 0; fi
 	phase_done postfix
-	say "postfix done: $PF_CHANGED file(s) changed (originals under /var/lib/reloca.to/orig in the target), ${#PF_FOLLOWUPS[@]} manual follow-up(s)"
+	say "postfix done: $PF_CHANGED file(s) changed (originals under /var/lib/migrator/orig in the target), ${#PF_FOLLOWUPS[@]} manual follow-up(s)"
 }
 
 # postfix_record [ROOT]: what was done to this system travels with it. Called by
 # verify once everything is green; calling it again refreshes the same record.
 postfix_record() {
 	local root=${1:-} was='' t dir stamp f sha old
-	if [ -n "$DRY" ]; then say "(dry) would copy the plan, log and state into the target's /root/reloca.to-<date>/ and write /etc/reloca-migrated"; return 0; fi
+	if [ -n "$DRY" ]; then say "(dry) would copy the plan, log and state into the target's /root/migrator-<date>/ and write /etc/migrator-migrated"; return 0; fi
 	[ -s "$RUN/plan" ] || die "$EX_ENV" "no plan at $RUN/plan: nothing to record"
 	if [ -n "$root" ]; then
 		[ "$root" = / ] || root=${root%/}
@@ -1200,12 +1200,12 @@ postfix_record() {
 	else
 		target_mount rw
 	fi
-	t=$TARGET_MNT; stamp=$t/etc/reloca-migrated
+	t=$TARGET_MNT; stamp=$t/etc/migrator-migrated
 	sha=$(sha256sum "$RUN/plan" | cut -c1-64)
 	# the same plan recorded before: the same directory again
 	old=$(sed -n 's/^record=//p' "$stamp" 2>/dev/null | head -1)
 	if [ -n "$old" ] && [ -d "$t$old" ] && [ "$(sed -n 's/^plan_sha256=//p' "$stamp" | head -1)" = "$sha" ]; then dir=$old
-	else dir=/root/reloca.to-$(date '+%Y%m%d-%H%M%S'); fi
+	else dir=/root/migrator-$(date '+%Y%m%d-%H%M%S'); fi
 	mkdir -p "$t$dir" && chmod 0700 "$t$dir" || die "$EX_FAIL" "cannot create $dir in the target"
 	for f in plan log state donor.inv recipient.inv; do
 		[ -r "$RUN/$f" ] || continue
@@ -1217,11 +1217,11 @@ postfix_record() {
 		echo "recipient_serial=$(pl_field "$(pl_records "$RUN/recipient.inv" host 2>/dev/null | head -1)" dmi_serial)"
 		echo "plan_sha256=$sha"
 		echo "donor_machine_id=$(pl_field "$(pl_records "$RUN/donor.inv" os 2>/dev/null | head -1)" machine_id)"
-		echo "reloca_version=$(reloca_version)"
+		echo "migrator_version=$(migrator_version)"
 		echo "record=$dir"
 	} > "$stamp" || die "$EX_FAIL" "cannot write $stamp"
 	chmod 0644 "$stamp"
-	say "recorded: $dir/ and /etc/reloca-migrated in the target"
+	say "recorded: $dir/ and /etc/migrator-migrated in the target"
 	case $was in
 		'') [ -n "$root" ] || target_umount ;;
 		ro) target_umount; target_mount ro ;;

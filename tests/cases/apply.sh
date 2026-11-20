@@ -21,7 +21,7 @@ set -u
 # shellcheck source=lib/apply.sh
 . "$REPO/lib/apply.sh"
 FIX=$REPO/tests/fixtures
-RELOCA_LIB=$REPO/lib; export RELOCA_LIB
+MIGRATOR_LIB=$REPO/lib; export MIGRATOR_LIB
 W=$RUN/apply-work; mkdir -p "$W"
 
 # --- (a) contract, silent sourcing -----------------------------------------------------
@@ -470,8 +470,8 @@ assert_eq  "fingerprint_check: no state -> exit 2"        2 "$rc"
 
 # --- (g) cleanup_all: no-op on an empty state dir, undoes setro/lock, never dies -----------
 E=$W/empty; mkdir -p "$E"
-if [ -d /mnt/reloca.to ]; then
-	skip "cleanup_all on an empty \$RUN (real)" "/mnt/reloca.to exists on this host"
+if [ -d /mnt/migrator ]; then
+	skip "cleanup_all on an empty \$RUN (real)" "/mnt/migrator exists on this host"
 else
 	( RUN=$E; DRY=; cleanup_all ) > "$E/out" 2>&1; rc=$?
 	assert_eq  "cleanup_all: empty \$RUN returns 0"        0 "$rc"
@@ -491,7 +491,7 @@ assert_eq  "cleanup_all: setro.disks cleared after setrw" "-" "$(RUN=$E state_ge
 assert_has "cleanup_all: a bogus disk is a WARN, not a death" "WARN: cleanup: blockdev --setrw /dev/sdzz failed" "$(cat "$E/out3")"
 ( RUN=$E; DRY=; findmnt() { :; }; lock; cleanup_all ) > "$E/out4" 2>&1; rc=$?
 assert_eq  "cleanup_all: returns 0 while the lock is held" 0 "$rc"
-assert_has "cleanup_all: a held lock is left in place"    "is held by a running reloca.to, left in place" "$(cat "$E/out4")"
+assert_has "cleanup_all: a held lock is left in place"    "is held by a running migrator, left in place" "$(cat "$E/out4")"
 ( RUN=$E; DRY=; findmnt() { :; }; cleanup_add "echo registered-ran >> $E/reg"; cleanup_all ) > "$E/out5" 2>&1
 assert_eq  "cleanup_all: runs the registered snippets"    "registered-ran" "$(cat "$E/reg")"
 assert_has "cleanup_all: counts them"                     "1 registered actions" "$(cat "$E/out5")"

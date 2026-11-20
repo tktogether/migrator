@@ -182,7 +182,7 @@ assert_fail "is_primary networkd: another name"       eval 'nf_is_primary networ
 # --- (e) ifcfg -----------------------------------------------------------------------------------------------
 sed 's/eth0/eno1/' "$RAW/ifcfg-eth0" > "$W/ifcfg-eno1"
 nf_ifcfg_rename eno1 eth0 < "$W/ifcfg-eno1" > "$W/ifcfg.out"
-assert_eq "ifcfg: DEVICE and NAME renamed (quotes kept), UUID commented out" 'NAME="eth0"|# reloca.to: UUID="b3f2a6c1-1d2e-4f3a-9b8c-7d6e5f4a3b2c"|DEVICE="eth0"' "$(sed -n '7,9p' "$W/ifcfg.out" | lines)"
+assert_eq "ifcfg: DEVICE and NAME renamed (quotes kept), UUID commented out" 'NAME="eth0"|# migrator: UUID="b3f2a6c1-1d2e-4f3a-9b8c-7d6e5f4a3b2c"|DEVICE="eth0"' "$(sed -n '7,9p' "$W/ifcfg.out" | lines)"
 assert_eq "ifcfg: three lines changed" "3" "$(diff "$W/ifcfg-eno1" "$W/ifcfg.out" | grep -c '^>')"
 assert_eq "ifcfg: HWADDR replaced, upper case kept" "HWADDR=52:54:00:CC:DD:01" "$(nf_mac_rewrite 00:25:90:ab:cd:ef $NEWMAC < "$W/ifcfg.out" | grep HWADDR)"
 assert_eq "ifcfg: renaming twice equals once" "$(cat "$W/ifcfg.out")" "$(nf_ifcfg_rename eno1 eth0 < "$W/ifcfg.out")"
@@ -228,7 +228,7 @@ mk() {
 # nfrun DIR [SNIPPET]: netfix_run on DIR/t in a subshell; output -> DIR/out, status echoed
 nfrun() { ( RUN=$1; TARGET_MNT=$1/t; PF_PLAN=; PF_DIR=; PF_WARNS=(); eval "${2:-}"; netfix_run ) > "$1/out" 2>&1; echo $?; }
 treesum() { ( cd "$1" && { find . -type f -print0 | sort -z | xargs -0 sha256sum; find . -type f -printf '%p %s %T@\n' | sort; } | sha256sum | cut -c1-64 ); }
-files() { ( cd "$1" && find . -type f | grep -v '^\./var/lib/reloca\.to/' | sort | sed 's|^\./||' | xargs ); }
+files() { ( cd "$1" && find . -type f | grep -v '^\./var/lib/migrator\.to/' | sort | sed 's|^\./||' | xargs ); }
 
 # ifupdown (the stand plan: ens3/-/interfaces): an interfaces.d file, the donor's udev rules, other places naming ens3
 D=$W/e-if; mk "$D" stand-debian-md-ext4-bios
@@ -247,7 +247,7 @@ assert_eq "e2e ifupdown: interfaces renamed" "auto eth0|iface eth0 inet dhcp" "$
 assert_eq "e2e ifupdown: interfaces.d renamed; the donor's hardware MAC inside the primary stanza follows (donor MAC '-' in the plan)" \
 	"iface eth0 inet6 auto|${TAB}hwaddress ether 52:54:00:CC:DD:01" "$(lines < "$D/t/etc/network/interfaces.d/v6")"
 assert_eq "e2e ifupdown: the donor's udev rules are replaced by ours" "1 0" "$(grep -c 'ATTR{address}=="52:54:00:cc:dd:01".*NAME="eth0"' "$D/t/etc/udev/rules.d/70-persistent-net.rules") $(grep -c 'ens3' "$D/t/etc/udev/rules.d/70-persistent-net.rules")"
-assert_ok "e2e ifupdown: ... and kept as the original" cmp -s "$D/pristine/etc/udev/rules.d/70-persistent-net.rules" "$D/t/var/lib/reloca.to/orig/etc/udev/rules.d/70-persistent-net.rules"
+assert_ok "e2e ifupdown: ... and kept as the original" cmp -s "$D/pristine/etc/udev/rules.d/70-persistent-net.rules" "$D/t/var/lib/migrator/orig/etc/udev/rules.d/70-persistent-net.rules"
 for f in /etc/iptables/rules.v4 /etc/default/isc-dhcp-server /etc/rc.local; do
 	assert_has "e2e ifupdown: list-only WARN for $f" "WARN: $f mentions ens3" "$(cat "$D/out")"
 	assert_ok  "e2e ifupdown: $f is not edited" cmp -s "$D/pristine$f" "$D/t$f"
@@ -264,7 +264,7 @@ assert_eq "e2e ifupdown, -n: diffs shown, tree byte-identical, no state" "0 3 sa
 # pin=0: the donor's rules go, ours are not written
 rc=$(nfrun "$D" 'sed -i "s/ pin=1$/ pin=0/" "$RUN/plan"')
 assert_eq "e2e ifupdown, pin=0: the donor's udev rules are removed (original kept), summary says 0 rules" "0 gone kept pin=0 rules" \
-	"$rc $([ -e "$D/t/etc/udev/rules.d/70-persistent-net.rules" ] && echo there || echo gone) $([ -e "$D/t/var/lib/reloca.to/orig/etc/udev/rules.d/70-persistent-net.rules" ] && echo kept || echo lost) $(tail -1 "$D/out" | grep -o 'pin=.*')"
+	"$rc $([ -e "$D/t/etc/udev/rules.d/70-persistent-net.rules" ] && echo there || echo gone) $([ -e "$D/t/var/lib/migrator/orig/etc/udev/rules.d/70-persistent-net.rules" ] && echo kept || echo lost) $(tail -1 "$D/out" | grep -o 'pin=.*')"
 
 # netplan (the ubuntu plan: enp1s0/52:54:00:11:22:33/netplan)
 D=$W/e-np; mk "$D" ubuntu-nvme-uefi-to-bios-vm; mkdir -p "$D/t/etc/netplan"
@@ -316,9 +316,9 @@ assert_eq "e2e ifcfg: exits 0" 0 "$rc"
 assert_eq "e2e ifcfg: ifcfg-eno1* and route-eno1 moved to eth0; eno2, lo and the .bak stay" \
 	"etc/sysconfig/network-scripts/ifcfg-eno1.bak etc/sysconfig/network-scripts/ifcfg-eno2 etc/sysconfig/network-scripts/ifcfg-eth0 etc/sysconfig/network-scripts/ifcfg-eth0:1 etc/sysconfig/network-scripts/ifcfg-lo etc/sysconfig/network-scripts/route-eth0 etc/udev/rules.d/70-persistent-net.rules" "$(files "$D/t")"
 assert_eq "e2e ifcfg: the moved file: DEVICE/NAME renamed, UUID commented, HWADDR replaced" \
-	"TYPE=Ethernet|BOOTPROTO=none|NAME=eth0|# reloca.to: UUID=b3f2a6c1-1d2e-4f3a-9b8c-7d6e5f4a3b2c|DEVICE=eth0|ONBOOT=yes|HWADDR=B0:83:FE:00:00:01|IPADDR=10.0.0.21|PREFIX=24" "$(lines < "$N/ifcfg-eth0")"
+	"TYPE=Ethernet|BOOTPROTO=none|NAME=eth0|# migrator: UUID=b3f2a6c1-1d2e-4f3a-9b8c-7d6e5f4a3b2c|DEVICE=eth0|ONBOOT=yes|HWADDR=B0:83:FE:00:00:01|IPADDR=10.0.0.21|PREFIX=24" "$(lines < "$N/ifcfg-eth0")"
 assert_eq "e2e ifcfg: alias file and route file" "DEVICE=eth0:1|IPADDR=10.0.0.22|10.9.0.0/16 via 10.0.0.1 dev eth0" "$(cat "$N/ifcfg-eth0:1" "$N/route-eth0" | lines)"
-assert_ok "e2e ifcfg: the original ifcfg-eno1 is kept" cmp -s "$D/pristine/etc/sysconfig/network-scripts/ifcfg-eno1" "$D/t/var/lib/reloca.to/orig/etc/sysconfig/network-scripts/ifcfg-eno1"
+assert_ok "e2e ifcfg: the original ifcfg-eno1 is kept" cmp -s "$D/pristine/etc/sysconfig/network-scripts/ifcfg-eno1" "$D/t/var/lib/migrator/orig/etc/sysconfig/network-scripts/ifcfg-eno1"
 assert_ok "e2e ifcfg: the second NIC's file is not edited" cmp -s "$D/pristine/etc/sysconfig/network-scripts/ifcfg-eno2" "$N/ifcfg-eno2"
 assert_has "e2e ifcfg: WARN: it still names a donor NIC the recipient lacks" "ifcfg-eno2 still names 3c:ec:ef:11:22:34" "$(cat "$D/out")"
 assert_has "e2e ifcfg: WARN: MACADDR= left as is" "ifcfg-eno2 sets a spoofed MAC" "$(cat "$D/out")"

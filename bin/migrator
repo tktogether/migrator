@@ -1,15 +1,15 @@
 #!/bin/bash
-# reloca.to — move a Linux server from a donor machine onto this one (the
+# migrator — move a Linux server from a donor machine onto this one (the
 # recipient) over the network, both booted into the XServer Live OS. Replaces
 # the manual runbook: inventory both sides, write a plan you can read and edit,
 # partition and format the recipient, stream every filesystem, fix the copy up
 # in a chroot (fstab, initramfs drivers, grub, network), verify it boots, and
 # only then cut over. The donor is never written to.
 #
-# usage: reloca.to [-n] [-y] [-i KEYFILE] [-d DISK] [-s STEP] [-o key=value]... [DONOR] [ARG]
-#   DONOR         [root@]host[:port] of the source: booted into the Live (off-line relocation,
-#                 source.reloca.to) or running its own OS (on-line relocation: the volumes are
-#                 copied in passes by reloca-agent while it runs and frozen for the last delta;
+# usage: migrator [-n] [-y] [-i KEYFILE] [-d DISK] [-s STEP] [-o key=value]... [DONOR] [ARG]
+#   DONOR         [root@]host[:port] of the source: booted into the Live (off-line migration,
+#                 source.migrator) or running its own OS (on-line migration: the volumes are
+#                 copied in passes by migrator-agent while it runs and frozen for the last delta;
 #                 the mode is detected, -o mode=online|offline insists on one)
 #   (no -s)       the whole migration: bootstrap -> inventory -> plan -> check -> confirm
 #                 -> apply -> transfer -> postfix -> verify -> confirm -> cutover
@@ -19,7 +19,7 @@
 #                   apply | transfer | postfix [ROOT] | verify [ROOT] | cutover
 #                   inventory [DONOR] raw records of this box (or of DONOR)
 #                   attach            back to the running tmux session (or tail the log)
-#                   cleanup           undo mounts/activations/read-only marks reloca.to left behind
+#                   cleanup           undo mounts/activations/read-only marks migrator left behind
 #   -d DISK       target disk on this box when it has several (/dev/sda, /dev/nvme0n1,
 #                 /dev/disk/by-id/...); default: the only eligible disk, else a refusal listing them.
 #                 -d DISK,DISK2 with -o raid=1: mirror the two (md RAID1 per slot, grub/ESP on both)
@@ -28,7 +28,7 @@
 #   -o key=value  repeat it for every key ("-o compress=none -o patience=600"):
 #                  a comma belongs to the value (driver=mod1,mod2,
 #                  console=ttyS0,115200), so options are never joined by one.
-#                  Every key is listed at https://reloca.to/options/; an unknown
+#                  Every key is listed by 'migrator -h'; an unknown
 #                  key is refused, so a typo cannot silently do nothing
 #      both modes: root=auto|block|files label=auto|gpt|dos nic=eth0 donor-nic=IFACE
 #         nic-pin=1|0 driver=MOD console=... redo=N cloudinit=disable|keep bootorder=pxe|local
@@ -59,9 +59,9 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 HERE=$(dirname "$(readlink -f "$0")")
-if [ -r "$HERE/../lib/common.sh" ]; then RELOCA_LIB=$(readlink -f "$HERE/../lib"); else RELOCA_LIB=/usr/local/lib/reloca.to; fi
-export RELOCA_LIB
-RUN=${RUN:-/run/reloca.to}; export RUN
+if [ -r "$HERE/../lib/common.sh" ]; then MIGRATOR_LIB=$(readlink -f "$HERE/../lib"); else MIGRATOR_LIB=/usr/local/lib/migrator; fi
+export MIGRATOR_LIB
+RUN=${RUN:-/run/migrator}; export RUN
 DRY=; YES=; SSH_KEYFILE=; DISK=auto; STEP=
 declare -A OPT
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit "${1:-2}"; }
@@ -91,7 +91,7 @@ shift $((OPTIND-1))
 CMD=${STEP:-all}
 case $CMD in all|plan|check|apply|transfer|postfix|verify|cutover|inventory|attach|cleanup|version) ;;
 	*) echo "unknown step: $CMD" >&2; usage 2 ;; esac
-[ "$CMD" != all ] && [ "$CMD" != plan ] || [ -n "${1:-}" ] || { echo "DONOR is required: reloca.to [-s plan] [root@]host[:port]" >&2; usage 2; }
+[ "$CMD" != all ] && [ "$CMD" != plan ] || [ -n "${1:-}" ] || { echo "DONOR is required: migrator [-s plan] [root@]host[:port]" >&2; usage 2; }
 # A dry run must not leave state, keys or a lock that a real run would trip
 # over: the steps that PRODUCE files (plan, all, inventory) work in $RUN/dry.
 # The other steps only read under -n ("-n -s postfix" = show the diffs of a
@@ -104,52 +104,52 @@ if [ -n "$DRY" ]; then
 fi
 export DRY YES RUN
 # shellcheck source=lib/common.sh
-. "$RELOCA_LIB/common.sh"
+. "$MIGRATOR_LIB/common.sh"
 opt_check
 low_mem_defaults
 for f in ssh bootstrap inventory plan apply transfer target postfix netfix verify; do
 	# shellcheck disable=SC1090  # the libs are known, listed just above
-	[ -r "$RELOCA_LIB/$f.sh" ] && . "$RELOCA_LIB/$f.sh"
+	[ -r "$MIGRATOR_LIB/$f.sh" ] && . "$MIGRATOR_LIB/$f.sh"
 done
 
 # --- identity: who is who, printed on every line ------------------------------
 # lie, so that is refused.
 # The two Lives are named by ROLE, not by serial: this box becomes
-# destination.reloca.to, the donor source.reloca.to (transient hostnames, gone
+# destination.migrator, the donor source.migrator (transient hostnames, gone
 # with the Live). No argument, nothing to confuse: the shell prompt, the log
 # tag and "+ donor:" lines say which side a command ran on. The identity of
 # the machines is still checked (nonce, DMI, MAC) in ssh_guard_same_box.
-HOST_TO=destination.reloca.to; HOST_FROM=source.reloca.to
+HOST_TO=destination.migrator; HOST_FROM=source.migrator
 set_roles() {
 	ROLE_TAG=destination; export ROLE_TAG
-	# only a Live gets renamed: "reloca.to -s check" on the build host must not touch it
+	# only a Live gets renamed: "migrator -s check" on the build host must not touch it
 	if [ -z "$DRY" ] && [ -n "$(live_release_file)" ] && have hostnamectl; then
 		hostnamectl --transient set-hostname "$HOST_TO" 2>/dev/null || true
 	fi
 }
 
 # --- tmux: the transfer must outlive the operator's ssh session ----------------
-# Long phases re-exec themselves inside a tmux session named "reloca.to"; a
-# dropped connection then costs nothing and "reloca.to -s attach" comes back.
+# Long phases re-exec themselves inside a tmux session named "migrator"; a
+# dropped connection then costs nothing and "migrator -s attach" comes back.
 # An unattended run (-y, no terminal) needs no tmux.
 # The pane runs a wrapper that records the inner exit code and keeps the pane
 # open on failure: tmux itself always exits 0 and would otherwise swallow both
-# the code and the reason line. "=reloca.to" is an exact session name (a bare
+# the code and the reason line. "=migrator" is an exact session name (a bare
 # name is a prefix match). The flock fd must be closed before the re-exec or
 # the inner instance finds its own lock held by the tmux client.
 maybe_tmux() {
 	[ -z "$DRY" ] && [ -z "$YES" ] && is_tty && [ -z "${TMUX:-}" ] || return 0
 	have tmux || { warn "tmux not available: running in the foreground, a dropped ssh session will kill the transfer"; return 0; }
-	if tmux has-session -t =reloca.to 2>/dev/null; then
-		say "a reloca.to tmux session already exists, attaching to it"
-		unlock; exec tmux attach -t =reloca.to
+	if tmux has-session -t =migrator 2>/dev/null; then
+		say "a migrator tmux session already exists, attaching to it"
+		unlock; exec tmux attach -t =migrator
 	fi
-	say "re-launching inside tmux session 'reloca.to' (detach: Ctrl-B D, return: reloca.to -s attach)"
+	say "re-launching inside tmux session 'migrator' (detach: Ctrl-B D, return: migrator -s attach)"
 	local inner wrapper rc
 	inner=$(printf '%q ' "$0" "${ORIG_ARGS[@]}")
-	wrapper="$inner; rc=\$?; echo \$rc > $(printf '%q' "$RUN/tmux.rc"); [ \$rc -eq 0 ] || read -rp '[reloca.to] exit '\$rc' - see $(printf '%q' "$RUN/log"), press Enter to close '; exit \$rc"
+	wrapper="$inner; rc=\$?; echo \$rc > $(printf '%q' "$RUN/tmux.rc"); [ \$rc -eq 0 ] || read -rp '[migrator] exit '\$rc' - see $(printf '%q' "$RUN/log"), press Enter to close '; exit \$rc"
 	rm -f "$RUN/tmux.rc"; unlock
-	tmux new-session -s reloca.to "bash -c $(printf '%q' "$wrapper")"
+	tmux new-session -s migrator "bash -c $(printf '%q' "$wrapper")"
 	rc=$(cat "$RUN/tmux.rc" 2>/dev/null || echo 1)
 	exit "$rc"
 }
@@ -175,16 +175,16 @@ connect_donor() {   # $1 = DONOR
 	want=$(opt mode); found=$(ssh_donor_mode)
 	case $want in
 		'') ;;
-		online|offline) [ "$want" = "$found" ] || die "$EX_ENV" "mode=$want but the donor $DONOR_HOST $([ "$found" = online ] && echo 'runs its own OS (on-line relocation)' || echo 'is a Live (off-line relocation)'): $([ "$want" = offline ] && echo 'boot it into the Live first' || echo 'mode=online wants the running OS, not the Live')";;
+		online|offline) [ "$want" = "$found" ] || die "$EX_ENV" "mode=$want but the donor $DONOR_HOST $([ "$found" = online ] && echo 'runs its own OS (on-line migration)' || echo 'is a Live (off-line migration)'): $([ "$want" = offline ] && echo 'boot it into the Live first' || echo 'mode=online wants the running OS, not the Live')";;
 		*) die "$EX_ENV" "bad -o mode=$want (want online or offline)";;
 	esac
-	RELOCA_MODE=$found; export RELOCA_MODE; state_set mode "$found"
+	MIGRATOR_MODE=$found; export MIGRATOR_MODE; state_set mode "$found"
 	ssh_relay_start
 	if [ "$found" = online ]; then
 		ssh_require_online_donor
 		ssh_guard_same_box
 		# the donor is somebody's production: no rename, no apt, no second sshd; the agent lives on a tmpfs
-		say "on-line relocation: donor $DONOR_HOST ($(ssh_donor_serial)) keeps running its OS, this box is $HOST_TO"
+		say "on-line migration: donor $DONOR_HOST ($(ssh_donor_serial)) keeps running its OS, this box is $HOST_TO"
 		bootstrap_donor_online
 		phase_done bootstrap
 		return 0
@@ -202,7 +202,7 @@ connect_donor() {   # $1 = DONOR
 # find the donor in the state connect_donor left behind
 reconnect_donor() {
 	local d; d=$(state_get donor.target)
-	[ -n "$d" ] || die "$EX_ENV" "no donor recorded in $RUN/state: run 'reloca.to -s plan DONOR' first"
+	[ -n "$d" ] || die "$EX_ENV" "no donor recorded in $RUN/state: run 'migrator -s plan DONOR' first"
 	connect_donor "$d"
 }
 
@@ -257,14 +257,14 @@ cmd_inventory() {
 	fi
 }
 cmd_attach() {
-	if have tmux && tmux has-session -t =reloca.to 2>/dev/null; then exec tmux attach -t =reloca.to; fi
+	if have tmux && tmux has-session -t =migrator 2>/dev/null; then exec tmux attach -t =migrator; fi
 	say "no tmux session; state:"; cat "$RUN/state" 2>/dev/null || echo "  (none)"
 	[ -r "$RUN/log" ] && exec tail -n 40 -f "$RUN/log"
 	die "$EX_ENV" "nothing to attach to"
 }
 cmd_cleanup() { set_roles; stub_or cleanup_all M2; }
 cmd_version() {
-	echo "reloca.to $(reloca_version)  lib=$RELOCA_LIB  live=${LIVE_ID:-$(live_build_id)}"
+	echo "migrator $(migrator_version)  lib=$MIGRATOR_LIB  live=${LIVE_ID:-$(live_build_id)}"
 }
 
 case $CMD in

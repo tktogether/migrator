@@ -23,7 +23,7 @@
 # Under -n: "ro" still mounts (read-only, no journal replay) so postfix can show
 # diffs and verify can look; "rw" is refused, nothing is ever written in a dry run.
 
-: "${TARGET_MNT:=/mnt/reloca.to/target}"
+: "${TARGET_MNT:=/mnt/migrator/target}"
 TARGET_BINDS=
 
 # rows of [volumes] that carry a filesystem mounted somewhere in the tree,

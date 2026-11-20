@@ -9,8 +9,8 @@
 #
 #   transfer_run                 driver entry: every [volumes] row in plan order
 #                                (mode=online in $RUN/state: transfer_online_run instead)
-#   transfer_online_run          on-line relocation: the ESP by tar first (it is never frozen),
-#                                then every block volume in one "reloca-agent pull" session
+#   transfer_online_run          on-line migration: the ESP by tar first (it is never frozen),
+#                                then every block volume in one "migrator-agent pull" session
 #                                (passes, fsfreeze, final delta; the donor stays frozen and
 #                                polls this box for the cutover), then fsck/grow on the copies
 #   transfer_probe COMP EST      5 s of zeros through the channel -> rate, ETA line
@@ -27,8 +27,8 @@
 #
 # What is written where: this box's target devices (partclone -r, tar -x, e2fsck
 # -y, resize2fs, xfs_growfs), $RUN/vol-N.{log,progress,remote.err,rc}. On the
-# donor only /run/reloca-src.{status,log} and read-only mounts under
-# /mnt/reloca.to/src/N (rule 4: the donor's disks are never written). Every
+# donor only /run/migrator-src.{status,log} and read-only mounts under
+# /mnt/migrator/src/N (rule 4: the donor's disks are never written). Every
 # pipeline is echoed with "+ donor:" / "+ " and logged verbatim: the log is the
 # runbook the operator replays by hand when the tool is not trusted.
 #
@@ -42,19 +42,19 @@
 # re-mkfs'ed from the [mkfs] line (or emptied) before tar runs again.
 #
 # Knobs: -o data=ssh|raw compress=lz4|zstd|none redo=N|SRC|all watchdog=MIN
-# fsck=quick|full. Test overrides (seconds): RELOCA_WATCHDOG_S,
-# RELOCA_POLL_S, RELOCA_PRINT_S, RELOCA_PROBE_S; TX_RSTATUS/TX_RLOG relocate the
+# fsck=quick|full. Test overrides (seconds): MIGRATOR_WATCHDOG_S,
+# MIGRATOR_POLL_S, MIGRATOR_PRINT_S, MIGRATOR_PROBE_S; TX_RSTATUS/TX_RLOG migrate the
 # donor's status/log files; TX_SRC_RUN runs the donor side of tx_verify_files.
 # Exit codes: EX_ENV (2) apply not done / no donor / tools missing; EX_PLAN (4)
 # unknown method or data=/compress= value; EX_FAIL (1) a volume failed (the
 # message names it and the redo command).
 
-TX_MNT=${TX_MNT:-/mnt/reloca.to}
-: "${TX_RSTATUS:=/run/reloca-src.status}"
-: "${TX_RLOG:=/run/reloca-src.log}"
-: "${TX_POLL_S:=${RELOCA_POLL_S:-10}}"     # how often the pipeline is looked at
-: "${TX_PRINT_S:=${RELOCA_PRINT_S:-30}}"   # progress line at most this often
-: "${TX_PROBE_S:=${RELOCA_PROBE_S:-5}}"    # 0 = no ETA probe
+TX_MNT=${TX_MNT:-/mnt/migrator}
+: "${TX_RSTATUS:=/run/migrator-src.status}"
+: "${TX_RLOG:=/run/migrator-src.log}"
+: "${TX_POLL_S:=${MIGRATOR_POLL_S:-10}}"     # how often the pipeline is looked at
+: "${TX_PRINT_S:=${MIGRATOR_PRINT_S:-30}}"   # progress line at most this often
+: "${TX_PROBE_S:=${MIGRATOR_PROBE_S:-5}}"    # 0 = no ETA probe
 : "${TX_SRC_RUN:=rsh_sh}"                  # runs a shell line on the donor (tests: a local runner)
 TX_DATA=ssh; TX_COMP=lz4
 TX_SRC=; TX_VID=; TX_ORD=0; TX_N=0
@@ -156,7 +156,7 @@ tx_redo_wants() {   # VID SRC -> 0 when -o redo= names this volume (or all)
 # until that is fixed in common.sh (writing through state_set works).
 tx_state_get() { sed -n "s|^$1=||p" "$RUN/state" 2>/dev/null | tail -1; }
 tx_vol_state() { tx_state_get "vol.$1"; }   # pending|running|done|failed|""
-tx_watchdog_s() { if [ -n "${RELOCA_WATCHDOG_S:-}" ]; then echo "$RELOCA_WATCHDOG_S"; else echo $(( $(opt watchdog 15) * 60 )); fi; }
+tx_watchdog_s() { if [ -n "${MIGRATOR_WATCHDOG_S:-}" ]; then echo "$MIGRATOR_WATCHDOG_S"; else echo $(( $(opt watchdog 15) * 60 )); fi; }
 tx_fmt_time() {   # SECONDS -> 2h 05m / 12m 30s / 45s
 	awk -v s="$1" 'BEGIN { s = int(s); if (s >= 3600) printf "%dh %02dm\n", s / 3600, (s % 3600) / 60; else if (s >= 60) printf "%dm %02ds\n", s / 60, s % 60; else printf "%ds\n", s }'
 }
@@ -188,7 +188,7 @@ tx_log_bytes() {   # LOG -> bytes partclone copied (0 when unknown)
 
 # --- failure, status line, cleanup -----------------------------------------------------
 # tx_status DETAIL: the last word on the transfer, one line in $RUN/summary (what
-# "reloca.to -s attach" and a script read after the phase; verify overwrites it)
+# "migrator -s attach" and a script read after the phase; verify overwrites it)
 tx_status() { mkdir -p "$RUN" 2>/dev/null; printf '%s\n' "$1" > "$RUN/summary" 2>/dev/null || true; }
 # tx_fail MSG: the volume is marked failed and the run stops; the message
 # names the volume and the exact command that repeats just this volume.
@@ -199,7 +199,7 @@ tx_fail() {
 		vol_state_set "$TX_SRC" failed
 		state_set "vol.$TX_SRC.finished" "$(date +%s)"; state_set "vol.$TX_SRC.rc" 1
 	fi
-	die "$EX_FAIL" "volume $TX_SRC (${TX_VID:-?}) failed: $*; fix the cause, then: reloca.to -o redo=${TX_VID:-N} -s transfer"
+	die "$EX_FAIL" "volume $TX_SRC (${TX_VID:-?}) failed: $*; fix the cause, then: migrator -o redo=${TX_VID:-N} -s transfer"
 }
 tx_must()    { run "$@" || tx_fail "command failed ($?): $*"; }
 tx_must_sh() { run_sh "$1" || tx_fail "command failed ($?): $1"; }
@@ -211,7 +211,7 @@ tx_ssh_cleanup_prefix() {
 # Registered once each (never under -n: nothing was mounted or started), and
 # run whatever the exit reason: a pipeline still running is killed by its own
 # process group (never by name), our mounts are undone on both sides. The
-# donor side only umounts what we mounted under /mnt/reloca.to/src.
+# donor side only umounts what we mounted under /mnt/migrator/src.
 tx_register_cleanup_local() {
 	[ -z "$_TX_CLEANUP_LOCAL" ] && [ -z "$DRY" ] || return 0
 	cleanup_add "p=\$(cat $(printf '%q' "$RUN/tx.pgid") 2>/dev/null); [ -n \"\$p\" ] && kill -TERM -- -\$p; rm -f $(printf '%q' "$RUN/tx.pgid")"
@@ -789,12 +789,12 @@ tx_ol_hook() {
 TX_PC_N=0
 # the COW files: /run is a small tmpfs on the Live (it filled up and invalidated the
 # snapshot in the first attempt); the Live's root tmpfs has room, -o precheck-dir= elsewhere
-TX_PC_DIR=${TX_PC_DIR:-/var/tmp/reloca.to}
+TX_PC_DIR=${TX_PC_DIR:-/var/tmp/migrator}
 transfer_precheck_cleanup() {
 	local i
 	target_umount 2>/dev/null
 	for (( i = TX_PC_N - 1; i >= 0; i-- )); do
-		dmsetup remove "reloca-pc-$i" 2>/dev/null || { sleep 1; dmsetup remove "reloca-pc-$i" 2>/dev/null; }
+		dmsetup remove "migrator-pc-$i" 2>/dev/null || { sleep 1; dmsetup remove "migrator-pc-$i" 2>/dev/null; }
 		[ -z "$(cat "$RUN/precheck-$i.loop" 2>/dev/null)" ] || losetup -d "$(cat "$RUN/precheck-$i.loop")" 2>/dev/null
 		rm -f "$TX_PC_DIR/precheck-$i.cow" "$RUN/precheck-$i.loop"
 	done
@@ -833,8 +833,8 @@ transfer_precheck() {
 		truncate -s "$cowsize" "$cow" || die "$EX_FAIL" "pre-check: cannot make the COW file $cow"
 		loop=$(losetup --show -f "$cow") || die "$EX_FAIL" "pre-check: losetup $cow"
 		echo "$loop" > "$RUN/precheck-$TX_PC_N.loop"
-		snap=/dev/mapper/reloca-pc-$TX_PC_N
-		run dmsetup create "reloca-pc-$TX_PC_N" --table "0 $sectors snapshot $target $loop N 8" || die "$EX_FAIL" "pre-check: dm-snapshot of $target failed (dm-snapshot module? dmsetup?)"
+		snap=/dev/mapper/migrator-pc-$TX_PC_N
+		run dmsetup create "migrator-pc-$TX_PC_N" --table "0 $sectors snapshot $target $loop N 8" || die "$EX_FAIL" "pre-check: dm-snapshot of $target failed (dm-snapshot module? dmsetup?)"
 		TX_PC_N=$((TX_PC_N + 1))
 		udevadm settle 2>/dev/null; [ -b "$snap" ] || sleep 1
 		printf '%s\t%s\n' "$target" "$snap" >> "$RUN/target.map"
@@ -846,7 +846,7 @@ transfer_precheck() {
 		esac
 	done < <(plan_section "$plan" volumes)
 	[ "$TX_PC_N" -gt 0 ] || die "$EX_FAIL" "pre-check: no mounted volume in the plan"
-	TARGET_MNT=/mnt/reloca.to/precheck
+	TARGET_MNT=/mnt/migrator/precheck
 	target_mount rw binds
 	postfix_run "$TARGET_MNT"
 	verify_run "$TARGET_MNT"
@@ -868,13 +868,13 @@ transfer_online_run() {
 	local plan=$RUN/plan comp acomp t i n row src target method fs notes vid st agent out rc line fmode cut_host cut_port
 	local -a rows=() blocks=() vols=()
 	[ -n "${DONOR_HOST:-}" ] || die "$EX_ENV" "not connected to a donor (the driver connects before transfer)"
-	[ -s "$plan" ] || die "$EX_ENV" "no plan at $plan: run 'reloca.to -s plan DONOR' first"
+	[ -s "$plan" ] || die "$EX_ENV" "no plan at $plan: run 'migrator -s plan DONOR' first"
 	[ "$(plan_get "$plan" target mode)" = online ] || die "$EX_PLAN" "the plan is not an on-line one ([target] has no mode=online): plan again against the running donor"
-	agent=${RELOCA_AGENT:-$(state_get agent.path)}
+	agent=${MIGRATOR_AGENT:-$(state_get agent.path)}
 	# an empty or truncated file still has +x: the shell then runs it as an empty
 	# script, exits 0 without a word and nothing is frozen (seen on .111, 2026-11-19)
 	[ -n "$agent" ] && [ -x "$agent" ] && [ -n "$("$agent" version 2>/dev/null)" ] \
-		|| die "$EX_ENV" "reloca-agent at '${agent:-unset}' does not run (missing, empty or truncated?): reinstall it from the Live's own build"
+		|| die "$EX_ENV" "migrator-agent at '${agent:-unset}' does not run (missing, empty or truncated?): reinstall it from the Live's own build"
 	# Two different things are compressed two different ways here.
 	# Block volumes: the agent compresses THE PAYLOAD OF EACH FRAME with zstd
 	# (statically linked in, so the donor needs nothing installed). A stream
@@ -913,7 +913,7 @@ transfer_online_run() {
 	if [ ${#esp_tar[@]} -gt 0 ] && [ "$(state_get donor.tool.tar)" = 0 ]; then die "$EX_ENV" "the ESP $(pl_field "${esp_tar[0]}" src) is bigger than its slot and the donor has no tar to copy it by files: install tar on the donor"; fi
 	if [ ${#files[@]} -gt 0 ] && [ "$(state_get donor.tool.tar)" = 0 ]; then die "$EX_ENV" "the files method needs tar on the donor (none there): install tar on the donor, or plan with a disk the volumes fit on"; fi
 	tx_require_tools "${rows[@]}"
-	say "transfer (on-line): $n volumes, ${#blocks[@]} block volume(s) by reloca-agent (frames: $acomp), file volumes by tar (stream: $comp), tracker=$(opt tracker auto), chunk=$(opt chunk 64K), converge=$(opt converge 10) s, passes<=$(opt passes 8)"
+	say "transfer (on-line): $n volumes, ${#blocks[@]} block volume(s) by migrator-agent (frames: $acomp), file volumes by tar (stream: $comp), tracker=$(opt tracker auto), chunk=$(opt chunk 64K), converge=$(opt converge 10) s, passes<=$(opt passes 8)"
 	# the ESP(s) first: tar from where the donor mounts them (nothing is mounted on the donor)
 	TX_N=$n
 	for (( i = 0; i < n; i++ )); do
@@ -970,11 +970,11 @@ transfer_online_run() {
 #!/bin/bash
 # the agent's hooks (generated by transfer_online_run): before|after the freeze = the files passes, precheck = postfix+verify on snapshots
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-for f in common ssh bootstrap inventory plan apply transfer target postfix netfix verify; do . "$RELOCA_LIB/\$f.sh"; done
+for f in common ssh bootstrap inventory plan apply transfer target postfix netfix verify; do . "$MIGRATOR_LIB/\$f.sh"; done
 # the libs reset these at source time: the donor of THIS run, verbatim; the options the hook reads
 DONOR_USER=$DONOR_USER; DONOR_HOST=$DONOR_HOST; DONOR_PORT=$DONOR_PORT; export DONOR_USER DONOR_HOST DONOR_PORT
-RELOCA_MODE=online; ROLE_TAG=destination; TX_COMP=$TX_COMP; TX_MNT=$TX_MNT; _ssh_setopts
-OPT[precheck-cow]=$(opt precheck-cow 2G); OPT[precheck-dir]=$(opt precheck-dir /var/tmp/reloca.to); OPT[fsck]=$(opt fsck quick)
+MIGRATOR_MODE=online; ROLE_TAG=destination; TX_COMP=$TX_COMP; TX_MNT=$TX_MNT; _ssh_setopts
+OPT[precheck-cow]=$(opt precheck-cow 2G); OPT[precheck-dir]=$(opt precheck-dir /var/tmp/migrator); OPT[fsck]=$(opt fsck quick)
 tx_ol_hook "\$1"
 EOF
 		fi
@@ -1014,7 +1014,7 @@ EOF
 	if [ -n "$DRY" ]; then say "(dry) transfer (on-line): nothing streamed, the donor is not frozen"; return 0; fi
 	! declare -f apply_fingerprint_check >/dev/null || apply_fingerprint_check
 	for row in "${blocks[@]}"; do src=$(pl_field "$row" src); vol_state_set "$src" running; state_set "vol.$src.started" "$(date +%s)"; done
-	tx_status "transfer (on-line): ${#blocks[@]} block volumes through reloca-agent"
+	tx_status "transfer (on-line): ${#blocks[@]} block volumes through migrator-agent"
 	"$agent" "${args[@]}" 2>&1 | tee "$out"; rc=${PIPESTATUS[0]}
 	sed 's/^/agent: /' "$out" >> "$RUN/log" 2>/dev/null || true
 	tx_ol_sessions_close
@@ -1022,7 +1022,7 @@ EOF
 	if [ "$rc" -ne 0 ] || [ "${line#RESULT }" = "${line#RESULT ok}" ]; then
 		for row in "${blocks[@]}" "${files[@]}"; do src=$(pl_field "$row" src); vol_state_set "$src" failed; done
 		for row in "${files[@]}"; do umount "$TX_MNT/dst/$(tx_vol_id "$row")" 2>/dev/null; done
-		die "$EX_FAIL" "on-line transfer failed (reloca-agent exit $rc; the donor is not frozen): see $out and $RUN/log; fix the cause and run 'reloca.to -s transfer' again"
+		die "$EX_FAIL" "on-line transfer failed (migrator-agent exit $rc; the donor is not frozen): see $out and $RUN/log; fix the cause and run 'migrator -s transfer' again"
 	fi
 	# the files volumes are complete (their last pass ran under the freeze): unmount, done
 	for row in "${files[@]}"; do
@@ -1037,7 +1037,7 @@ EOF
 	state_set online.cutover_token "$(echo "$line" | sed -n 's/.*token=\([^ ]*\).*/\1/p')"
 	state_set online.frozen 1; state_set online.frozen_at "$(date +%s)"
 	[ -n "$(state_get online.cutover_token)" ] || die "$EX_FAIL" "the agent reported no cutover token (see $out): the donor is frozen without a poller; thaw it by hand (fsfreeze -u) and retry"
-	say "the donor's filesystems are FROZEN from now on; it polls $cut_host:$cut_port for the cutover command ('reloca.to -s cutover'; rollback: '-o cutover=rollback')"
+	say "the donor's filesystems are FROZEN from now on; it polls $cut_host:$cut_port for the cutover command ('migrator -s cutover'; rollback: '-o cutover=rollback')"
 	# only now anything may write to the copies: the checks and the grows
 	i=0
 	for row in "${blocks[@]}"; do
@@ -1068,19 +1068,19 @@ EOF
 transfer_run() {
 	local plan=$RUN/plan data comp i n row src target method fs size used vid st pending=0 est=0 total skipped=0
 	local -a rows=()
-	if [ "${RELOCA_MODE:-$(state_get mode)}" = online ]; then
+	if [ "${MIGRATOR_MODE:-$(state_get mode)}" = online ]; then
 		if ! phase_is_done apply; then
 			if [ -n "$DRY" ]; then say "(dry) apply is not marked done in $RUN/state; continuing"
-			else die "$EX_ENV" "run 'reloca.to -s apply' first (phase apply is not done in $RUN/state)"; fi
+			else die "$EX_ENV" "run 'migrator -s apply' first (phase apply is not done in $RUN/state)"; fi
 		fi
 		transfer_online_run; return
 	fi
 	if ! phase_is_done apply; then
 		if [ -n "$DRY" ]; then say "(dry) apply is not marked done in $RUN/state; continuing"
-		else die "$EX_ENV" "run 'reloca.to -s apply' first (phase apply is not done in $RUN/state)"; fi
+		else die "$EX_ENV" "run 'migrator -s apply' first (phase apply is not done in $RUN/state)"; fi
 	fi
 	[ -n "${DONOR_HOST:-}" ] || die "$EX_ENV" "not connected to a donor (the driver connects before transfer)"
-	[ -s "$plan" ] || die "$EX_ENV" "no plan at $plan: run 'reloca.to -s plan DONOR' first"
+	[ -s "$plan" ] || die "$EX_ENV" "no plan at $plan: run 'migrator -s plan DONOR' first"
 	data=$(opt data "$(plan_get "$plan" target data)"); data=${data:-ssh}
 	comp=$(opt compress "$(plan_get "$plan" target compress)"); comp=${comp:-lz4}
 	case $data in ssh|raw) ;; *) die "$EX_PLAN" "data=$data: want ssh or raw";; esac

@@ -1,5 +1,5 @@
-# reloca.to plan  donor=10.0.0.21/24/db1 (Dell%20Inc.%20PowerEdge%20R640%20SN=CN12345, CentOS%20Linux%207%20(Core))  recipient=to-XS-456 (Dell%20Inc.%20PowerEdge%20R740%20SN=GH7TX22, boot=eno1/b0:83:fe:00:00:01)
-# inv_sha256=cd3dbacad7ada27cc9d4bfba22fbe5b3b3fbb7b4eff8a799056728b966b4c7f3:5d443bfb51abe6bd3c0c11f278690652f132e08eab702d530387da2a866d8c2c  reloca=-  live=-  date=-
+# migrator plan  donor=10.0.0.21/24/db1 (Dell%20Inc.%20PowerEdge%20R640%20SN=CN12345, CentOS%20Linux%207%20(Core))  recipient=to-XS-456 (Dell%20Inc.%20PowerEdge%20R740%20SN=GH7TX22, boot=eno1/b0:83:fe:00:00:01)
+# inv_sha256=cd3dbacad7ada27cc9d4bfba22fbe5b3b3fbb7b4eff8a799056728b966b4c7f3:5d443bfb51abe6bd3c0c11f278690652f132e08eab702d530387da2a866d8c2c  migrator=-  live=-  date=-
 # WARN: partitions of other donor disks are appended to /dev/sda as extra slots: /dev/sdb2(swap)
 # WARN: partitions are renumbered (physical order on dos): PARTUUID= and /dev/sdaN references are rewritten to UUID=
 # WARN: recipient has 4 NICs: eth0 assignment depends on probe order; the udev pin (pins=) is best-effort

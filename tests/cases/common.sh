@@ -43,10 +43,10 @@ assert_eq "opt unset, no default"        ""   "$(opt nothing)"
 assert_eq "opt empty value -> default"   ssh  "$(opt empty ssh)"
 
 # --- say / warn / log ---------------------------------------------------------
-assert_eq "say prefix"    "[reloca.to] hello" "$(say hello)"
-assert_eq "say with role" "[reloca.to destination] hello" "$(ROLE_TAG='destination' say hello)"
+assert_eq "say prefix"    "[migrator] hello" "$(say hello)"
+assert_eq "say with role" "[migrator destination] hello" "$(ROLE_TAG='destination' say hello)"
 assert_ok "say logs to \$RUN/log" grep -q ' hello$' "$RUN/log"
-assert_eq "warn prefix"   "[reloca.to] WARN: careful" "$(warn careful 2>/dev/null)"
+assert_eq "warn prefix"   "[migrator] WARN: careful" "$(warn careful 2>/dev/null)"
 warn counted >/dev/null 2>&1
 assert_eq "warn counts"   1 "$WARNINGS"
 
@@ -108,7 +108,7 @@ assert_has "failure: phase="                   "phase=apply "   "$failure"
 assert_has "failure: volume="                  "volume=3 "      "$failure"
 assert_has "failure: reason="                  "reason=boom "   "$failure"
 assert_has "failure: log="                     "log=$RUN/log"   "$failure"
-assert_eq  "die: last stdout line is the reason" "[reloca.to] ERROR: boom" "$(tail -1 "$RUN/die.out")"
+assert_eq  "die: last stdout line is the reason" "[migrator] ERROR: boom" "$(tail -1 "$RUN/die.out")"
 assert_has "die: reason also on stderr"        "ERROR: boom"    "$(cat "$RUN/die.err")"
 assert_ok  "die: reason in the log"            grep -q 'ERROR(exit 3): boom$' "$RUN/log"
 ( die "plain" ) >/dev/null 2>&1; rc=$?
@@ -146,7 +146,7 @@ fresh_sh "cleanup_add false; exit 0"; rc=$?
 assert_eq "a failing snippet does not change the exit code" 0 "$rc"
 
 # --- environment ----------------------------------------------------------------
-if [ -r /etc/reloca-live-release ] || [ -r /etc/xserver-live-release ]; then
+if [ -r /etc/migrator-live-release ] || [ -r /etc/xserver-live-release ]; then
 	skip "require_full_live off-Live" "this host is a Live"
 else
 	( require_full_live ) >"$RUN/rfl.out" 2>/dev/null; rc=$?
@@ -154,7 +154,7 @@ else
 	assert_has "require_full_live off-Live says why" "not a Live OS" "$(cat "$RUN/rfl.out")"
 fi
 mkdir -p "$RUN/lib"; echo 1.2.3 > "$RUN/lib/VERSION"
-assert_eq "reloca_version without lib/VERSION" dev   "$(RELOCA_LIB=$RUN/nolib reloca_version)"
-assert_eq "reloca_version from lib/VERSION"    1.2.3 "$(RELOCA_LIB=$RUN/lib reloca_version)"
+assert_eq "migrator_version without lib/VERSION" dev   "$(MIGRATOR_LIB=$RUN/nolib migrator_version)"
+assert_eq "migrator_version from lib/VERSION"    1.2.3 "$(MIGRATOR_LIB=$RUN/lib migrator_version)"
 
 t_end

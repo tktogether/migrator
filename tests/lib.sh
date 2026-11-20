@@ -27,7 +27,7 @@ export REPO
 # rather than by a trap of our own.
 T_OWN_RUN=
 if [ -z "${RUN:-}" ]; then
-	RUN=$(mktemp -d /var/tmp/xslive-reloca-case.XXXXXX) || exit 1
+	RUN=$(mktemp -d /var/tmp/xslive-migrator-case.XXXXXX) || exit 1
 	T_OWN_RUN=y
 fi
 export RUN

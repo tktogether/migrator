@@ -1,5 +1,5 @@
-# reloca.to plan  donor=10.0.0.61/24/files1 (Supermicro%20X9SCL%20SN=S222222, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-611 (Supermicro%20X11SSH-F%20SN=XS-611, boot=eno1/b0:83:fe:00:00:21)
-# inv_sha256=35aa995d86e0ed2d695920153be16490a5f844f8a554d4b30e76ca801ac2f8a7:e335bd6967b216924900c6a5054a92348cbb736765a6bd2a7abf3343f6e33b46  reloca=-  live=-  date=-
+# migrator plan  donor=10.0.0.61/24/files1 (Supermicro%20X9SCL%20SN=S222222, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-611 (Supermicro%20X11SSH-F%20SN=XS-611, boot=eno1/b0:83:fe:00:00:21)
+# inv_sha256=35aa995d86e0ed2d695920153be16490a5f844f8a554d4b30e76ca801ac2f8a7:e335bd6967b216924900c6a5054a92348cbb736765a6bd2a7abf3343f6e33b46  migrator=-  live=-  date=-
 # WARN: 5 slots need more than 4 primary partitions: gpt instead of dos (no extended/logical partitions)
 # WARN: partition table dos -> gpt: new label-id and partition GUIDs, PARTUUID= references are rewritten to UUID=
 # WARN: partitions are renumbered (physical order on gpt): PARTUUID= and /dev/sdaN references are rewritten to UUID=

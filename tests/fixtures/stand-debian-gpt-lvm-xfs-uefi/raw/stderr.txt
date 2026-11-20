@@ -1,3 +1,3 @@
-inventory: donor root /dev/mapper/vg0-root (xfs) mounted at /mnt/reloca.to/inv/root
+inventory: donor root /dev/mapper/vg0-root (xfs) mounted at /mnt/migrator/inv/root
 inventory: mounted /dev/vda2 at /boot (ext4, read-only)
 inventory: mounted /dev/vda1 at /boot/efi (vfat, read-only)

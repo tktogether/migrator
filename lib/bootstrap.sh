@@ -1,13 +1,13 @@
 #!/bin/bash
 # lib/bootstrap.sh — make sure both Lives carry the tools a migration needs,
 # installing what is missing from the mirror at runtime (the image is not
-# rebuilt for reloca.to). Sourced by bin/reloca.to after common.sh and ssh.sh;
+# rebuilt for migrator). Sourced by bin/migrator after common.sh and ssh.sh;
 # defines functions and defaults only, nothing runs at source time.
 #
 #   bootstrap_local [SET...]   this box: check binaries, apt-get what is missing; SET = base (default), grub
 #   bootstrap_donor            the donor through the ssh master (set "donor"), then version parity
-#   bootstrap_donor_online     on-line relocation: no apt; a tmpfs at $DONOR_RUN (/run is noexec)
-#                              with reloca-agent in it, same version as ours; records the
+#   bootstrap_donor_online     on-line migration: no apt; a tmpfs at $DONOR_RUN (/run is noexec)
+#                              with migrator-agent in it, same version as ours; records the
 #                              donor's compressors (donor.tool.zstd/lz4)
 #   bootstrap_missing SET      print the missing binaries/dirs of SET, one per line (tests use it)
 #   tool_version NAME          first x.y[.z] token of NAME's version banner (empty when absent)
@@ -275,20 +275,20 @@ _bootstrap_parity() {
 # static binary) is copied over the master into a small tmpfs of its own under
 # /run (/run itself is noexec on Debian). Idempotent: a later phase that
 # reconnects finds it there (gone with a reboot of the donor, copied again).
-RELOCA_AGENT=${RELOCA_AGENT:-}
-bootstrap_agent_path() {   # where this box's reloca-agent is: next to the driver (installed), in the tree (dev), or on PATH
+MIGRATOR_AGENT=${MIGRATOR_AGENT:-}
+bootstrap_agent_path() {   # where this box's migrator-agent is: next to the driver (installed), in the tree (dev), or on PATH
 	local here; here=$(dirname "$(readlink -f "${BASH_SOURCE[1]:-$0}")")
-	if [ -n "$RELOCA_AGENT" ] && [ -x "$RELOCA_AGENT" ]; then echo "$RELOCA_AGENT"; return 0; fi
-	for f in /usr/local/sbin/reloca-agent "$RELOCA_LIB/../agent/reloca-agent" "$here/reloca-agent" "$here/../agent/reloca-agent"; do
+	if [ -n "$MIGRATOR_AGENT" ] && [ -x "$MIGRATOR_AGENT" ]; then echo "$MIGRATOR_AGENT"; return 0; fi
+	for f in /usr/local/sbin/migrator-agent "$MIGRATOR_LIB/../agent/migrator-agent" "$here/migrator-agent" "$here/../agent/migrator-agent"; do
 		[ -x "$f" ] && { readlink -f "$f"; return 0; }
 	done
-	command -v reloca-agent 2>/dev/null
+	command -v migrator-agent 2>/dev/null
 }
 bootstrap_donor_online() {
 	local agent ver dver tools t
-	agent=$(bootstrap_agent_path) || die "$EX_ENV" "no reloca-agent on this box (the tarball ships it as bin/reloca-agent; in the tree: make agent)"
+	agent=$(bootstrap_agent_path) || die "$EX_ENV" "no migrator-agent on this box (the tarball ships it as bin/migrator-agent; in the tree: make agent)"
 	ver=$("$agent" version 2>/dev/null) || die "$EX_ENV" "$agent does not run here"
-	RELOCA_AGENT=$agent; export RELOCA_AGENT
+	MIGRATOR_AGENT=$agent; export MIGRATOR_AGENT
 	state_set agent.path "$agent"; state_set agent.version "$ver"
 	if [ -n "$DRY" ]; then
 		echo "(dry) donor: mount -t tmpfs -o size=16m,mode=0700 tmpfs $DONOR_RUN; cat > $DONOR_RUN/agent < $agent"
@@ -298,13 +298,13 @@ bootstrap_donor_online() {
 		|| die "$EX_ENV" "cannot prepare the tmpfs $DONOR_RUN on the donor"
 	dver=$(rsh sh -c "$DONOR_RUN/agent version 2>/dev/null" </dev/null) || dver=
 	if [ "$dver" != "$ver" ]; then
-		say "copying reloca-agent $ver ($(du -h "$agent" | cut -f1)) to the donor's $DONOR_RUN/agent"
+		say "copying migrator-agent $ver ($(du -h "$agent" | cut -f1)) to the donor's $DONOR_RUN/agent"
 		rsh_sh "cat > $DONOR_RUN/agent.new && chmod 0700 $DONOR_RUN/agent.new && mv -f $DONOR_RUN/agent.new $DONOR_RUN/agent" < "$agent" \
 			|| die "$EX_ENV" "cannot copy the agent to the donor's $DONOR_RUN"
 		dver=$(rsh sh -c "$DONOR_RUN/agent version" </dev/null) || die "$EX_ENV" "the agent does not run on the donor ($DONOR_RUN/agent version failed)"
 		[ "$dver" = "$ver" ] || die "$EX_ENV" "the agent on the donor says $dver, ours is $ver"
 	else
-		say "reloca-agent $ver is already on the donor ($DONOR_RUN/agent)"
+		say "migrator-agent $ver is already on the donor ($DONOR_RUN/agent)"
 	fi
 	# what can compress the stream on the donor (transfer picks from these)
 	# shellcheck disable=SC2016  # $t expands on the donor

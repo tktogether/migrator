@@ -1,4 +1,4 @@
-/* agent/main.c — reloca-agent: serve (donor), pull (recipient), probe, hash.
+/* agent/main.c — migrator-agent: serve (donor), pull (recipient), probe, hash.
  *
  * Protocol (serve's stdin -> commands, stdout -> frames), one line each; a
  * data frame carries LEN raw bytes right after its line:
@@ -24,13 +24,13 @@
  *
  * The cutover, hours later and without a new ssh login (sshd would write
  * lastlog/wtmp on the frozen root and hang): "quit poll HOST PORT TOKEN" leaves
- * the donor frozen and spawns "reloca-agent poll", a detached process that
- * keeps connecting to the recipient's HOST:PORT; "reloca-agent cutover --port
+ * the donor frozen and spawns "migrator-agent poll", a detached process that
+ * keeps connecting to the recipient's HOST:PORT; "migrator-agent cutover --port
  * PORT --token TOKEN netdown|poweroff|thaw|ping|exit" on the recipient answers
  * the next poll with that command. The donor's firewall is no obstacle: the
  * connection goes out from the donor. A recipient that never comes back must
  * not leave the donor frozen until someone visits its console: when the poller
- * has not reached the recipient for RELOCA_POLL_THAW_AFTER seconds (default
+ * has not reached the recipient for MIGRATOR_POLL_THAW_AFTER seconds (default
  * 1800), or for the one-week cap at the latest, it thaws the mountpoints it was
  * given and exits.
  *
@@ -78,13 +78,13 @@
 void die(const char *fmt, ...)
 {
 	va_list ap; va_start(ap, fmt);
-	fprintf(stderr, "reloca-agent: "); vfprintf(stderr, fmt, ap); fprintf(stderr, "\n");
+	fprintf(stderr, "migrator-agent: "); vfprintf(stderr, fmt, ap); fprintf(stderr, "\n");
 	va_end(ap); exit(1);
 }
 void logf_(const char *fmt, ...)
 {
 	va_list ap; va_start(ap, fmt);
-	fprintf(stderr, "reloca-agent: "); vfprintf(stderr, fmt, ap); fprintf(stderr, "\n");
+	fprintf(stderr, "migrator-agent: "); vfprintf(stderr, fmt, ap); fprintf(stderr, "\n");
 	va_end(ap);
 }
 double now_s(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec / 1e9; }
@@ -439,13 +439,13 @@ static int S_spawn_poller(const char *host, const char *port, const char *token)
 		                 access("/bin/systemd-run", X_OK) == 0 ? "/bin/systemd-run" : NULL;
 		if (sr) {
 			char unit[64]; char *sa[16 + 2 * MAX_VOLS]; int k = 0, st = 0; pid_t sp;
-			snprintf(unit, sizeof unit, "reloca-poller-%d", (int)getpid());
+			snprintf(unit, sizeof unit, "migrator-poller-%d", (int)getpid());
 			sa[k++] = (char *)sr;
 			sa[k++] = "--unit"; sa[k++] = unit;
 			sa[k++] = "--collect";
 			sa[k++] = "--service-type=exec";
-			sa[k++] = "--property=StandardOutput=file:/run/reloca.to/poller.log";
-			sa[k++] = "--property=StandardError=file:/run/reloca.to/poller.log";
+			sa[k++] = "--property=StandardOutput=file:/run/migrator/poller.log";
+			sa[k++] = "--property=StandardError=file:/run/migrator/poller.log";
 			sa[k++] = "--";
 			for (i = 0; i < argc && k < (int)(sizeof sa / sizeof *sa) - 1; i++) sa[k++] = argv[i];
 			sa[k] = NULL;
@@ -466,7 +466,7 @@ static int S_spawn_poller(const char *host, const char *port, const char *token)
 		if (fork() != 0) _exit(0);
 		int fd = open("/dev/null", O_RDWR);
 		if (fd >= 0) { dup2(fd, 0); if (fd > 2) close(fd); }
-		int lg = open("/run/reloca.to/poller.log", O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+		int lg = open("/run/migrator/poller.log", O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
 		if (lg >= 0) { dup2(lg, 1); dup2(lg, 2); if (lg > 2) close(lg); }
 		for (i = 3; i < 1024; i++) close(i);
 		execv(exe, argv);
@@ -543,9 +543,9 @@ static int cmd_poll(int argc, char **argv)
 {
 	const char *host, *token; int port; time_t t0 = time(NULL), last_ok = time(NULL);
 	long thaw_after = 1800;
-	if (argc < 4) die("usage: reloca-agent poll HOST PORT TOKEN [MOUNTPOINT...]");
+	if (argc < 4) die("usage: migrator-agent poll HOST PORT TOKEN [MOUNTPOINT...]");
 	host = argv[1]; port = atoi(argv[2]); token = argv[3];
-	{ const char *e = getenv("RELOCA_POLL_THAW_AFTER"); if (e && atol(e) > 0) thaw_after = atol(e); }
+	{ const char *e = getenv("MIGRATOR_POLL_THAW_AFTER"); if (e && atol(e) > 0) thaw_after = atol(e); }
 	fprintf(stderr, "poll: start host=%s port=%d mounts=%d thaw_after=%ld\n", host, port, argc - 4, thaw_after);
 	signal(SIGHUP, SIG_IGN); signal(SIGPIPE, SIG_IGN);
 	for (;;) {
@@ -560,7 +560,7 @@ static int cmd_poll(int argc, char **argv)
 		}
 		fd = connect_numeric(host, port);
 		if (fd < 0) { sleep(3); continue; }
-		snprintf(line, sizeof line, "RELOCA-POLL %s\n", token);
+		snprintf(line, sizeof line, "MIGRATOR-POLL %s\n", token);
 		if (write_all(fd, line, strlen(line)) < 0 || (n = read_line_fd(fd, line, sizeof line, 30)) < 0) {
 			/* A TCP connect can succeed with nothing behind it: a relay whose
 			 * forwarded port has no listener passes the SYN and drops it
@@ -595,7 +595,7 @@ static int cmd_poll(int argc, char **argv)
 		write_all(fd, "err unknown command\n", 20); close(fd); sleep(3);
 	}
 }
-/* reloca-agent cutover --port P --token T [--timeout S] ACTION: on the recipient,
+/* migrator-agent cutover --port P --token T [--timeout S] ACTION: on the recipient,
  * wait for the donor's poller and hand it ACTION; prints what it answered */
 static int cmd_cutover(int argc, char **argv)
 {
@@ -606,7 +606,7 @@ static int cmd_cutover(int argc, char **argv)
 		else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
 		else action = argv[i];
 	}
-	if (!port || !token || !action) die("usage: reloca-agent cutover --port P --token T [--timeout S] ping|netdown|poweroff|thaw|exit");
+	if (!port || !token || !action) die("usage: migrator-agent cutover --port P --token T [--timeout S] ping|netdown|poweroff|thaw|exit");
 	ls = socket(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (ls < 0) die("socket: %s", strerror(errno));
 	setsockopt(ls, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
@@ -619,7 +619,7 @@ static int cmd_cutover(int argc, char **argv)
 		FD_ZERO(&rf); FD_SET(ls, &rf);
 		if (select(ls + 1, &rf, NULL, NULL, &tv) <= 0) continue;
 		fd = accept(ls, NULL, NULL); if (fd < 0) continue;
-		if (read_line_fd(fd, line, sizeof line, 10) < 0 || strncmp(line, "RELOCA-POLL ", 12) || strcmp(line + 12, token)) { close(fd); continue; }
+		if (read_line_fd(fd, line, sizeof line, 10) < 0 || strncmp(line, "MIGRATOR-POLL ", 14) || strcmp(line + 14, token)) { close(fd); continue; }
 		snprintf(line, sizeof line, "%s\n", action);
 		if (write_all(fd, line, strlen(line)) < 0) { close(fd); continue; }
 		if (read_line_fd(fd, line, sizeof line, 30) < 0) { printf("the donor took '%s' and went away (no answer)\n", action); close(fd); return !strcmp(action, "netdown") || !strcmp(action, "poweroff") ? 0 : 1; }
@@ -1052,9 +1052,9 @@ static int spawn(const char *cmd)
 static void usage_pull(void)
 {
 	fprintf(stderr,
-"usage: reloca-agent pull --ssh 'CMD' --vol ID=DONOR_PATH=LOCAL_DEV ... [options]\n"
-"  CMD runs the donor's 'reloca-agent serve' with its stdin/stdout on this session, e.g.\n"
-"    'ssh root@10.0.0.12 /run/reloca-agent serve' or '... \"serve | zstd -q -1\" | zstd -d -q'\n"
+"usage: migrator-agent pull --ssh 'CMD' --vol ID=DONOR_PATH=LOCAL_DEV ... [options]\n"
+"  CMD runs the donor's 'migrator-agent serve' with its stdin/stdout on this session, e.g.\n"
+"    'ssh root@10.0.0.12 /run/migrator-agent serve' or '... \"serve | zstd -q -1\" | zstd -d -q'\n"
 "  --chunk SIZE      dirty granularity, power of two (default 64K)\n"
 "  --run SIZE        read/frame size, up to 8M (default 4M)\n"
 "  --tracker MODE    auto | bpf | ftrace (default auto)\n"
@@ -1079,7 +1079,7 @@ static void usage_pull(void)
 "  --precheck C      freeze twice: after the first final deltas thaw the donor, run C here (a pre-check on the\n"
 "                    consistent copy), then catch up and freeze again; C failing ends the transfer, donor thawed\n"
 "  --cutover IP:PORT the donor keeps polling this address (ours, as the donor sees it) for the cutover\n"
-"                    command: 'reloca-agent cutover --port PORT --token T netdown|poweroff|thaw'; a CUTOVER line names the token\n"
+"                    command: 'migrator-agent cutover --port PORT --token T netdown|poweroff|thaw'; a CUTOVER line names the token\n"
 "  --quiet           no donor stat lines\n");
 	exit(2);
 }
@@ -1406,7 +1406,7 @@ static int cmd_probe(int argc, char **argv)
 static int cmd_hash(int argc, char **argv)
 {
 	struct sha256_ctx c; uint64_t size, off; char hex[65]; int fd; uint8_t *buf;
-	if (argc < 2) die("usage: reloca-agent hash DEV_OR_FILE [BYTES]");
+	if (argc < 2) die("usage: migrator-agent hash DEV_OR_FILE [BYTES]");
 	fd = open(argv[1], O_RDONLY | O_CLOEXEC);
 	if (fd < 0) die("%s: %s", argv[1], strerror(errno));
 	if (argc > 2) size = strtoull(argv[2], NULL, 10);
@@ -1424,7 +1424,7 @@ static int cmd_hash(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	if (argc < 2) { fprintf(stderr, "usage: reloca-agent serve | pull ... | probe [PATH...] | hash DEV [BYTES] | cutover --port P --token T ACTION | version\n"); return 2; }
+	if (argc < 2) { fprintf(stderr, "usage: migrator-agent serve | pull ... | probe [PATH...] | hash DEV [BYTES] | cutover --port P --token T ACTION | version\n"); return 2; }
 	if (!strcmp(argv[1], "version")) { printf("%s\n", AGENT_VERSION); return 0; }
 	if (!strcmp(argv[1], "serve")) return cmd_serve(argc - 1, argv + 1);
 	if (!strcmp(argv[1], "pull")) return cmd_pull(argc - 1, argv + 1);
@@ -1432,6 +1432,6 @@ int main(int argc, char **argv)
 	if (!strcmp(argv[1], "hash")) return cmd_hash(argc - 1, argv + 1);
 	if (!strcmp(argv[1], "poll")) return cmd_poll(argc - 1, argv + 1);
 	if (!strcmp(argv[1], "cutover")) return cmd_cutover(argc - 1, argv + 1);
-	fprintf(stderr, "reloca-agent: unknown command %s\n", argv[1]);
+	fprintf(stderr, "migrator-agent: unknown command %s\n", argv[1]);
 	return 2;
 }

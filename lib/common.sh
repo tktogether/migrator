@@ -1,12 +1,12 @@
 #!/bin/bash
-# Shared helpers for reloca.to: sourced by bin/reloca.to and by every lib/*.sh.
+# Shared helpers for migrator: sourced by bin/migrator and by every lib/*.sh.
 # Nothing here touches disks or the network; it only defines how the tool
 # talks (say/warn/die), how it runs commands (run: echo first, then execute,
 # or only echo under -n), how it keeps state in $RUN, and how it cleans up.
 #
 # Globals the driver sets before sourcing:
-#   RELOCA_LIB  directory holding the libs (this file's directory)
-#   RUN           state directory, default /run/reloca.to (tmpfs: gone on reboot)
+#   MIGRATOR_LIB  directory holding the libs (this file's directory)
+#   RUN           state directory, default /run/migrator (tmpfs: gone on reboot)
 #   DRY           y = print commands only (-n)     YES  y = never prompt (-y)
 #   ROLE_TAG      text shown on every line, e.g. "destination"
 #   OPT           associative array of -o key=value options
@@ -19,7 +19,7 @@ EX_ENV=2      # usage / environment / identity: not full Live, apt or ssh failed
 EX_VERIFY=3   # verify failed: the recipient was written, do NOT reboot it
 EX_PLAN=4     # plan infeasible or an edited plan rejected: nothing was written
 
-: "${RUN:=/run/reloca.to}"
+: "${RUN:=/run/migrator}"
 : "${DRY:=}"
 : "${YES:=}"
 : "${ROLE_TAG:=}"
@@ -28,7 +28,7 @@ WARNINGS=0
 CLEANUP_CMDS=()
 
 # --- output -----------------------------------------------------------------
-_tag() { if [ -n "$ROLE_TAG" ]; then echo "[reloca.to $ROLE_TAG]"; else echo "[reloca.to]"; fi; }
+_tag() { if [ -n "$ROLE_TAG" ]; then echo "[migrator $ROLE_TAG]"; else echo "[migrator]"; fi; }
 _ts()  { date '+%Y-%m-%d %H:%M:%S'; }
 log()  { mkdir -p "$RUN" 2>/dev/null; echo "$(_ts) $*" >> "$RUN/log" 2>/dev/null || true; }
 say()  { echo "$(_tag) $*"; log "$*"; }
@@ -38,7 +38,7 @@ say()  { echo "$(_tag) $*"; log "$*"; }
 warn() { local m; m="$(_tag) WARN: $*"; echo "$m" >&2; echo "$m"; log "WARN: $*"; WARNINGS=$((WARNINGS+1)); }
 # die [CODE] MESSAGE — records the failure for the task template, then exits.
 # The last stdout line is always the reason: that is what the operator (and
-# the panel, through /run/reloca.to/failure) gets to see.
+# the panel, through /run/migrator/failure) gets to see.
 die() {
 	local code=$EX_FAIL
 	case "$1" in [0-9]|[0-9][0-9]) code=$1; shift;; esac
@@ -75,24 +75,24 @@ must_sh() { run_sh "$1" || die "command failed ($?): $1"; }
 # --- options, prompts ---------------------------------------------------------
 opt() { local v=${OPT[$1]-}; if [ -n "$v" ]; then echo "$v"; else echo "${2-}"; fi; }
 # Every key -o understands, by the mode it belongs to. This list is the whole
-# reference: the usage header, docs/reloca.to.md and the table on reloca.to are
+# reference: the usage header, docs/migrator.md and the table on migrator are
 # checked against it by the test suite, so none of the four can drift.
 # A key that is not here is a typo, and a typo has to fail: "-o maxest=600"
 # used to be accepted and do nothing, and the run then froze the donor for a
 # window the operator believed he had raised. Keys are spelled with hyphens;
 # an underscore is accepted and normalised, so scripts written before the
 # spelling settled keep working.
-RELOCA_OPTS_BOTH="boot-part bootorder boottest cipher cloudinit compress console cutover donor-nic driver expect force fsck label mode nic nic-pin offline raid raw redo relay root"
-RELOCA_OPTS_OFFLINE="data sshd-port watchdog"
-RELOCA_OPTS_ONLINE="chunk converge cutover-port dpkg-wait max-est passes patience precheck precheck-cow precheck-dir settle stall tracker verify-hash"
+MIGRATOR_OPTS_BOTH="boot-part bootorder boottest cipher cloudinit compress console cutover donor-nic driver expect force fsck label mode nic nic-pin offline raid raw redo relay root"
+MIGRATOR_OPTS_OFFLINE="data sshd-port watchdog"
+MIGRATOR_OPTS_ONLINE="chunk converge cutover-port dpkg-wait max-est passes patience precheck precheck-cow precheck-dir settle stall tracker verify-hash"
 # opt_check — refuse unknown -o keys, naming the near miss when there is one
 opt_check() {
-	local k n c all="$RELOCA_OPTS_BOTH $RELOCA_OPTS_OFFLINE $RELOCA_OPTS_ONLINE" hint
+	local k n c all="$MIGRATOR_OPTS_BOTH $MIGRATOR_OPTS_OFFLINE $MIGRATOR_OPTS_ONLINE" hint
 	for k in "${!OPT[@]}"; do
 		case " $all " in *" $k "*) continue ;; esac
 		n=$(printf '%s' "$k" | tr -d '_-' | tr '[:upper:]' '[:lower:]'); hint=
 		for c in $all; do [ "$(printf '%s' "$c" | tr -d '-')" = "$n" ] && { hint=" (did you mean $c=?)"; break; }; done
-		die "$EX_ENV" "unknown option -o $k$hint; 'reloca.to -h' lists every key, https://reloca.to/options/ explains them"
+		die "$EX_ENV" "unknown option -o $k$hint; 'migrator -h' lists every key, so a typo is refused instead of ignored"
 	done
 	# "-o compress=none,patience=600" is not two options: the comma stays in the
 	# value, and some values really do take one (driver=mod1,mod2,
@@ -150,11 +150,11 @@ vol_state_set() { state_set "vol.$1" "$2"; }     # pending|running|done|failed
 vol_state_get() { state_get "vol.$1"; }
 
 # --- locking ------------------------------------------------------------------
-# One reloca.to per Live: a second instance mid-transfer would race on state.
+# One migrator per Live: a second instance mid-transfer would race on state.
 lock() {
 	mkdir -p "$RUN"
 	exec {LOCKFD}>"$RUN/lock"
-	flock -n "$LOCKFD" || die "$EX_ENV" "another reloca.to is running (lock $RUN/lock); use 'reloca.to -s attach'"
+	flock -n "$LOCKFD" || die "$EX_ENV" "another migrator is running (lock $RUN/lock); use 'migrator -s attach'"
 }
 # unlock: before exec'ing something that must take the lock itself (tmux)
 unlock() { [ -n "${LOCKFD:-}" ] && exec {LOCKFD}>&-; LOCKFD=; }
@@ -175,19 +175,19 @@ trap run_cleanup EXIT
 
 # --- environment --------------------------------------------------------------
 live_release_file() {   # marker file of a full Live: ours first, upstream's kept for compatibility (D4)
-	if   [ -r /etc/reloca-live-release ];  then echo /etc/reloca-live-release
+	if   [ -r /etc/migrator-live-release ];  then echo /etc/migrator-live-release
 	elif [ -r /etc/xserver-live-release ]; then echo /etc/xserver-live-release
 	else echo; fi
 }
 require_full_live() {
 	local rf; rf=$(live_release_file)
-	[ -n "$rf" ] || die "$EX_ENV" "not a Live OS (no /etc/reloca-live-release)"
+	[ -n "$rf" ] || die "$EX_ENV" "not a Live OS (no /etc/migrator-live-release)"
 	if ! { have systemctl && have bash && have apt-get; }; then die "$EX_ENV" "this needs the full Live OS, not boot=base"; fi
 }
 live_build_id() { local rf; rf=$(live_release_file); [ -n "$rf" ] && sed -n 's/^BUILD_ID=//p' "$rf" 2>/dev/null; return 0; }
-reloca_version() {
+migrator_version() {
 	local v=dev
-	[ -r "$RELOCA_LIB/VERSION" ] && v=$(cat "$RELOCA_LIB/VERSION")
+	[ -r "$MIGRATOR_LIB/VERSION" ] && v=$(cat "$MIGRATOR_LIB/VERSION")
 	echo "$v"
 }
 

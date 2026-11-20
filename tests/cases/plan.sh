@@ -6,7 +6,7 @@
 # numbering, identity rewrites, mkfs flags, [lvm] lines, refusal codes and messages.
 # Then plan_check is green on every expected.plan and red after hand corruptions,
 # plan_build writes $RUN/plan and prints the summary, and the driver's "check" wiring
-# is exercised with bin/reloca.to -n. No root, no devices: everything is text.
+# is exercised with bin/migrator -n. No root, no devices: everything is text.
 set -u
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/../lib.sh"
@@ -15,13 +15,13 @@ set -u
 # shellcheck source=lib/plan.sh
 . "$REPO/lib/plan.sh"
 FIX=$REPO/tests/fixtures
-RELOCA_LIB=$REPO/lib; export RELOCA_LIB     # reloca_version() needs it, as under the driver
+MIGRATOR_LIB=$REPO/lib; export MIGRATOR_LIB     # migrator_version() needs it, as under the driver
 W=$RUN/plan-work; mkdir -p "$W"
 MIB=1048576
 
 # --- helpers -------------------------------------------------------------------
 # norm FILE: the header fields that legitimately differ between runs
-norm() { sed -e 's/^# inv_sha256=[^ ]*/# inv_sha256=X/' -e 's/  reloca=[^ ]*/  reloca=X/' -e 's/  live=[^ ]*/  live=X/' -e 's/  date=[^ ]*/  date=X/' "$1"; }
+norm() { sed -e 's/^# inv_sha256=[^ ]*/# inv_sha256=X/' -e 's/  migrator=[^ ]*/  migrator=X/' -e 's/  live=[^ ]*/  live=X/' -e 's/  date=[^ ]*/  date=X/' "$1"; }
 # compute CASE [DISK] [key=value...]: run the pure core -> $W/CASE.{out,err,rc}
 compute() { local c=$1; shift; plan_compute "$FIX/$c/donor.inv" "$FIX/$c/recipient.inv" "${1:-auto}" "${@:2}" > "$W/$c.out" 2> "$W/$c.err"; echo $? > "$W/$c.rc"; }
 rc()    { cat "$W/$1.rc"; }
@@ -304,7 +304,7 @@ refused() {   # CASE DISK NEEDLE
 	assert_has "$c: last stdout line is # ERROR"  "# ERROR: " "$(tail -1 "$W/$c.out")"
 	assert_has "$c: reason"                       "$3" "$(tail -1 "$W/$c.out")"
 	assert_has "$c: reason on stderr too"         "$3" "$(grep "^ERROR: " "$W/$c.err")"
-	assert_ok  "$c: header printed before the error" grep -q '^# reloca.to plan  donor=' "$W/$c.out"
+	assert_ok  "$c: header printed before the error" grep -q '^# migrator plan  donor=' "$W/$c.out"
 }
 refused_with() {   # CASE DISK NEEDLE [key=value...]: a refusal of a fixture whose expected.plan is a success (no diff)
 	local c=$1; compute "$c" "$2" "${@:4}"
@@ -553,13 +553,13 @@ assert_eq  "plan_get finds keys on later lines"        dos "$(plan_get "$FIX/deb
 assert_eq  "plan_section strips comments and blanks"   "7 0" "$(plan_section "$FIX/debian-md-ext4-bios/expected.plan" sfdisk | wc -l) $(plan_section "$FIX/debian-md-ext4-bios/expected.plan" volumes | grep -c '^#')"
 assert_eq  "plan_section of a missing section is empty" "" "$(plan_section "$FIX/debian-md-ext4-bios/expected.plan" nosuch)"
 
-# --- 9b. on-line relocation: the inventory of a RUNNING donor (host online=1) ------------------
+# --- 9b. on-line migration: the inventory of a RUNNING donor (host online=1) ------------------
 compute online-debian-md-ext4-bios
 assert_eq  "online: exit 0"                            0 "$(rc online-debian-md-ext4-bios)"
 diff_case  online-debian-md-ext4-bios
 assert_eq  "online: [target] mode=online"              online "$(pget online-debian-md-ext4-bios target mode)"
 assert_eq  "online: the mounted root gets no dirty note" "" "$(rowf online-debian-md-ext4-bios /dev/md127 notes | grep -o dirty)"
-assert_has "online: the on-line WARN"                  "on-line relocation: the donor keeps running" "$(cat "$W/online-debian-md-ext4-bios.err")"
+assert_has "online: the on-line WARN"                  "on-line migration: the donor keeps running" "$(cat "$W/online-debian-md-ext4-bios.err")"
 assert_eq  "online: / stays a block volume"            block "$(rowf online-debian-md-ext4-bios /dev/md127 method)"
 assert_eq  "off-line plan has no mode="                "" "$(pget stand-debian-md-ext4-bios target mode)"
 compute online-debian-md-ext4-bios auto root=files
@@ -575,11 +575,11 @@ b=$W/build; mkdir -p "$b"; cp "$FIX/debian-md-ext4-bios/donor.inv" "$FIX/debian-
 assert_eq  "plan_build: exit 0"                        0 "$rcn"
 assert_ok  "plan_build: wrote \$RUN/plan under -n"     test -s "$b/plan"
 assert_eq  "plan_build: plan == core output (with the option)" "" "$(diff <(norm "$b/plan") <(plan_compute "$b/donor.inv" "$b/recipient.inv" auto compress=zstd 2>/dev/null | norm /dev/stdin))"
-assert_eq  "plan_build: header carries reloca.to/live/date" 1 "$(grep -c '^# inv_sha256=[0-9a-f]*:[0-9a-f]*  reloca=dev  live=[^ ]*  date=20' "$b/plan")"
+assert_eq  "plan_build: header carries migrator/live/date" 1 "$(grep -c '^# inv_sha256=[0-9a-f]*:[0-9a-f]*  migrator=dev  live=[^ ]*  date=20' "$b/plan")"
 assert_has "plan_build: summary title"                 "план записан: $b/plan (dry)" "$(cat "$b/build.out")"
 assert_has "plan_build: summary lists volumes"         "/dev/md1" "$(cat "$b/build.out")"
 assert_has "plan_build: summary shows the disk"        "disk=/dev/vda" "$(cat "$b/build.out")"
-assert_has "plan_build: summary next steps"            "reloca.to -s check" "$(cat "$b/build.out")"
+assert_has "plan_build: summary next steps"            "migrator -s check" "$(cat "$b/build.out")"
 assert_eq  "plan_build: check accepts its own plan"    0 "$(check_in "$b")"
 cp "$FIX/refuse-btrfs/donor.inv" "$FIX/refuse-btrfs/recipient.inv" "$b/"; rm -f "$b/plan" "$b/failure"
 ( RUN=$b; plan_build auto ) > "$b/build.out" 2> "$b/build.err"; rcn=$?
@@ -596,7 +596,7 @@ assert_eq  "plan_build with warnings: exit 0"          0 "$rcn"
 assert_has "plan_build: WARN relayed via warn()"       "WARN: recipient has 4 NICs" "$(cat "$b/build.out")"
 
 # --- 11. the driver's check wiring (no Live needed: check only needs set_roles) ---------------
-M=$REPO/bin/reloca.to; dd=$W/driver; mkdir -p "$dd"
+M=$REPO/bin/migrator; dd=$W/driver; mkdir -p "$dd"
 out=$(RUN=$dd bash "$M" -n -o force=1 -s check "$FIX/rocky9-lvm-xfs-uefi/expected.plan" 2>&1); rcn=$?
 assert_eq  "driver check -o force=1: exit 0"           0 "$rcn"
 assert_has "driver check: passed"                      "plan check passed" "$out"

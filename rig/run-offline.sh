@@ -5,8 +5,8 @@
 # VM RAM is small on purpose: the build container has 4G and two 1G guests with
 # full TCG translation caches put the host into constant reclaim (memory.events
 # max=50k) which freezes the guests mid-run. tb-size caps the JIT cache.
-# reloca.to runs detached INSIDE the recipient VM (no tmux); its exit code lands
-# in /root/reloca.rc, which the poller below reads — an ssh hiccup must never be
+# migrator runs detached INSIDE the recipient VM (no tmux); its exit code lands
+# in /root/migrator.rc, which the poller below reads — an ssh hiccup must never be
 # mistaken for completion (that was the "rc=" bug).
 set -uo pipefail
 OUT=${RIG_OUT:-$HOME/rig}
@@ -26,7 +26,7 @@ sleep 1
 
 [ -s "$ISO" ] || { echo "no ISO at $ISO (rig/build-live.sh)" >&2; exit 1; }
 [ -s "$DONOR_DISK" ] || { echo "no donor disk at $DONOR_DISK (rig/build-donor.sh)" >&2; exit 1; }
-: > "$TARGET_DISK"; truncate -s 20G "$TARGET_DISK"   # sparse; reloca.to's plan rule R1 wants >= 20 GiB
+: > "$TARGET_DISK"; truncate -s 20G "$TARGET_DISK"   # sparse; migrator's plan rule R1 wants >= 20 GiB
 
 echo "[rig] starting donor VM..."
 qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 512 \
@@ -63,22 +63,22 @@ wait_ssh 2255 recipient || exit 1
 
 echo "[rig] pushing the rig key into the recipient VM and starting the migration detached..."
 scp $SSH_OPTS -P 2255 "$KEY" root@127.0.0.1:/root/rig-key >/dev/null
-# RELOCA_EXTRA_OPTS: extra -o flags (e.g. "-o boottest=1" once the Live bakes qemu)
+# MIGRATOR_EXTRA_OPTS: extra -o flags (e.g. "-o boottest=1" once the Live bakes qemu)
 ssh $SSH_OPTS -p 2255 root@127.0.0.1 "
-	rm -f /root/reloca.rc /root/reloca-run.log
-	setsid nohup sh -c 'reloca.to -y ${RELOCA_EXTRA_OPTS:-} -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/reloca-run.log 2>&1; echo \$? > /root/reloca.rc' >/dev/null 2>&1 &
+	rm -f /root/migrator.rc /root/migrator-run.log
+	setsid nohup sh -c 'migrator -y ${MIGRATOR_EXTRA_OPTS:-} -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/migrator-run.log 2>&1; echo \$? > /root/migrator.rc' >/dev/null 2>&1 &
 	sleep 2
 	echo migration started"
 
 # poll: the rc file is the only completion signal; an unreachable VM is NOT one
 for i in $(seq 1 120); do
-	RC=$(ssh $SSH_OPTS -p 2255 root@127.0.0.1 "cat /root/reloca.rc 2>/dev/null" 2>/dev/null)
+	RC=$(ssh $SSH_OPTS -p 2255 root@127.0.0.1 "cat /root/migrator.rc 2>/dev/null" 2>/dev/null)
 	if [ -n "$RC" ]; then
-		echo "[rig] reloca.to finished with rc=$RC"
-		ssh $SSH_OPTS -p 2255 root@127.0.0.1 "tail -25 /root/reloca-run.log" || true
+		echo "[rig] migrator finished with rc=$RC"
+		ssh $SSH_OPTS -p 2255 root@127.0.0.1 "tail -25 /root/migrator-run.log" || true
 		exit "$([ "$RC" = 0 ] && echo 0 || echo 1)"
 	fi
 	sleep 15
 done
-echo "FAIL: migration timed out; logs in $LOGS and recipient /root/reloca-run.log" >&2
+echo "FAIL: migration timed out; logs in $LOGS and recipient /root/migrator-run.log" >&2
 exit 1

@@ -1,10 +1,10 @@
 #!/bin/bash
 # lib/inventory.sh — what is on this machine (the recipient) or on the donor,
-# as tab-separated records (docs/format.md). Sourced by bin/reloca.to for the
+# as tab-separated records (docs/format.md). Sourced by bin/migrator for the
 # functions, and streamed to the donor as a standalone script that needs only
 # bash, mawk and the Live's own tools (no common.sh on the other side):
 #
-#   rsh bash -s -- --role donor [--raw /run/reloca.to/raw] [--modalias LIST] < lib/inventory.sh
+#   rsh bash -s -- --role donor [--raw /run/migrator/raw] [--modalias LIST] < lib/inventory.sh
 #
 # usage: inventory.sh --role donor|recipient [--raw DIR] [--modalias LIST] [--root DIR] [--mnt DIR]
 #   --role recipient   this box, read-only: host disk part md pv vg lv fs swap nic
@@ -21,14 +21,14 @@
 #                      them, kernel.pci_drivers=name:module,... with "-" for no module
 #   --root DIR         donor role on an already mounted (or unpacked) tree: no storage
 #                      preparation, no discovery, no mounts (tests, fixtures)
-#   --online           donor role on the RUNNING donor OS (on-line relocation): the
+#   --online           donor role on the RUNNING donor OS (on-line migration): the
 #                      tree is /, its root device from findmnt, every filesystem stays
 #                      mounted as it is (rw), no mdadm --readonly, no vgchange, no
 #                      probe mounts, nothing unmounted; host.online=1
-#   --mnt DIR          mount base instead of /mnt/reloca.to/inv
+#   --mnt DIR          mount base instead of /mnt/migrator/inv
 #   -h, --help         this text
 # Records on stdout, diagnostics on stderr. Nothing here writes to a block device;
-# the donor's only writes are /run/reloca.to/md.conf and the --raw directory.
+# the donor's only writes are /run/migrator/md.conf and the --raw directory.
 # exit: 0 ok · 2 usage · 4 the donor is unusable (resync in progress, no installed
 #       root found): the reason is on stderr and the last stdout line is "# ERROR: ..."
 #
@@ -61,7 +61,7 @@ declare -f human >/dev/null || human() {
 : "${EX_PLAN:=4}" "${EX_ENV:=2}" "${EX_FAIL:=1}"
 
 INV_RAW=${INV_RAW:-}                 # --raw DIR (empty: keep nothing)
-INV_MNT=${INV_MNT:-/mnt/reloca.to/inv} # mount base on the donor
+INV_MNT=${INV_MNT:-/mnt/migrator/inv} # mount base on the donor
 INV_ROOT=                            # the donor tree once mounted (or --root DIR)
 INV_ROOT_DEV=-                       # device the donor root was found on
 INV_ROOT_FS=; INV_CAND_FS=           # its filesystem type (and the runner-up's)
@@ -830,7 +830,7 @@ inv_lv_path() {
 inv_emit_host() {
 	local role=$1 hn live fw sb=0 v bootnic bootmac bootip gw ncpu ram awkv
 	hn=$(cat /proc/sys/kernel/hostname 2>/dev/null || hostname 2>/dev/null); : "${hn:=-}"
-	live=$({ sed -n 's/^BUILD_ID=//p' /etc/reloca-live-release 2>/dev/null; sed -n 's/^BUILD_ID=//p' /etc/xserver-live-release 2>/dev/null; } | head -1); : "${live:=-}"
+	live=$({ sed -n 's/^BUILD_ID=//p' /etc/migrator-live-release 2>/dev/null; sed -n 's/^BUILD_ID=//p' /etc/xserver-live-release 2>/dev/null; } | head -1); : "${live:=-}"
 	if [ -d /sys/firmware/efi ]; then fw=uefi; else fw=bios; fi
 	if [ "$fw" = uefi ]; then
 		# efivar layout: 4 bytes of attributes, then the value
@@ -1088,7 +1088,7 @@ inv_md_check_and_ro() {
 	done < <(awk '/^md[0-9]+ *:/ {print $1}' /proc/mdstat 2>/dev/null)
 }
 inv_donor_prepare() {
-	local run=${RUN:-/run/reloca.to}
+	local run=${RUN:-/run/migrator}
 	mkdir -p "$run" 2>/dev/null
 	# LVM auto-activation holds the arrays open (EBUSY for --readonly): drop it first
 	have vgchange && vgchange -an >/dev/null 2>&1
@@ -1314,7 +1314,7 @@ inventory_collect() {
 		inv_note "online: the running root $INV_ROOT_DEV ($INV_ROOT_FS) is the donor tree; /boot: $(findmnt -rno SOURCE /boot 2>/dev/null || echo 'not a mountpoint')"
 	elif [ "$role" = donor ] && [ -z "$INV_ROOT" ]; then inv_donor_prepare; fi
 	inv_gather
-	echo "# reloca.to inventory role=$role date=$(date -u '+%Y-%m-%dT%H:%M:%SZ') host=$(cat /proc/sys/kernel/hostname 2>/dev/null)"
+	echo "# migrator inventory role=$role date=$(date -u '+%Y-%m-%dT%H:%M:%SZ') host=$(cat /proc/sys/kernel/hostname 2>/dev/null)"
 	inv_emit_host "$role"
 	inv_emit_disks
 	inv_emit_parts
@@ -1361,13 +1361,13 @@ inv_run_donor() {   # RAWDIR
 	local -a args=(); local list rc line
 	[ -n "${DONOR_HOST:-}" ] || die "$EX_ENV" "not connected to a donor (ssh_connect first)"
 	[ -n "$1" ] && args+=(--raw "$DONOR_RUN/raw")
-	[ "${RELOCA_MODE:-$(state_get mode)}" != online ] || args+=(--online)
+	[ "${MIGRATOR_MODE:-$(state_get mode)}" != online ] || args+=(--online)
 	list=$(inv_modalias_list "$RUN/recipient.inv")
 	[ -n "$list" ] && args+=(--modalias "$list")
 	mkdir -p "$RUN"
 	say "inventory: donor $DONOR_HOST -> $RUN/donor.inv (streaming lib/inventory.sh: bash -s -- --role donor ${args[*]})"
 	# stdout is the inventory; the donor's stderr comes back through the log, tagged
-	rsh bash -s -- --role donor "${args[@]}" < "$RELOCA_LIB/inventory.sh" 2>&1 > "$RUN/donor.inv" \
+	rsh bash -s -- --role donor "${args[@]}" < "$MIGRATOR_LIB/inventory.sh" 2>&1 > "$RUN/donor.inv" \
 		| while IFS= read -r line; do say "donor: $line"; done
 	rc=${PIPESTATUS[0]}
 	if [ "$rc" -ne 0 ]; then
@@ -1385,7 +1385,7 @@ inv_run_donor() {   # RAWDIR
 }
 # inventory_run ROLE (the driver): both = recipient first (its modaliases go to
 # the donor), then the donor. A single role also prints the raw inventory on
-# stdout (reloca.to inventory) and the summary on stderr.
+# stdout (migrator inventory) and the summary on stderr.
 inventory_run() {
 	local role=${1:-both} rawdir
 	rawdir=$(opt raw)

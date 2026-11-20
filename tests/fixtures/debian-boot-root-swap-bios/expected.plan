@@ -1,5 +1,5 @@
-# reloca.to plan  donor=10.0.0.44/24/mail2 (Supermicro%20X11SSL-F%20SN=S555555, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-456 (Supermicro%20X11SSH-F%20SN=XS-456, boot=eno1/b0:83:fe:00:00:21)
-# inv_sha256=92ea0ed7f71168bbc3b83f871043efe1af2c943af161be313056906ddf3c9d94:ec41964fc206b98f0a6443040b742b81888bbf50da03b9953fea701e0ee8513c  reloca=-  live=-  date=-
+# migrator plan  donor=10.0.0.44/24/mail2 (Supermicro%20X11SSL-F%20SN=S555555, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-456 (Supermicro%20X11SSH-F%20SN=XS-456, boot=eno1/b0:83:fe:00:00:21)
+# inv_sha256=92ea0ed7f71168bbc3b83f871043efe1af2c943af161be313056906ddf3c9d94:ec41964fc206b98f0a6443040b742b81888bbf50da03b9953fea701e0ee8513c  migrator=-  live=-  date=-
 # WARN: partitions are renumbered (physical order on dos): PARTUUID= and /dev/sdaN references are rewritten to UUID=
 [target]
 disk=/dev/sda id=wwn:0x5000c500b0000009 size=1000204886016 lsec=512 psec=4096 ptuuid=0x99887766 head=-

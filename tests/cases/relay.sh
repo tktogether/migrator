@@ -4,7 +4,7 @@
 set -u
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/../lib.sh"
-M=$REPO/bin/reloca.to
+M=$REPO/bin/migrator
 
 # the parser (lib/ssh.sh is functions-only; common.sh carries the registry)
 . "$REPO/lib/common.sh"

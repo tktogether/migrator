@@ -1,14 +1,14 @@
 #!/bin/bash
-# tests/run.sh — the reloca.to test harness ("make test"). Seconds, no root.
+# tests/run.sh — the migrator test harness ("make test"). Seconds, no root.
 #
-#   1. shellcheck over bin/reloca.to, lib/*.sh, tools/*.sh, tests/*.sh and
+#   1. shellcheck over bin/migrator, lib/*.sh, tools/*.sh, tests/*.sh and
 #      tests/cases/*.sh (-x; -s bash, or -s sh for #!/bin/sh scripts such as
 #      tools/install.sh, which is piped into sh on the Live). When the
 #      linter is not installed this step is a loud SKIP, not a failure:
 #      "make requirements" installs it.
 #   2. every tests/cases/*.sh, each in its own process, with awk resolving to
 #      mawk (the Live has no gawk; the build host has both) and RUN set to a
-#      throwaway state dir, so a case can never touch /run/reloca.to.
+#      throwaway state dir, so a case can never touch /run/migrator.
 #
 # usage: tests/run.sh [CASE...]      CASE = file name without .sh; default: all
 # Prints "== N cases, M assertions, F failures ==".
@@ -20,7 +20,7 @@ cd "$REPO" || exit 2
 shopt -s nullglob
 
 # /tmp on the build host is a small tmpfs shared with the stands; /var/tmp is not
-TMP=$(mktemp -d /var/tmp/xslive-reloca-test.XXXXXX) || exit 2
+TMP=$(mktemp -d /var/tmp/xslive-migrator-test.XXXXXX) || exit 2
 trap 'rm -rf "$TMP"' EXIT
 FAILED=0
 
@@ -28,7 +28,7 @@ FAILED=0
 echo "== shellcheck =="
 if command -v shellcheck >/dev/null 2>&1; then
 	bash_files=(); sh_files=()
-	for f in bin/reloca.to lib/*.sh tools/*.sh tests/*.sh tests/cases/*.sh; do
+	for f in bin/migrator lib/*.sh tools/*.sh tests/*.sh tests/cases/*.sh; do
 		if head -1 "$f" | grep -q '/bin/sh$'; then sh_files+=("$f"); else bash_files+=("$f"); fi
 	done
 	rc=0

@@ -80,10 +80,10 @@ VF_ROOT=; VF_PLAN=
 VF_KERNEL=; VF_INITRD=; VF_CMDLINE=; VF_SOURCE=; VF_KVER=
 VF_BOOTTEST_K=; VF_BOOTTEST_I=; VF_BOOTTEST_CMD=; VF_BOOTTEST_DISK=; VF_BOOTTEST_WAIT=600
 # cutover timing, seconds (tests shorten them)
-: "${RELOCA_CUTOVER_WAIT_S:=5}"       # after the donor command, before the first ping
-: "${RELOCA_CUTOVER_TIMEOUT_S:=30}"   # pings per address before "still answers"
-: "${RELOCA_CUTOVER_POLL_S:=1}"       # pause after a ping that was answered
-: "${RELOCA_CUTOVER_AGENT_S:=180}"    # on-line: how long to wait for the donor's poller to come for the cutover command
+: "${MIGRATOR_CUTOVER_WAIT_S:=5}"       # after the donor command, before the first ping
+: "${MIGRATOR_CUTOVER_TIMEOUT_S:=30}"   # pings per address before "still answers"
+: "${MIGRATOR_CUTOVER_POLL_S:=1}"       # pause after a ping that was answered
+: "${MIGRATOR_CUTOVER_AGENT_S:=180}"    # on-line: how long to wait for the donor's poller to come for the cutover command
 
 # --- reporting ---------------------------------------------------------------------
 vf_section() { echo "=== $1 ==="; log "verify: === $1 ==="; }
@@ -128,7 +128,7 @@ vf_md_uuid()    { grep -q "^${1#/dev/} " /proc/mdstat 2>/dev/null || return 2; m
 vf_esp_files() {
 	local m rc=0
 	[ -b "$1" ] || return 2
-	m=$(mktemp -d /run/reloca-esp.XXXXXX) || return 1
+	m=$(mktemp -d /run/migrator-esp.XXXXXX) || return 1
 	if mount -t vfat -o ro "$1" "$m" 2>/dev/null; then
 		(cd "$m" && find . -type f -iname '*.efi' | sed 's|^\./||' | sort)
 		umount "$m" 2>/dev/null || umount -l "$m" 2>/dev/null
@@ -1036,16 +1036,16 @@ verify_run() {
 	VF_PLAN=$RUN/plan
 	if [ ! -r "$VF_PLAN" ]; then
 		if [ -n "$DRY" ] && [ -z "$root" ]; then vf_list_checks; return 0; fi
-		die "$EX_ENV" "no plan at $VF_PLAN: verify takes what to expect from it (run 'reloca.to -s plan DONOR' first)"
+		die "$EX_ENV" "no plan at $VF_PLAN: verify takes what to expect from it (run 'migrator -s plan DONOR' first)"
 	fi
 	if [ -n "$root" ]; then
 		root=${root%/}
 		[ -d "$root/etc" ] || die "$EX_ENV" "verify: $root is not a system tree (no etc/)"
 		TARGET_MNT=$root
-		say "verifying the tree at $root as it is (not mounted by reloca.to)"
+		say "verifying the tree at $root as it is (not mounted by migrator)"
 	else
 		if ! phase_is_done postfix; then
-			[ -n "$DRY" ] || die "$EX_ENV" "postfix has not finished (phase.postfix is not done in $RUN/state): run 'reloca.to -s postfix' first"
+			[ -n "$DRY" ] || die "$EX_ENV" "postfix has not finished (phase.postfix is not done in $RUN/state): run 'migrator -s postfix' first"
 			d=$(target_dev_of /)
 			if [ -n "$d" ] && [ -b "$d" ] && [ -n "$(target_fstype "$d")" ]; then
 				say "(dry) postfix is not marked done here: verifying what is on $d now, read-only"
@@ -1063,21 +1063,21 @@ verify_run() {
 	say "verify: $VF_OK ok, $VF_WARN warnings, $VF_FAIL failures"
 	if [ "$VF_FAIL" -gt 0 ]; then
 		[ -n "$DRY" ] || state_set phase.verify failed
-		die "$EX_VERIFY" "verify failed: $VF_FAIL check(s); the recipient disk is written, do NOT reboot it: fix and re-run 'reloca.to -s verify'"
+		die "$EX_VERIFY" "verify failed: $VF_FAIL check(s); the recipient disk is written, do NOT reboot it: fix and re-run 'migrator -s verify'"
 	fi
 	if [ -n "$DRY" ]; then
 		say "(dry) verify is green; a real run would mark phase verify done and write $RUN/summary"
 		verify_summary; return 0
 	fi
 	phase_done verify; state_set verify.warnings "$VF_WARN"; state_set verify.time "$(date +%s)"
-	printf '%s\n' "verified: $VF_OK ok, $VF_WARN warnings; next: reloca.to -s cutover" > "$RUN/summary"
+	printf '%s\n' "verified: $VF_OK ok, $VF_WARN warnings; next: migrator -s cutover" > "$RUN/summary"
 	# the record inside the target (plan, log, state, the migrated stamp) is postfix's to
 	# write; only for a target this run mounted itself, never into an operator's tree
 	if [ -n "$mounted" ] && declare -F postfix_record >/dev/null; then
 		postfix_record || warn "postfix_record failed ($?): the copy of plan/log/state inside the target may be incomplete"
 	fi
 	verify_summary
-	say "verified: $VF_OK ok, $VF_WARN warnings; next: reloca.to -s cutover"
+	say "verified: $VF_OK ok, $VF_WARN warnings; next: migrator -s cutover"
 }
 
 # ==============================================================================
@@ -1112,18 +1112,18 @@ co_do() {
 }
 co_instructions() {
 	local host=$1
-	say "cutover mode 'none': nothing is switched by reloca.to. By hand, in this order:"
+	say "cutover mode 'none': nothing is switched by migrator. By hand, in this order:"
 	echo "    1. take the donor ${host:+$host }off the network: on its console, every NIC but lo: ip link set <nic> down   (or: poweroff)"
 	echo "    2. make sure it is gone:  ping -c3 ${host:-<donor address>}   must get no answer (two hosts must never share one IP)"
-	echo "    3. boot this recipient into the migrated system:  systemctl reboot   (or: reloca.to -o cutover=kexec -s cutover)"
+	echo "    3. boot this recipient into the migrated system:  systemctl reboot   (or: migrator -o cutover=kexec -s cutover)"
 }
 # co_wait_gone ADDR: 0 once three pings in a row go unanswered, 1 when it still answers
-# after RELOCA_CUTOVER_TIMEOUT_S pings (an unanswered ping costs its own 1 s timeout)
+# after MIGRATOR_CUTOVER_TIMEOUT_S pings (an unanswered ping costs its own 1 s timeout)
 co_wait_gone() {
 	local addr=$1 misses=0 t
-	for ((t = 0; t < RELOCA_CUTOVER_TIMEOUT_S; t++)); do
+	for ((t = 0; t < MIGRATOR_CUTOVER_TIMEOUT_S; t++)); do
 		if co_ping "$addr"; then
-			misses=0; [ "$RELOCA_CUTOVER_POLL_S" = 0 ] || sleep "$RELOCA_CUTOVER_POLL_S"
+			misses=0; [ "$MIGRATOR_CUTOVER_POLL_S" = 0 ] || sleep "$MIGRATOR_CUTOVER_POLL_S"
 		else
 			misses=$((misses+1)); [ "$misses" -lt 3 ] || return 0
 		fi
@@ -1142,13 +1142,13 @@ co_kexec_prepare() {
 		CO_KERNEL=$RUN/kexec/${k##*/}; CO_INITRD=$RUN/kexec/${i##*/}; CO_CMDLINE=$c
 		return 0
 	fi
-	if [ -z "$k" ] || [ -z "$i" ]; then die "$EX_ENV" "no verified boot entry in $RUN/state (verify.kernel, verify.initrd): run 'reloca.to verify' first"; fi
+	if [ -z "$k" ] || [ -z "$i" ]; then die "$EX_ENV" "no verified boot entry in $RUN/state (verify.kernel, verify.initrd): run 'migrator verify' first"; fi
 	have kexec || die "$EX_ENV" "kexec is not installed on this Live: use '-o cutover=netdown' (firmware boot)"
 	target_mount ro
 	mkdir -p "$RUN/kexec"
 	if [ ! -f "$TARGET_MNT$k" ] || [ ! -f "$TARGET_MNT$i" ]; then
 		target_umount
-		die "$EX_FAIL" "the verified kernel $k or initrd $i is not on the target any more: re-run 'reloca.to -s verify'"
+		die "$EX_FAIL" "the verified kernel $k or initrd $i is not on the target any more: re-run 'migrator -s verify'"
 	fi
 	CO_KERNEL=$RUN/kexec/${k##*/}; CO_INITRD=$RUN/kexec/${i##*/}; CO_CMDLINE=$c
 	if ! { run cp -L -- "$TARGET_MNT$k" "$CO_KERNEL" && run cp -L -- "$TARGET_MNT$i" "$CO_INITRD"; }; then
@@ -1158,14 +1158,14 @@ co_kexec_prepare() {
 	target_umount
 }
 # co_online_donor MODE: the on-line donor's part of the cutover, through its
-# poller (reloca-agent poll on the donor, reloca-agent cutover here): netdown
+# poller (migrator-agent poll on the donor, migrator-agent cutover here): netdown
 # (also kexec's donor part), poweroff, rollback (thaw: the donor goes on as if
 # nothing happened, this box boots nothing). State: online.cutover_{host,port,token}.
 co_online_donor() {
 	local mode=$1 port token agent action host
 	[ "$(state_get online.frozen)" = 1 ] || die "$EX_ENV" "the donor is not frozen (transfer did not finish on-line?): nothing to cut over"
 	port=$(state_get online.cutover_port); token=$(state_get online.cutover_token); host=$(state_get online.cutover_host)
-	agent=${RELOCA_AGENT:-$(state_get agent.path)}
+	agent=${MIGRATOR_AGENT:-$(state_get agent.path)}
 	if [ -z "$port" ] || [ -z "$token" ] || [ ! -x "$agent" ]; then die "$EX_ENV" "no cutover token/port/agent in $RUN/state: the on-line transfer did not leave a poller behind"; fi
 	case $mode in rollback) action=thaw;; poweroff) action=poweroff;; *) action=netdown;; esac
 	if [ -n "$DRY" ]; then echo "(dry) would hand the donor's poller (port $port on $host) the command: $action"; return 0; fi
@@ -1176,15 +1176,15 @@ co_online_donor() {
 		esac
 	fi
 	say "waiting for the donor's poller on port $port (it connects every 3 s)"
-	run "$agent" cutover --port "$port" --token "$token" --timeout "$RELOCA_CUTOVER_AGENT_S" "$action" \
-		|| die "$EX_FAIL" "the donor did not take '$action' (no poll on port $port within $RELOCA_CUTOVER_AGENT_S s: is reloca-agent still running there, can it reach $host:$port?); by hand on the donor's console: fsfreeze -u / (rollback) or ip link set DEV down"
+	run "$agent" cutover --port "$port" --token "$token" --timeout "$MIGRATOR_CUTOVER_AGENT_S" "$action" \
+		|| die "$EX_FAIL" "the donor did not take '$action' (no poll on port $port within $MIGRATOR_CUTOVER_AGENT_S s: is migrator-agent still running there, can it reach $host:$port?); by hand on the donor's console: fsfreeze -u / (rollback) or ip link set DEV down"
 	if [ "$action" = thaw ]; then
 		state_set online.frozen 0; state_set cutover.mode rollback; state_set cutover.time "$(date +%s)"
-		say "rolled back: the donor runs on, unfrozen; the copy on this box stays as it is (reloca.to -s transfer starts over)"
+		say "rolled back: the donor runs on, unfrozen; the copy on this box stays as it is (migrator -s transfer starts over)"
 		return 0
 	fi
 	if declare -F ssh_disconnect >/dev/null; then ssh_disconnect >/dev/null 2>&1 || true; fi
-	[ "$RELOCA_CUTOVER_WAIT_S" = 0 ] || sleep "$RELOCA_CUTOVER_WAIT_S"
+	[ "$MIGRATOR_CUTOVER_WAIT_S" = 0 ] || sleep "$MIGRATOR_CUTOVER_WAIT_S"
 }
 cutover_run() {
 	local mode=${1:-netdown} host addr pip vg rc
@@ -1200,7 +1200,7 @@ cutover_run() {
 	if ! phase_is_done verify; then
 		if [ "$(opt force 0)" = 1 ]; then warn "verify is not marked done: cutting over anyway (force=1)"
 		elif [ -n "$DRY" ]; then say "(dry) verify is not marked done here: a real cutover refuses at this point (run verify first)"
-		else die "$EX_ENV" "run verify first: the migrated system is not verified ('reloca.to -s verify'; force=1 overrides)"; fi
+		else die "$EX_ENV" "run verify first: the migrated system is not verified ('migrator -s verify'; force=1 overrides)"; fi
 	fi
 	host=${DONOR_HOST:-}
 	if [ -z "$host" ]; then host=$(state_get donor.target); host=${host#*@}; host=${host%:*}; fi
@@ -1236,7 +1236,7 @@ cutover_run() {
 	esac
 	[ "$rc" -eq 0 ] || warn "the donor command returned $rc (the connection may have dropped first): the ping check below decides"
 	if [ -z "$DRY" ]; then
-		[ "$RELOCA_CUTOVER_WAIT_S" = 0 ] || sleep "$RELOCA_CUTOVER_WAIT_S"
+		[ "$MIGRATOR_CUTOVER_WAIT_S" = 0 ] || sleep "$MIGRATOR_CUTOVER_WAIT_S"
 		if declare -F ssh_disconnect >/dev/null; then ssh_disconnect >/dev/null 2>&1 || true; fi
 	fi
 	fi
@@ -1250,7 +1250,7 @@ cutover_run() {
 		else say "the donor OS address $pip is in no subnet of this Live: it cannot be seen from here, not checked"; fi
 	fi
 	for addr in "${addrs[@]}"; do
-		if [ -n "$DRY" ]; then echo "(dry) would ping $addr until 3 pings in a row go unanswered (up to ${RELOCA_CUTOVER_TIMEOUT_S} s), and refuse to boot while it answers"; continue; fi
+		if [ -n "$DRY" ]; then echo "(dry) would ping $addr until 3 pings in a row go unanswered (up to ${MIGRATOR_CUTOVER_TIMEOUT_S} s), and refuse to boot while it answers"; continue; fi
 		if co_wait_gone "$addr"; then say "donor is gone: $addr does not answer"
 		else die "$EX_FAIL" "donor still answers on $addr: not rebooting (two hosts with one IP)"; fi
 	done

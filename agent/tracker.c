@@ -505,7 +505,7 @@ static void *ft_consumer(void *arg)
 				 * for byte, and a discarded range reads back as zeros. */
 				if (sscanf(p + 19, "%u,%u %15s %llu + %llu", &maj, &min, rwbs, &sec, &nr) == 5 && nr && rwbs[0] != 'R' && rwbs[1] != 'R')
 					ft_event(t, maj, min, sec, nr);
-			} else if ((p = strstr(line, ": tracing_mark_write: RELOCA "))) {
+			} else if ((p = strstr(line, ": tracing_mark_write: MIGRATOR "))) {
 				int k = atoi(p + 29);
 				/* The epoch ends here: what came before the marker is in cur, which
 				 * becomes closed. But trace_pipe merges per-cpu buffers by timestamp
@@ -575,7 +575,7 @@ static int ft_flip(struct tracker *t)
 {
 	char path[256], m[32]; int k = ++t->flip_req, i;
 	ft_path(t, path, sizeof path, "trace_marker");
-	snprintf(m, sizeof m, "RELOCA %d", k);
+	snprintf(m, sizeof m, "MIGRATOR %d", k);
 	if (write_file_str(path, m) < 0) FAIL("write trace_marker: %s", strerror(errno));
 	for (i = 0; i < 2000; i++) {
 		if (__atomic_load_n(&t->flip_seen, __ATOMIC_ACQUIRE) == k) break;

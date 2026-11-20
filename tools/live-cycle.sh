@@ -7,11 +7,11 @@
 #   tools/live-cycle.sh -H root@192.168.8.111 -S root@192.168.8.117:/root
 #
 # What it does, in order:
-#   1. reads the target's address and default gateway (for reloca.ip=)
+#   1. reads the target's address and default gateway (for migrator.ip=)
 #   2. copies vmlinuz-live, initrd-live.img and live/filesystem.squashfs from
 #      -S HOST:DIR (or uses -f DIR when the artefacts are already local)
 #   3. copies tools/live-entry.sh to the target and runs it there
-#   4. reboots, then polls ssh until /etc/reloca-live-release answers
+#   4. reboots, then polls ssh until /etc/migrator-live-release answers
 #   5. asserts the three things that decide whether the Live is really up:
 #      the release file, swap on zram, and the target disk released by toram
 #
@@ -19,7 +19,7 @@
 #   -H HOST   the machine to boot into the Live (ssh)
 #   -S SRC:DIR  where the artefacts live, reachable over ssh (e.g. the build host)
 #   -f DIR      ...or a local directory that already has them
-#   -i SPEC     reloca.ip=IP/PREFIX,GW,DNS (default: the address the target has
+#   -i SPEC     migrator.ip=IP/PREFIX,GW,DNS (default: the address the target has
 #               now, its default gateway, and 114.114.114.114)
 #   -k KEY      ssh private key (default $SSH_KEY or ~/.ssh/id_ed25519)
 #   -s          make the entry the persistent default (for a run that wipes the
@@ -72,8 +72,8 @@ ADDR=$(rs "$HOST" "ip -4 -o addr show dev ${IF:-eth0} 2>/dev/null | awk '{print 
 say "   interface ${IF:-eth0}"
 GW=$(rs "$HOST" "ip route show default | awk '/default/ {print \$3; exit}'")
 [ -n "$SPEC" ] || SPEC="$ADDR,${GW:-192.168.8.1},114.114.114.114"
-say "   address $ADDR, gateway ${GW:-?}, boot line reloca.ip=$SPEC"
-rs "$HOST" 'cat /etc/reloca-live-release 2>/dev/null' | grep -q . && say "   NOTE: this already looks like the Live"
+say "   address $ADDR, gateway ${GW:-?}, boot line migrator.ip=$SPEC"
+rs "$HOST" 'cat /etc/migrator-live-release 2>/dev/null' | grep -q . && say "   NOTE: this already looks like the Live"
 FREE=$(rs "$HOST" "df -B1 --output=avail /boot 2>/dev/null | tail -1 | tr -d ' '")
 [ -n "$FREE" ] && say "   /boot free: $(numfmt --to=iec "$FREE" 2>/dev/null || echo "$FREE")"
 
@@ -95,7 +95,7 @@ else
 fi
 
 if [ -n "$DRY" ]; then
-	say "== dry run: would copy the artefacts, write /etc/grub.d/41_reloca-live on $HOST,"
+	say "== dry run: would copy the artefacts, write /etc/grub.d/41_migrator-live on $HOST,"
 	say "   run live-entry.sh ${PERSIST:+-s }-i $SPEC, reboot, and poll ssh for up to ${WAIT}s"
 	exit 0
 fi
@@ -125,7 +125,7 @@ sleep 1
 say "== waiting for the Live (up to ${WAIT}s)"
 i=0; REL=
 while [ "$i" -lt "$WAIT" ]; do
-	REL=$(rs "$HOST" 'cat /etc/reloca-live-release 2>/dev/null' 2>/dev/null) || REL=
+	REL=$(rs "$HOST" 'cat /etc/migrator-live-release 2>/dev/null' 2>/dev/null) || REL=
 	[ -n "$REL" ] && break
 	i=$(( i + 10 ))
 	sleep 10
@@ -145,8 +145,8 @@ if [ -n "$DISK" ]; then
 	exit 1
 fi
 say "   /dev/sda:          free (toram released it)"
-say "   tool:              $(rs "$HOST" 'cat /usr/local/lib/reloca.to/VERSION 2>/dev/null || echo -')"
+say "   tool:              $(rs "$HOST" 'cat /usr/local/lib/migrator/VERSION 2>/dev/null || echo -')"
 say ""
 say "next (from here, no console):"
-say "  ssh -i $KEY root@${ADDR%%/*} 'reloca.to -y -i /root/rig-key -d <disks> -o mode=online -o cutover=rollback root@<DONOR>'"
+say "  ssh -i $KEY root@${ADDR%%/*} 'migrator -y -i /root/rig-key -d <disks> -o mode=online -o cutover=rollback root@<DONOR>'"
 exit 0

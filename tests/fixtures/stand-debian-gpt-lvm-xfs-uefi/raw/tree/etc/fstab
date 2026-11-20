@@ -1,4 +1,4 @@
-# /etc/fstab: static file system information (reloca.to fixture debian-gpt-lvm-xfs-uefi)
+# /etc/fstab: static file system information (migrator fixture debian-gpt-lvm-xfs-uefi)
 # <file system> <mount point> <type> <options> <dump> <pass>
 /dev/mapper/vg0-root /         xfs  defaults   0 0
 UUID=b0070000-e4f4-4b00-8000-000000000002 /boot     ext4 defaults   0 2

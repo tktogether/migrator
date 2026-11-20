@@ -1,4 +1,4 @@
-/* agent/agent.h — reloca-agent: the on-line relocation agent of reloca.to.
+/* agent/agent.h — migrator-agent: the on-line migration agent of migrator.
  *
  * One static binary, both ends. On the donor (its own running OS) it runs
  * "serve": registers volumes, tracks every write to them (eBPF bitmap on the
@@ -10,8 +10,8 @@
  * when to freeze (docs/DEVLOG.md 2026-10-21, convergence thresholds).
  * Nothing is installed on the donor and its disks are only read.
  */
-#ifndef RELOCA_AGENT_H
-#define RELOCA_AGENT_H
+#ifndef MIGRATOR_AGENT_H
+#define MIGRATOR_AGENT_H
 #define _GNU_SOURCE
 #include <stdint.h>
 #include <stddef.h>

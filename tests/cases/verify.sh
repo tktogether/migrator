@@ -35,7 +35,7 @@ STAND=$FIX/stand-debian-md-ext4-bios
 VFIX=$FIX/raw/verify
 W=$RUN/verify-work; mkdir -p "$W"
 # no waiting in tests: no settle time, no pause between pings, six pings at most
-RELOCA_CUTOVER_WAIT_S=0; RELOCA_CUTOVER_POLL_S=0; RELOCA_CUTOVER_TIMEOUT_S=6
+MIGRATOR_CUTOVER_WAIT_S=0; MIGRATOR_CUTOVER_POLL_S=0; MIGRATOR_CUTOVER_TIMEOUT_S=6
 
 U_ROOT=32431f84-84c8-46b5-bcc0-3e1e93c22618
 U_BOOT=766ce09c-da55-4d91-90c5-8b5541a7b3be
@@ -69,7 +69,7 @@ mktree() {
 	rm -rf "$t"; mkdir -p "$t"
 	cp -R "$STAND/raw/tree/." "$t/"
 	rm -f "$t"/lib/modules/*/modules.alias
-	sed -i 's/^ARRAY /# reloca.to: ARRAY /' "$t/etc/mdadm/mdadm.conf"
+	sed -i 's/^ARRAY /# migrator: ARRAY /' "$t/etc/mdadm/mdadm.conf"
 	sed -i 's/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="console=ttyS0,115200 console=tty0 net.ifnames=0 biosdevname=0"/' "$t/etc/default/grub"
 	sed -i 's/ens3/eth0/g' "$t/etc/network/interfaces"
 	mkdir -p "$t/etc/udev/rules.d" "$t/boot/grub/i386-pc"
@@ -111,7 +111,7 @@ fails() {
 	assert_eq "$name: exit 3" 3 "$rc"
 	for line in "$@"; do assert_has "$name: $line" "$line" "$(o "$name")"; done
 	assert_eq "$name: phase verify not done" "failed" "$(st "$name" phase.verify)"
-	assert_has "$name: the last line says do NOT reboot" "do NOT reboot it: fix and re-run 'reloca.to -s verify'" "$(o "$name" | tail -1)"
+	assert_has "$name: the last line says do NOT reboot" "do NOT reboot it: fix and re-run 'migrator -s verify'" "$(o "$name" | tail -1)"
 }
 # warns NAME SNIPPET N LINE...: the mutation keeps exit 0 with exactly N warnings
 warns() {
@@ -186,7 +186,7 @@ assert_eq  "green: verify.warnings"       "0"    "$(st green verify.warnings)"
 assert_eq  "green: verify.kernel (inside the target root)" "/boot/vmlinuz-$KVER"    "$(st green verify.kernel)"
 assert_eq  "green: verify.initrd"         "/boot/initrd.img-$KVER" "$(st green verify.initrd)"
 assert_eq  "green: verify.cmdline"        "$CMDLINE" "$(st green verify.cmdline)"
-assert_eq  "green: summary file"          "verified: 21 ok, 0 warnings; next: reloca.to -s cutover" "$(cat "$W/green.run/summary")"
+assert_eq  "green: summary file"          "verified: 21 ok, 0 warnings; next: migrator -s cutover" "$(cat "$W/green.run/summary")"
 assert_has "green: MAC table"             "52:54:00:cc:dd:01   eth0       eth0" "$(o green)"
 assert_has "green: BMC console line"      "on the BMC console: n=\$(grep -il 52:54:00:cc:dd:01 /sys/class/net/*/address" "$(o green)"
 assert_eq  "green: postfix_record is not called for an operator's tree" "" "$(cat "$W/green.run/record" 2>/dev/null)"
@@ -210,7 +210,7 @@ rc=$(vrun mountedfail "$MOUNTED; state_set phase.postfix done; rm \"\$T/boot/vml
 assert_eq  "no ROOT, a FAIL: exit 3" 3 "$rc"
 assert_eq  "no ROOT, a FAIL: unmounted, no record" "mount ro,umount" "$(paste -sd, "$W/mountedfail.run/calls")"
 # dry run: no target to look at -> the list of checks, exit 0, no state
-rc=$(vrun drylist "$MOUNTED; DRY=y; target_dev_of() { echo /dev/reloca-test-absent; }" -)
+rc=$(vrun drylist "$MOUNTED; DRY=y; target_dev_of() { echo /dev/migrator-test-absent; }" -)
 assert_eq  "dry, no target: exit 0" 0 "$rc"
 assert_has "dry, no target: lists the checks" "verify would check, read-only, after postfix" "$(o drylist)"
 assert_has "dry, no target: names the sections" "kernel cmdline" "$(o drylist)"
@@ -230,7 +230,7 @@ assert_has "m-ifnames: the count line" "1 failures" "$(o m-ifnames)"
 assert_has "m-ifnames: failure file for the panel" "exit=3 " "$(cat "$W/m-ifnames.run/failure")"
 fails m-grubdefault 'sed -i "s/ biosdevname=0\"/\"/" "$T/etc/default/grub"' \
 	"  [FAIL] /etc/default/grub (GRUB_CMDLINE_LINUX) lacks biosdevname=0"
-fails m-array 'sed -i "s/^# reloca.to: ARRAY/ARRAY/" "$T/etc/mdadm/mdadm.conf"' \
+fails m-array 'sed -i "s/^# migrator: ARRAY/ARRAY/" "$T/etc/mdadm/mdadm.conf"' \
 	"  [FAIL] /etc/mdadm/mdadm.conf still has 2 active ARRAY line(s)"
 fails m-rdmd 'sed -i "s/^GRUB_CMDLINE_LINUX=\"/GRUB_CMDLINE_LINUX=\"rd.md.uuid=21422b8e:6e58604b:368cc1d7:0699304b /" "$T/etc/default/grub"' \
 	"  [FAIL] /etc/default/grub:GRUB_CMDLINE_LINUX: forbidden token 'rd.md.uuid=21422b8e:6e58604b:368cc1d7:0699304b' (matches rd.md.uuid)"
@@ -632,7 +632,7 @@ fails raid-uuid "$RAID; vf_md_uuid() { echo 00000000:00000000:00000000:00000001;
 	"  [FAIL] /dev/md1: UUID 00000000:00000000:00000000:00000001 is not the plan's $MDU1"
 fails raid-conf-missing "$RAID; sed -i '/^ARRAY \/dev\/md3 /d' \"\$T/etc/mdadm/mdadm.conf\"" \
 	"  [FAIL] /etc/mdadm/mdadm.conf lacks: ARRAY /dev/md3 metadata=1.2 name=fixture-debian:3 UUID=$MDU3"
-fails raid-conf-stale "$RAID; sed -i 's/^# reloca.to: ARRAY \/dev\/md0 /ARRAY \/dev\/md0 /' \"\$T/etc/mdadm/mdadm.conf\"" \
+fails raid-conf-stale "$RAID; sed -i 's/^# migrator: ARRAY \/dev\/md0 /ARRAY \/dev\/md0 /' \"\$T/etc/mdadm/mdadm.conf\"" \
 	"  [FAIL] /etc/mdadm/mdadm.conf has ARRAY line(s) of arrays that are not here: ARRAY /dev/md0 metadata=1.2 UUID=21422b8e:6e58604b:368cc1d7:0699304b"
 fails raid-noconf "$RAID; rm \"\$T/etc/mdadm/mdadm.conf\"" \
 	"  [FAIL] no mdadm.conf in the tree: the initramfs would not know the arrays"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # lib/ssh.sh — the control channel to the donor, and the data channel it hands
-# out to the transfer. Sourced by bin/reloca.to after common.sh; defines
+# out to the transfer. Sourced by bin/migrator after common.sh; defines
 # functions and defaults only, nothing runs at source time.
 #
 #   ssh_connect DONOR            master + auth chain + session key; DONOR = [user@]host[:port]
@@ -20,7 +20,7 @@
 #   boot_nic_mac [local|donor]   MAC of the boot NIC   dmi_serial_of [local|donor]  DMI serial
 #
 # Globals set here: DONOR_USER DONOR_HOST DONOR_PORT (exported: cleanup snippets need
-# them), SSH_DATA_PORT (2222), DONOR_RUN (/run/reloca.to on the donor), DONOR_AUTH_KEYS
+# them), SSH_DATA_PORT (2222), DONOR_RUN (/run/migrator on the donor), DONOR_AUTH_KEYS
 # (the donor's authorized_keys; tests point it at a throwaway sshd's file).
 # Read from the driver: RUN DRY YES SSH_KEYFILE OPT[data] OPT[cipher] OPT[expect].
 # Exit codes: everything here refuses with EX_ENV (2): donor unreachable, no way to
@@ -31,9 +31,9 @@ DONOR_USER=root
 DONOR_HOST=
 DONOR_PORT=22
 # The donor's own state dir. Its RUN is always the default: only the recipient
-# runs reloca.to with a possibly relocated RUN (tests).
+# runs migrator with a possibly migrated RUN (tests).
 # shellcheck disable=SC2034  # used by bootstrap.sh
-DONOR_RUN=/run/reloca.to
+DONOR_RUN=/run/migrator
 : "${DONOR_AUTH_KEYS:=/root/.ssh/authorized_keys}"
 
 # --- option sets ----------------------------------------------------------------
@@ -149,7 +149,7 @@ ssh_connect() {
 
 	if [ ! -s "$RUN/id_ed25519" ]; then
 		rm -f "$RUN/id_ed25519.pub"
-		ssh-keygen -t ed25519 -N '' -q -C "reloca-session@$(hostname)" -f "$RUN/id_ed25519" \
+		ssh-keygen -t ed25519 -N '' -q -C "migrator-session@$(hostname)" -f "$RUN/id_ed25519" \
 			|| die "$EX_ENV" "ssh-keygen failed for the session key $RUN/id_ed25519"
 	fi
 	chmod 600 "$RUN/id_ed25519"
@@ -191,21 +191,21 @@ ssh_disconnect() {
 # --- who is on the other end -----------------------------------------------------
 ssh_require_full_live_donor() {
 	local rc id
-	rsh sh -c 'test -r /etc/reloca-live-release || test -r /etc/xserver-live-release'; rc=$?
+	rsh sh -c 'test -r /etc/migrator-live-release || test -r /etc/xserver-live-release'; rc=$?
 	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
-	[ $rc -eq 0 ] || die "$EX_ENV" "donor $DONOR_HOST is not a full Live OS (no /etc/reloca-live-release)"
+	[ $rc -eq 0 ] || die "$EX_ENV" "donor $DONOR_HOST is not a full Live OS (no /etc/migrator-live-release)"
 	# the base Live is busybox only: no bash for rsh_fn, no apt-get for bootstrap
 	rsh sh -c 'command -v bash >/dev/null && command -v apt-get >/dev/null' \
 		|| die "$EX_ENV" "donor $DONOR_HOST runs the base Live (busybox only); boot it into the full Live"
-	id=$(rsh sh -c 'sed -n "s/^BUILD_ID=//p" /etc/reloca-live-release 2>/dev/null; sed -n "s/^BUILD_ID=//p" /etc/xserver-live-release 2>/dev/null' | head -1)
+	id=$(rsh sh -c 'sed -n "s/^BUILD_ID=//p" /etc/migrator-live-release 2>/dev/null; sed -n "s/^BUILD_ID=//p" /etc/xserver-live-release 2>/dev/null' | head -1)
 	state_set donor.live "$id"
 	say "donor Live build ${id:-?}, this box $(live_build_id)"
 }
 
-# on-line relocation: the donor is not a Live at all but the running OS itself
+# on-line migration: the donor is not a Live at all but the running OS itself
 ssh_donor_mode() {
 	local rc
-	rsh sh -c 'test -r /etc/reloca-live-release || test -r /etc/xserver-live-release'; rc=$?
+	rsh sh -c 'test -r /etc/migrator-live-release || test -r /etc/xserver-live-release'; rc=$?
 	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
 	if [ $rc -eq 0 ]; then echo offline; else echo online; fi
 }
@@ -213,7 +213,7 @@ ssh_donor_mode() {
 # --- relay (E2, -o relay=USER@HOST[:SSHPORT]) ------------------------------------
 # Both ends may sit behind NAT. The operator starts tools/relay-tunnel.sh on the
 # DONOR (it forwards donor :22/:2222 onto the relay's :2222/:2223) and passes the
-# relay as the donor argument ("reloca.to root@RELAY:2222 -o sshd-port=2223").
+# relay as the donor argument ("migrator root@RELAY:2222 -o sshd-port=2223").
 # This side forwards its own cutover port onto the relay's :2224 so the on-line
 # poller (transfer.sh) reaches the recipient even though nobody can dial it.
 relay_spec() {   # SPEC -> "user<TAB>host<TAB>port" of the relay; 2 = malformed
@@ -261,13 +261,13 @@ ssh_require_online_donor() {
 	# shellcheck disable=SC2016  # the $(...) expand on the donor, not here
 	facts=$(rsh sh -c 'echo "uid=$(id -u) bash=$(command -v bash || echo -) findmnt=$(command -v findmnt || echo -) os=$(sed -n "s/^PRETTY_NAME=//p" /etc/os-release 2>/dev/null | tr -d "\"" | tr " " _) kernel=$(uname -r) arch=$(uname -m)"') \
 		|| die "$EX_ENV" "cannot look at the donor $DONOR_HOST (ssh failed)"
-	case $facts in *"uid=0 "*) ;; *) die "$EX_ENV" "online relocation needs root on the donor ($facts)";; esac
+	case $facts in *"uid=0 "*) ;; *) die "$EX_ENV" "online migration needs root on the donor ($facts)";; esac
 	case $facts in *"bash=- "*) die "$EX_ENV" "the donor has no bash: the inventory needs it";; esac
 	case $facts in *"findmnt=- "*) die "$EX_ENV" "the donor has no findmnt (util-linux): the agent needs it";; esac
-	case $facts in *"arch=x86_64"*) ;; *) die "$EX_ENV" "online relocation: the agent is built for x86_64, the donor is ${facts##*arch=}";; esac
+	case $facts in *"arch=x86_64"*) ;; *) die "$EX_ENV" "online migration: the agent is built for x86_64, the donor is ${facts##*arch=}";; esac
 	state_set donor.os "$(echo "$facts" | sed -n 's/.*os=\([^ ]*\).*/\1/p')"
 	state_set donor.kernel "$(echo "$facts" | sed -n 's/.*kernel=\([^ ]*\).*/\1/p')"
-	say "donor runs its own OS: $(state_get donor.os | tr _ ' ') ($(state_get donor.kernel)) - on-line relocation"
+	say "donor runs its own OS: $(state_get donor.os | tr _ ' ') ($(state_get donor.kernel)) - on-line migration"
 }
 
 # Self-contained on purpose (shipped to the donor with rsh_fn): only the "donor"
@@ -342,34 +342,34 @@ ssh_start_data_sshd() {
 		return 0
 	fi
 	# shellcheck disable=SC2016  # $p expands on the donor, not here
-	alive='p=$(cat /run/reloca-sshd.pid 2>/dev/null) && [ -n "$p" ] && [ "$(cat /proc/$p/comm 2>/dev/null)" = sshd ]'
+	alive='p=$(cat /run/migrator-sshd.pid 2>/dev/null) && [ -n "$p" ] && [ "$(cat /proc/$p/comm 2>/dev/null)" = sshd ]'
 	if rsh_sh "$alive"; then
 		say "data channel sshd:$port is already running on the donor"
 	elif [ -n "$DRY" ]; then
 		# rrun_sh under -n: the "(dry) donor:" line goes to the log as well, not only to the screen
-		rrun_sh "/usr/sbin/sshd -p $port -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o AuthorizedKeysFile=$DONOR_AUTH_KEYS -o PidFile=/run/reloca-sshd.pid"
+		rrun_sh "/usr/sbin/sshd -p $port -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o AuthorizedKeysFile=$DONOR_AUTH_KEYS -o PidFile=/run/migrator-sshd.pid"
 		return 0
 	else
-		rrun_sh 'rm -f /run/reloca-sshd.pid; [ -s /etc/ssh/ssh_host_rsa_key ] && [ -s /etc/ssh/ssh_host_ecdsa_key ] && [ -s /etc/ssh/ssh_host_ed25519_key ] || ssh-keygen -A' \
+		rrun_sh 'rm -f /run/migrator-sshd.pid; [ -s /etc/ssh/ssh_host_rsa_key ] && [ -s /etc/ssh/ssh_host_ecdsa_key ] && [ -s /etc/ssh/ssh_host_ed25519_key ] || ssh-keygen -A' \
 			|| die "$EX_ENV" "cannot prepare host keys on the donor"
 		# /run/sshd is sshd's privilege separation dir; normally made by tmpfiles at boot
 		# no ListenAddress: sshd then listens on both address families
-		rrun_sh "mkdir -p /run/sshd && /usr/sbin/sshd -p $port -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o AuthorizedKeysFile=$DONOR_AUTH_KEYS -o PidFile=/run/reloca-sshd.pid" \
+		rrun_sh "mkdir -p /run/sshd && /usr/sbin/sshd -p $port -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o AuthorizedKeysFile=$DONOR_AUTH_KEYS -o PidFile=/run/migrator-sshd.pid" \
 			|| die "$EX_ENV" "cannot start sshd:$port on the donor"
 		# sshd daemonises before it binds, so its exit status says nothing about
 		# the port; the pidfile is written only once the listen sockets are up
 		local up=
 		for _ in 1 2 3 4 5 6 7 8 9 10; do
-			rsh test -s /run/reloca-sshd.pid && { up=y; break; }; sleep 1
+			rsh test -s /run/migrator-sshd.pid && { up=y; break; }; sleep 1
 		done
-		[ -n "$up" ] || die "$EX_ENV" "sshd:$port did not come up on the donor (port busy? on the donor: kill \$(cat /run/reloca-sshd.pid), or -o sshd-port=N)"
+		[ -n "$up" ] || die "$EX_ENV" "sshd:$port did not come up on the donor (port busy? on the donor: kill \$(cat /run/migrator-sshd.pid), or -o sshd-port=N)"
 	fi
 	# only the pid WE recorded is ever killed, never "sshd" by name (the :22 server, the
 	# operator's own sessions); the snippet is self-contained because cleanup
 	# runs it in a fresh bash: it goes through the master, or straight in with the
 	# session key when the master is gone.
 	# shellcheck disable=SC2016  # $p expands on the donor, not here
-	kill_cmd='p=$(cat /run/reloca-sshd.pid 2>/dev/null); [ -n "$p" ] && [ "$(cat /proc/$p/comm 2>/dev/null)" = sshd ] && kill "$p"; rm -f /run/reloca-sshd.pid'
+	kill_cmd='p=$(cat /run/migrator-sshd.pid 2>/dev/null); [ -n "$p" ] && [ "$(cat /proc/$p/comm 2>/dev/null)" = sshd ] && kill "$p"; rm -f /run/migrator-sshd.pid'
 	if [ -z "${_SSH_CLEANUP_DATA:-}" ]; then
 		cleanup_add "ssh -S $(printf '%q' "$RUN/ssh.sock") -o ControlMaster=no -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=$(printf '%q' "$RUN/known_hosts") -o LogLevel=ERROR -i $(printf '%q' "$RUN/id_ed25519") -p $DONOR_PORT $DONOR_USER@$DONOR_HOST -- $(printf '%q' "sh -c $(printf '%q' "$kill_cmd")")"
 		_SSH_CLEANUP_DATA=y
@@ -388,7 +388,7 @@ ssh_data_cmd() {
 	# and the master gives up after ServerAliveInterval x CountMax of unanswered
 	# keepalives - 600 s, which is exactly where the first Rocky transfer broke
 	# ("the stream ended inside a data frame" at 620 s, pass 1 not even finished).
-	if [ "${RELOCA_MODE:-$(state_get mode)}" = online ]; then
+	if [ "${MIGRATOR_MODE:-$(state_get mode)}" = online ]; then
 		echo "ssh -p $DONOR_PORT -c $cipher -o ControlMaster=no -o ControlPath=none -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=$RUN/known_hosts -o LogLevel=ERROR -o IdentitiesOnly=yes -i $RUN/id_ed25519 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 $DONOR_USER@$DONOR_HOST"
 		return 0
 	fi

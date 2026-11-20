@@ -31,62 +31,62 @@ lib_missing > "$RUN/missing" 2>/dev/null
 assert_eq "transfer.sh defines the driver's contract functions" "" "$(sed 's/ $//' "$RUN/missing")"
 
 # --- (b) pure builders: the exact strings that go over the wire ---------------------
-S='echo ${PIPESTATUS[0]} > /run/reloca-src.status'
+S='echo ${PIPESTATUS[0]} > /run/migrator-src.status'
 assert_eq "block ext4 lz4 (clean)" \
-	"bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -L /run/reloca-src.log | lz4 -c; $S'" \
+	"bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -L /run/migrator-src.log | lz4 -c; $S'" \
 	"$(lib_sh 'tx_remote_block_cmd ext4 /dev/sda2 "" lz4')"
 assert_eq "block ext4 lz4 (dirty: -I)" \
-	"bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -I -L /run/reloca-src.log | lz4 -c; $S'" \
+	"bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -I -L /run/migrator-src.log | lz4 -c; $S'" \
 	"$(lib_sh 'tx_remote_block_cmd ext4 /dev/sda2 -I lz4')"
 assert_eq "block xfs zstd" \
-	"bash -o pipefail -c 'partclone.xfs -c -s /dev/centos/root -o - -q -a1 -L /run/reloca-src.log | zstd -T0 --fast=3 -q -c; $S'" \
+	"bash -o pipefail -c 'partclone.xfs -c -s /dev/centos/root -o - -q -a1 -L /run/migrator-src.log | zstd -T0 --fast=3 -q -c; $S'" \
 	"$(lib_sh 'tx_remote_block_cmd xfs /dev/centos/root "" zstd')"
 assert_eq "block ext3 none" \
-	"bash -o pipefail -c 'partclone.extfs -c -s /dev/md0 -o - -q -a1 -L /run/reloca-src.log | cat; $S'" \
+	"bash -o pipefail -c 'partclone.extfs -c -s /dev/md0 -o - -q -a1 -L /run/migrator-src.log | cat; $S'" \
 	"$(lib_sh 'tx_remote_block_cmd ext3 /dev/md0 "" none')"
 assert_eq "block raw sink appended" \
-	"bash -o pipefail -c 'partclone.extfs -c -s /dev/md0 -o - -q -a1 -L /run/reloca-src.log | lz4 -c | busybox nc 192.168.77.2 31234; $S'" \
+	"bash -o pipefail -c 'partclone.extfs -c -s /dev/md0 -o - -q -a1 -L /run/migrator-src.log | lz4 -c | busybox nc 192.168.77.2 31234; $S'" \
 	"$(lib_sh 'tx_remote_block_cmd ext4 /dev/md0 "" lz4 "busybox nc 192.168.77.2 31234"')"
 assert_eq "local block ext4 lz4" \
-	"lz4 -d -c | partclone.extfs -r -s - -o /dev/sda3 -L /run/reloca.to/vol-3.log -f 10 -B" \
-	"$(lib_sh 'tx_local_block_cmd ext4 /dev/sda3 lz4 /run/reloca.to/vol-3.log')"
+	"lz4 -d -c | partclone.extfs -r -s - -o /dev/sda3 -L /run/migrator/vol-3.log -f 10 -B" \
+	"$(lib_sh 'tx_local_block_cmd ext4 /dev/sda3 lz4 /run/migrator/vol-3.log')"
 assert_eq "local block: -f follows the poll interval" \
 	"lz4 -d -c | partclone.extfs -r -s - -o /dev/sda3 -L /tmp/l -f 2 -B" \
-	"$(RELOCA_POLL_S=2 lib_sh 'tx_local_block_cmd ext4 /dev/sda3 lz4 /tmp/l')"
+	"$(MIGRATOR_POLL_S=2 lib_sh 'tx_local_block_cmd ext4 /dev/sda3 lz4 /tmp/l')"
 assert_eq "local block xfs zstd" \
-	"zstd -d -q -c | partclone.xfs -r -s - -o /dev/rl/root -L /run/reloca.to/vol-rl-root.log -f 10 -B" \
-	"$(lib_sh 'tx_local_block_cmd xfs /dev/rl/root zstd /run/reloca.to/vol-rl-root.log')"
+	"zstd -d -q -c | partclone.xfs -r -s - -o /dev/rl/root -L /run/migrator/vol-rl-root.log -f 10 -B" \
+	"$(lib_sh 'tx_local_block_cmd xfs /dev/rl/root zstd /run/migrator/vol-rl-root.log')"
 assert_eq "local block none" \
-	"cat | partclone.extfs -r -s - -o /dev/sda1 -L /run/reloca.to/vol-1.log -f 10 -B" \
-	"$(lib_sh 'tx_local_block_cmd ext2 /dev/sda1 none /run/reloca.to/vol-1.log')"
+	"cat | partclone.extfs -r -s - -o /dev/sda1 -L /run/migrator/vol-1.log -f 10 -B" \
+	"$(lib_sh 'tx_local_block_cmd ext2 /dev/sda1 none /run/migrator/vol-1.log')"
 touch "$RUN/img"
 assert_eq "local block onto a regular file uses -O (overwrite)" \
 	"lz4 -d -c | partclone.extfs -r -s - -O $RUN/img -L /tmp/l -f 10 -B" \
 	"$(lib_sh "tx_local_block_cmd ext4 $RUN/img lz4 /tmp/l")"
 assert_eq "files ext4 lz4 with two excludes" \
-	"bash -o pipefail -c 'cd /mnt/reloca.to/src/3 && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse --exclude=./swapfile --exclude=./var/swap -cf - . | lz4 -c; $S'" \
-	"$(lib_sh 'tx_remote_files_cmd /mnt/reloca.to/src/3 lz4 "--exclude=./swapfile --exclude=./var/swap"')"
+	"bash -o pipefail -c 'cd /mnt/migrator/src/3 && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse --exclude=./swapfile --exclude=./var/swap -cf - . | lz4 -c; $S'" \
+	"$(lib_sh 'tx_remote_files_cmd /mnt/migrator/src/3 lz4 "--exclude=./swapfile --exclude=./var/swap"')"
 assert_eq "files zstd no excludes" \
-	"bash -o pipefail -c 'cd /mnt/reloca.to/src/centos-root && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse -cf - . | zstd -T0 --fast=3 -q -c; $S'" \
-	"$(lib_sh 'tx_remote_files_cmd /mnt/reloca.to/src/centos-root zstd ""')"
+	"bash -o pipefail -c 'cd /mnt/migrator/src/centos-root && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse -cf - . | zstd -T0 --fast=3 -q -c; $S'" \
+	"$(lib_sh 'tx_remote_files_cmd /mnt/migrator/src/centos-root zstd ""')"
 assert_eq "esp vfat none: no xattrs" \
-	"bash -o pipefail -c 'cd /mnt/reloca.to/src/1 && tar --one-file-system --numeric-owner --sparse -cf - . | cat; $S'" \
-	"$(lib_sh 'tx_remote_files_cmd /mnt/reloca.to/src/1 none "" vfat')"
+	"bash -o pipefail -c 'cd /mnt/migrator/src/1 && tar --one-file-system --numeric-owner --sparse -cf - . | cat; $S'" \
+	"$(lib_sh 'tx_remote_files_cmd /mnt/migrator/src/1 none "" vfat')"
 assert_eq "files raw sink appended" \
-	"bash -o pipefail -c 'cd /mnt/reloca.to/src/3 && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse -cf - . | lz4 -c | busybox nc 10.0.0.2 30001; $S'" \
-	"$(lib_sh 'tx_remote_files_cmd /mnt/reloca.to/src/3 lz4 "" "" "busybox nc 10.0.0.2 30001"')"
+	"bash -o pipefail -c 'cd /mnt/migrator/src/3 && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse -cf - . | lz4 -c | busybox nc 10.0.0.2 30001; $S'" \
+	"$(lib_sh 'tx_remote_files_cmd /mnt/migrator/src/3 lz4 "" "" "busybox nc 10.0.0.2 30001"')"
 assert_eq "local files lz4" \
-	"lz4 -d -c | tar -C /mnt/reloca.to/dst/3 --numeric-owner --xattrs --xattrs-include=\\* -xpf -" \
-	"$(lib_sh 'tx_local_files_cmd /mnt/reloca.to/dst/3 lz4')"
+	"lz4 -d -c | tar -C /mnt/migrator/dst/3 --numeric-owner --xattrs --xattrs-include=\\* -xpf -" \
+	"$(lib_sh 'tx_local_files_cmd /mnt/migrator/dst/3 lz4')"
 assert_eq "local files zstd" \
-	"zstd -d -q -c | tar -C /mnt/reloca.to/dst/3 --numeric-owner --xattrs --xattrs-include=\\* -xpf -" \
-	"$(lib_sh 'tx_local_files_cmd /mnt/reloca.to/dst/3 zstd')"
+	"zstd -d -q -c | tar -C /mnt/migrator/dst/3 --numeric-owner --xattrs --xattrs-include=\\* -xpf -" \
+	"$(lib_sh 'tx_local_files_cmd /mnt/migrator/dst/3 zstd')"
 assert_eq "local esp vfat: no -p, no owner, no xattrs" \
-	"cat | tar -C /mnt/reloca.to/dst/1 --numeric-owner --no-same-owner --no-same-permissions -xf -" \
-	"$(lib_sh 'tx_local_files_cmd /mnt/reloca.to/dst/1 none vfat')"
+	"cat | tar -C /mnt/migrator/dst/1 --numeric-owner --no-same-owner --no-same-permissions -xf -" \
+	"$(lib_sh 'tx_local_files_cmd /mnt/migrator/dst/1 none vfat')"
 assert_fail "block btrfs is refused by the builder" lib_sh 'tx_remote_block_cmd btrfs /dev/x "" lz4'
 assert_eq "compress=gzip builds a gzip pipeline (the fallback every base system has)" \
-	"bash -o pipefail -c 'partclone.extfs -c -s /dev/x -o - -q -a1 -L /run/reloca-src.log | gzip -1 -c; echo \${PIPESTATUS[0]} > /run/reloca-src.status'" \
+	"bash -o pipefail -c 'partclone.extfs -c -s /dev/x -o - -q -a1 -L /run/migrator-src.log | gzip -1 -c; echo \${PIPESTATUS[0]} > /run/migrator-src.status'" \
 	"$(lib_sh 'tx_remote_block_cmd ext4 /dev/x "" gzip')"
 assert_eq "decompress=gzip" "gzip -d -c" "$(lib_sh 'tx_decomp gzip')"
 assert_fail "compress=bzip2 is refused by the builder" lib_sh 'tx_remote_block_cmd ext4 /dev/x "" bzip2'
@@ -167,24 +167,24 @@ assert_has "dry: apply not done is tolerated"     "(dry) apply is not marked don
 assert_has "dry: probe skipped"                   "(dry) probe skipped" "$out"
 assert_has "dry: status line per volume"          "vol 2/4: /dev/sda2 -> /dev/sda3 (block, 460.8G)" "$out"
 assert_has "dry: mkswap volume needs nothing"     "nothing to stream: apply made /dev/sda2" "$out"
-assert_has "dry: donor block pipeline verbatim"   "(dry) donor: bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -I -L /run/reloca-src.log | lz4 -c; echo \${PIPESTATUS[0]} > /run/reloca-src.status'" "$out"
+assert_has "dry: donor block pipeline verbatim"   "(dry) donor: bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -I -L /run/migrator-src.log | lz4 -c; echo \${PIPESTATUS[0]} > /run/migrator-src.status'" "$out"
 assert_has "dry: local block chain over sshd:2222" "-p 2222 -c aes128-gcm@openssh.com -o ControlMaster=no" "$out"
 assert_has "dry: local block chain"               "bash -o pipefail -c lz4\\ -d\\ -c\\ \\|\\ partclone.extfs\\ -r\\ -s\\ -\\ -o\\ /dev/sda3\\ -L\\ $P/vol-3.log\\ -f\\ 10\\ -B 2>$P/vol-3.progress" "$out"
 assert_has "dry: dirty ext -> e2fsck -f -y"       "(dry) e2fsck -f -y /dev/sda3" "$out"
 assert_has "dry: grow -> resize2fs"               "(dry) resize2fs /dev/sda3" "$out"
-assert_has "dry: donor ro mount (xfs norecovery, private)" "(dry) donor: mount -t xfs -o ro,norecovery /dev/centos/root /mnt/reloca.to/src/centos-root && mount --make-private /mnt/reloca.to/src/centos-root" "$out"
-assert_has "dry: recipient mount"                 "(dry) mount -t xfs /dev/centos/root /mnt/reloca.to/dst/centos-root" "$out"
-assert_has "dry: recipient mount made private"    "(dry) mount --make-private /mnt/reloca.to/dst/centos-root" "$out"
+assert_has "dry: donor ro mount (xfs norecovery, private)" "(dry) donor: mount -t xfs -o ro,norecovery /dev/centos/root /mnt/migrator/src/centos-root && mount --make-private /mnt/migrator/src/centos-root" "$out"
+assert_has "dry: recipient mount"                 "(dry) mount -t xfs /dev/centos/root /mnt/migrator/dst/centos-root" "$out"
+assert_has "dry: recipient mount made private"    "(dry) mount --make-private /mnt/migrator/dst/centos-root" "$out"
 assert_has "dry: swapfile on /srv excluded"       "--exclude=./swap -cf - ." "$out"
-assert_has "dry: files pipeline verbatim"         "(dry) donor: bash -o pipefail -c 'cd /mnt/reloca.to/src/centos-root && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse --exclude=./swap -cf - . | lz4 -c; echo \${PIPESTATUS[0]} > /run/reloca-src.status'" "$out"
-assert_has "dry: esp pipeline without xattrs"     "(dry) donor: bash -o pipefail -c 'cd /mnt/reloca.to/src/1 && tar --one-file-system --numeric-owner --sparse -cf - . | lz4 -c;" "$out"
-assert_has "dry: esp extracted without ownership" "tar\\ -C\\ /mnt/reloca.to/dst/1\\ --numeric-owner\\ --no-same-owner\\ --no-same-permissions\\ -xf\\ -" "$out"
-assert_has "dry: umounts printed"                 "(dry) umount /mnt/reloca.to/dst/centos-root" "$out"
-assert_has "dry: donor umount printed"            "(dry) donor: umount /mnt/reloca.to/src/centos-root" "$out"
+assert_has "dry: files pipeline verbatim"         "(dry) donor: bash -o pipefail -c 'cd /mnt/migrator/src/centos-root && tar --one-file-system --numeric-owner --xattrs --xattrs-include=\\* --sparse --exclude=./swap -cf - . | lz4 -c; echo \${PIPESTATUS[0]} > /run/migrator-src.status'" "$out"
+assert_has "dry: esp pipeline without xattrs"     "(dry) donor: bash -o pipefail -c 'cd /mnt/migrator/src/1 && tar --one-file-system --numeric-owner --sparse -cf - . | lz4 -c;" "$out"
+assert_has "dry: esp extracted without ownership" "tar\\ -C\\ /mnt/migrator/dst/1\\ --numeric-owner\\ --no-same-owner\\ --no-same-permissions\\ -xf\\ -" "$out"
+assert_has "dry: umounts printed"                 "(dry) umount /mnt/migrator/dst/centos-root" "$out"
+assert_has "dry: donor umount printed"            "(dry) donor: umount /mnt/migrator/src/centos-root" "$out"
 assert_has "dry: ends without streaming"          "(dry) transfer: 4 volumes printed, nothing streamed" "$out"
 n=$(grep -c '^vol\.' "$P/state" 2>/dev/null); assert_eq "dry: no vol.* state written" 0 "${n:-0}"
 assert_eq  "dry: phase transfer not marked"       "" "$(RUN=$P lib_sh 'state_get phase.transfer')"
-assert_ok  "dry: the log holds the donor pipeline verbatim" grep -qF "(dry) donor: bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -I -L /run/reloca-src.log | lz4 -c; echo \${PIPESTATUS[0]} > /run/reloca-src.status'" "$P/log"
+assert_ok  "dry: the log holds the donor pipeline verbatim" grep -qF "(dry) donor: bash -o pipefail -c 'partclone.extfs -c -s /dev/sda2 -o - -q -a1 -I -L /run/migrator-src.log | lz4 -c; echo \${PIPESTATUS[0]} > /run/migrator-src.status'" "$P/log"
 # -o compress=/data= override the plan; raw prints the listener and warns
 out=$(RUN=$P DRY=y lib_sh 'DONOR_HOST=10.0.0.12; OPT[compress]=zstd; OPT[data]=raw; transfer_run' 2>&1); rc=$?
 assert_eq  "dry raw: exit 0"                      0 "$rc"
@@ -215,7 +215,7 @@ RUN=$P lib_sh 'vol_state_set /dev/centos/root pending'
 Q=$RUN/refuse; mkdir -p "$Q"; cp "$P/plan" "$Q/plan"
 out=$(RUN=$Q lib_sh 'DONOR_HOST=10.0.0.12; transfer_run' 2>&1); rc=$?
 assert_eq  "apply not done: exit 2"               2 "$rc"
-assert_has "apply not done: says so"              "run 'reloca.to -s apply' first" "$out"
+assert_has "apply not done: says so"              "run 'migrator -s apply' first" "$out"
 RUN=$Q lib_sh 'phase_done apply'
 out=$(RUN=$Q lib_sh 'transfer_run' 2>&1); rc=$?
 assert_eq  "no donor: exit 2"                     2 "$rc"
@@ -225,7 +225,7 @@ out=$(RUN=$Q lib_sh 'DONOR_HOST=10.0.0.12; OPT[compress]=bzip2; transfer_run' 2>
 assert_eq  "compress=bzip2: exit 4"               4 "$rc"
 assert_has "compress=bzip2: names what it wants"  "want lz4, zstd, gzip or none" "$out"
 printf '[target]\ndata=ssh compress=lz4\n[volumes]\nsrc=/dev/sda9\tkind=part\tfs=ext4\tsize=1\tused=-\tmethod=rsync\ttarget=/dev/sda9\ttsize=1\tmount=/x\tnum=9\tnotes=-\n' > "$Q/plan"
-out=$(RUN=$Q lib_sh 'DONOR_HOST=10.0.0.12; RELOCA_PROBE_S=0; tx_require_tools() { :; }; transfer_run' 2>&1); rc=$?
+out=$(RUN=$Q lib_sh 'DONOR_HOST=10.0.0.12; MIGRATOR_PROBE_S=0; tx_require_tools() { :; }; transfer_run' 2>&1); rc=$?
 assert_eq  "unknown method: exit 4"               4 "$rc"
 assert_has "unknown method: names it"             "unknown method 'rsync'" "$out"
 printf '[target]\ndata=ssh compress=lz4\n[volumes]\n' > "$Q/plan"
@@ -243,7 +243,7 @@ RUN=$W lib_sh 'phase_done apply'
 # stands in for "ssh ... -n -- REMOTE": runs REMOTE locally
 printf '#!/bin/bash\nwhile [ "$1" != -- ]; do shift; done; shift\nexec bash -c "$1"\n' > "$W/fakessh"; chmod 0755 "$W/fakessh"
 t0=$(date +%s)
-out=$(RUN=$W RELOCA_WATCHDOG_S=3 RELOCA_POLL_S=1 RELOCA_PROBE_S=0 lib_sh '
+out=$(RUN=$W MIGRATOR_WATCHDOG_S=3 MIGRATOR_POLL_S=1 MIGRATOR_PROBE_S=0 lib_sh '
 	DONOR_HOST=127.0.0.1
 	ssh_data_cmd() { echo "$RUN/fakessh"; }
 	rsh() { return 0; }                         # rm -f of the status files, cat of the status
@@ -255,7 +255,7 @@ t1=$(date +%s)
 assert_eq  "watchdog: exit 1"                     1 "$rc"
 assert_has "watchdog: reason"                     "no progress for 3s (watchdog); pipeline killed" "$out"
 assert_has "watchdog: names the volume and the redo command" "volume /dev/fake (5) failed" "$out"
-assert_has "watchdog: redo hint"                  "reloca.to -o redo=5 -s transfer" "$out"
+assert_has "watchdog: redo hint"                  "migrator -o redo=5 -s transfer" "$out"
 assert_eq  "watchdog: state failed"               failed "$(RUN=$W lib_sh 'tx_vol_state /dev/fake')"
 assert_eq  "watchdog: rc recorded"                1 "$(RUN=$W lib_sh 'tx_state_get vol./dev/fake.rc')"
 assert_eq  "watchdog: state file has the key"     "vol./dev/fake=failed" "$(grep '^vol./dev/fake=' "$W/state")"
@@ -273,7 +273,7 @@ if [ -z "$e2e_reason" ] && { command -v ss >/dev/null 2>&1 && ss -Hltn 2>/dev/nu
 if [ -n "$e2e_reason" ]; then
 	skip "e2e loopback block transfer" "$e2e_reason"
 else
-	E=$(mktemp -d /root/.reloca-e2e.XXXXXX); chmod 700 "$E"; mkdir -p "$E/run"
+	E=$(mktemp -d /root/.migrator-e2e.XXXXXX); chmod 700 "$E"; mkdir -p "$E/run"
 	ssh-keygen -q -t ed25519 -N '' -f "$E/hostkey"
 	ssh-keygen -q -t ed25519 -N '' -f "$E/run/id_ed25519"
 	cp "$E/run/id_ed25519.pub" "$E/authorized_keys"; chmod 600 "$E/authorized_keys"
@@ -297,7 +297,7 @@ else
 			printf 'src=%s\tkind=part\tfs=ext4\tsize=67108864\tused=18874368\tmethod=block\ttarget=%s\ttsize=67108864\tmount=/\tnum=7\tnotes=-\n' "$E/a.img" "$E/b.img"
 		} > "$E/run/plan"
 		RUN=$E/run lib_sh 'phase_done apply'
-		out=$(RUN=$E/run TX_RSTATUS=$E/src.status TX_RLOG=$E/src.log RELOCA_POLL_S=1 RELOCA_PRINT_S=0 RELOCA_PROBE_S=1 \
+		out=$(RUN=$E/run TX_RSTATUS=$E/src.status TX_RLOG=$E/src.log MIGRATOR_POLL_S=1 MIGRATOR_PRINT_S=0 MIGRATOR_PROBE_S=1 \
 			lib_sh 'DONOR_HOST=127.0.0.1; DONOR_PORT=2398; SSH_DATA_PORT=2398; export DONOR_HOST DONOR_PORT; transfer_run' 2>&1); rc=$?
 		assert_eq  "e2e: exit 0"                     0 "$rc"
 		assert_has "e2e: probe printed an estimate"  "estimated total: 18.0M at " "$out"
@@ -322,7 +322,7 @@ else
 		assert_has "e2e: summary file"               "transfer: done" "$(cat "$E/run/summary")"
 		assert_fail "e2e: pgid file removed"         test -e "$E/run/tx.pgid"
 		# a second run streams nothing: the volume is done
-		out=$(RUN=$E/run TX_RSTATUS=$E/src.status TX_RLOG=$E/src.log RELOCA_PROBE_S=0 \
+		out=$(RUN=$E/run TX_RSTATUS=$E/src.status TX_RLOG=$E/src.log MIGRATOR_PROBE_S=0 \
 			lib_sh 'DONOR_HOST=127.0.0.1; DONOR_PORT=2398; SSH_DATA_PORT=2398; export DONOR_HOST DONOR_PORT; transfer_run' 2>&1); rc=$?
 		assert_eq  "e2e rerun: exit 0"               0 "$rc"
 		assert_has "e2e rerun: skipped as done"      "done earlier, skipped (-o redo=7 repeats it)" "$out"
@@ -332,7 +332,7 @@ else
 		# the watchdog is capped so a regression cannot hang the suite
 		if command -v busybox >/dev/null 2>&1 && busybox nc 2>&1 | grep -q -- '-l'; then
 			truncate -s 0 "$E/b.img"; truncate -s 64M "$E/b.img"
-			out=$(RUN=$E/run TX_RSTATUS=$E/src.status TX_RLOG=$E/src.log RELOCA_POLL_S=1 RELOCA_PRINT_S=0 RELOCA_PROBE_S=0 RELOCA_WATCHDOG_S=40 \
+			out=$(RUN=$E/run TX_RSTATUS=$E/src.status TX_RLOG=$E/src.log MIGRATOR_POLL_S=1 MIGRATOR_PRINT_S=0 MIGRATOR_PROBE_S=0 MIGRATOR_WATCHDOG_S=40 \
 				lib_sh 'DONOR_HOST=127.0.0.1; DONOR_PORT=2398; SSH_DATA_PORT=2398; export DONOR_HOST DONOR_PORT; OPT[redo]=7; OPT[data]=raw; transfer_run' 2>&1); rc=$?
 			assert_eq  "e2e raw: exit 0"                 0 "$rc"
 			assert_has "e2e raw: trusted-LAN warning"    "data=raw: plain TCP" "$out"

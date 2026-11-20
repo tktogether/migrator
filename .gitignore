@@ -1,6 +1,6 @@
 dist/
 lib/VERSION
-bin/reloca-agent
+bin/migrator-agent
 research
 *.o
 .workbuddy/

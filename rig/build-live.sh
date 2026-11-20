@@ -35,7 +35,7 @@ mmdebstrap --variant=minbase \
 
 echo "[live] install the tool + marker + network config..."
 SHORT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo dev)
-cat > "$CH/etc/reloca-live-release" <<EOF
+cat > "$CH/etc/migrator-live-release" <<EOF
 BUILD_ID=migrator-$SHORT-$(date +%Y%m%d)
 CODENAME=$SUITE
 MIRROR=$MIRROR
@@ -45,7 +45,7 @@ echo migrator-live > "$CH/etc/hostname"
 # zram: half the RAM as zstd compressed swap, so a 1 GiB recipient survives the
 # postfix/initramfs peak (D23)
 install -d -m0755 "$CH/usr/local/sbin"
-cat > "$CH/usr/local/sbin/reloca-zram" <<'ZRAM'
+cat > "$CH/usr/local/sbin/migrator-zram" <<'ZRAM'
 #!/bin/sh
 command -v zramctl >/dev/null 2>&1 || exit 0
 [ -e /dev/zram0 ] || modprobe zram 2>/dev/null || exit 0
@@ -54,24 +54,24 @@ dev=$(zramctl --find --size "${sz}K" --algorithm zstd 2>/dev/null) || exit 0
 mkswap "$dev" >/dev/null 2>&1 || exit 0
 swapon -p 100 "$dev" 2>/dev/null || true
 ZRAM
-cat > "$CH/etc/systemd/system/reloca-zram.service" <<'UNIT'
+cat > "$CH/etc/systemd/system/migrator-zram.service" <<'UNIT'
 [Unit]
-Description=reloca zram swap (half the RAM, zstd)
+Description=migrator zram swap (half the RAM, zstd)
 After=local-fs.target
 Before=swap.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/reloca-zram
+ExecStart=/usr/local/sbin/migrator-zram
 [Install]
 WantedBy=swap.target
 UNIT
-printf 'vm.swappiness=100\n' > "$CH/etc/sysctl.d/99-reloca-zram.conf"
-# static network for providers that do not run DHCP: reloca.ip=IP/PREFIX,GW,DNS1[,DNS2]
-cat > "$CH/usr/local/sbin/reloca-live-net" <<'NET'
+printf 'vm.swappiness=100\n' > "$CH/etc/sysctl.d/99-migrator-zram.conf"
+# static network for providers that do not run DHCP: migrator.ip=IP/PREFIX,GW,DNS1[,DNS2]
+cat > "$CH/usr/local/sbin/migrator-live-net" <<'NET'
 #!/bin/sh
 spec=
-for w in $(cat /proc/cmdline); do case $w in reloca.ip=*) spec=${w#reloca.ip=} ;; esac; done
+for w in $(cat /proc/cmdline); do case $w in migrator.ip=*) spec=${w#migrator.ip=} ;; esac; done
 [ -n "$spec" ] || exit 0
 addr=${spec%%,*}; rest=${spec#*,}; gw=${rest%%,*}; dns=${rest#*,}
 ip link set eth0 up 2>/dev/null || exit 0
@@ -82,33 +82,33 @@ ip addr add "$addr" dev eth0 || exit 0
 [ -z "$dns" ] || for d in $(echo "$dns" | tr ',' ' '); do echo "nameserver $d" >> /etc/resolv.conf; done
 exit 0
 NET
-cat > "$CH/etc/systemd/system/reloca-live-net.service" <<'UNIT'
+cat > "$CH/etc/systemd/system/migrator-live-net.service" <<'UNIT'
 [Unit]
-Description=reloca live static network (reloca.ip=)
+Description=migrator live static network (migrator.ip=)
 After=local-fs.target
 Before=network.target ssh.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/reloca-live-net
+ExecStart=/usr/local/sbin/migrator-live-net
 [Install]
 WantedBy=multi-user.target
 UNIT
-chmod 0755 "$CH/usr/local/sbin/reloca-zram" "$CH/usr/local/sbin/reloca-live-net"
+chmod 0755 "$CH/usr/local/sbin/migrator-zram" "$CH/usr/local/sbin/migrator-live-net"
 install -d "$CH/etc/systemd/system/swap.target.wants" "$CH/etc/systemd/system/multi-user.target.wants"
-ln -sf /etc/systemd/system/reloca-zram.service "$CH/etc/systemd/system/swap.target.wants/reloca-zram.service"
-ln -sf /etc/systemd/system/reloca-live-net.service "$CH/etc/systemd/system/multi-user.target.wants/reloca-live-net.service"
+ln -sf /etc/systemd/system/migrator-zram.service "$CH/etc/systemd/system/swap.target.wants/migrator-zram.service"
+ln -sf /etc/systemd/system/migrator-live-net.service "$CH/etc/systemd/system/multi-user.target.wants/migrator-live-net.service"
 install -d -m0700 "$CH/root/.ssh"
 install -m0600 "$KEY.pub" "$CH/root/.ssh/authorized_keys"
-install -d -m0755 "$CH/usr/local/sbin" "$CH/usr/local/lib/reloca.to"
-install -m0755 "$REPO/bin/reloca.to" "$CH/usr/local/sbin/reloca.to"
-if [ -x "$REPO/agent/reloca-agent" ]; then
-	install -m0755 "$REPO/agent/reloca-agent" "$CH/usr/local/sbin/reloca-agent"
+install -d -m0755 "$CH/usr/local/sbin" "$CH/usr/local/lib/migrator"
+install -m0755 "$REPO/bin/migrator" "$CH/usr/local/sbin/migrator"
+if [ -x "$REPO/agent/migrator-agent" ]; then
+	install -m0755 "$REPO/agent/migrator-agent" "$CH/usr/local/sbin/migrator-agent"
 else
-	echo "WARN: agent/reloca-agent missing (make agent first); on-line mode will lack the agent" >&2
+	echo "WARN: agent/migrator-agent missing (make agent first); on-line mode will lack the agent" >&2
 fi
-install -m0644 "$REPO"/lib/*.sh "$CH/usr/local/lib/reloca.to/"
-[ -f "$REPO/lib/VERSION" ] && install -m0644 "$REPO/lib/VERSION" "$CH/usr/local/lib/reloca.to/" || true
+install -m0644 "$REPO"/lib/*.sh "$CH/usr/local/lib/migrator/"
+[ -f "$REPO/lib/VERSION" ] && install -m0644 "$REPO/lib/VERSION" "$CH/usr/local/lib/migrator/" || true
 
 echo "[live] squashfs ($PROFILE)..."
 mkdir -p "$ISODIR/live" "$ISODIR/isolinux"

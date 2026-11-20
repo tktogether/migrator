@@ -169,7 +169,7 @@ nf_ifcfg_rename() {   # OLD NEW
 			}
 		}
 		# the connection UUID belongs to the old profile: NetworkManager makes a new one
-		for (i = 1; i <= NR; i++) { s = lines[i]; if (hit && s ~ /^[ \t]*UUID=/) s = "# reloca.to: " s; print s }
+		for (i = 1; i <= NR; i++) { s = lines[i]; if (hit && s ~ /^[ \t]*UUID=/) s = "# migrator: " s; print s }
 	}'
 }
 nf_keyfile_rename() {   # OLD NEW
@@ -271,7 +271,7 @@ nf_is_primary() {
 nf_udev_rules() {   # PINS = name:mac,name:mac,...
 	local p name mac
 	printf '%s\n' \
-		'# reloca.to: written by the migration, replaces the rules of the donor machine.' \
+		'# migrator: written by the migration, replaces the rules of the donor machine.' \
 		'# Pins the interface names the migrated config relies on to the MACs of THIS' \
 		'# machine. Best-effort: udev renames NICs in parallel, and when the kernel has' \
 		'# already given eth0 to another NIC the rename fails with EEXIST; on a box with' \

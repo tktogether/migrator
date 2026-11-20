@@ -1,7 +1,7 @@
 #!/bin/bash
 # tests/cases/install.sh — tools/install.sh against a fake "current/" served by
 # python3 http.server on 127.0.0.1: a good tarball installs under a scratch
-# PREFIX and 'reloca.to version' reports the tarball's VERSION; a corrupted
+# PREFIX and 'migrator version' reports the tarball's VERSION; a corrupted
 # SHA256SUMS, a listing without a tarball and a dead URL all fail without
 # touching what is installed. Needs python3 and curl or wget; else SKIP.
 set -u
@@ -14,14 +14,14 @@ command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || { skip "in
 
 # --- a fake dist/: the real bin/ and lib/ under a made-up version --------------
 VER=0.0-test
-DIST=$RUN/dist; SRC=$DIST/reloca-$VER
+DIST=$RUN/dist; SRC=$DIST/migrator-$VER
 mkdir -p "$SRC/tools" "$DIST/prefix"
 cp -a "$REPO/bin" "$REPO/lib" "$SRC/"
 echo "$VER" > "$SRC/lib/VERSION"
-tar -C "$DIST" -czf "$DIST/reloca-$VER.tar.gz" "reloca-$VER"
+tar -C "$DIST" -czf "$DIST/migrator-$VER.tar.gz" "migrator-$VER"
 rm -rf "$SRC"
 cp "$INSTALL" "$DIST/install.sh"
-( cd "$DIST" && sha256sum "reloca-$VER.tar.gz" install.sh > SHA256SUMS )
+( cd "$DIST" && sha256sum "migrator-$VER.tar.gz" install.sh > SHA256SUMS )
 
 # --- serve it: own PID only, killed on exit ------------------------------------
 HTTPD=
@@ -44,47 +44,47 @@ URL=http://127.0.0.1:$PORT
 PREFIX=$RUN/prefix
 
 # --- good install -------------------------------------------------------------
-out=$(RELOCA_URL=$URL RELOCA_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
+out=$(MIGRATOR_URL=$URL MIGRATOR_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
 assert_eq  "install.sh exits 0"                    0 "$rc"
-assert_ok  "bin/reloca.to installed and executable" test -x "$PREFIX/sbin/reloca.to"
-assert_ok  "lib/common.sh installed"               test -r "$PREFIX/lib/reloca.to/common.sh"
-assert_eq  "lib/VERSION installed"                 "$VER" "$(cat "$PREFIX/lib/reloca.to/VERSION" 2>/dev/null)"
-assert_has "install.sh prints the version"         "reloca.to $VER" "$out"
-assert_has "install.sh prints the -h hint"         "reloca.to -h" "$out"
-assert_fail "no staging dir left behind"           sh -c "ls -d '$PREFIX/lib'/.reloca.to* 2>/dev/null | grep -q ."
-# bin/reloca.to looks for its libs at $HERE/../lib or /usr/local/lib/reloca.to
+assert_ok  "bin/migrator installed and executable" test -x "$PREFIX/sbin/migrator"
+assert_ok  "lib/common.sh installed"               test -r "$PREFIX/lib/migrator/common.sh"
+assert_eq  "lib/VERSION installed"                 "$VER" "$(cat "$PREFIX/lib/migrator/VERSION" 2>/dev/null)"
+assert_has "install.sh prints the version"         "migrator $VER" "$out"
+assert_has "install.sh prints the -h hint"         "migrator -h" "$out"
+assert_fail "no staging dir left behind"           sh -c "ls -d '$PREFIX/lib'/.migrator* 2>/dev/null | grep -q ."
+# bin/migrator looks for its libs at $HERE/../lib or /usr/local/lib/migrator
 # only, so under a scratch PREFIX it cannot find them: check what can be checked
-out=$(cd / && "$PREFIX/sbin/reloca.to" -V 2>&1); rc=$?
-assert_eq  "installed reloca.to runs"               0 "$rc"
+out=$(cd / && "$PREFIX/sbin/migrator" -V 2>&1); rc=$?
+assert_eq  "installed migrator runs"               0 "$rc"
 case "$out" in
-	*"lib=$PREFIX/lib/reloca.to"*)
-		assert_has "installed reloca.to reports the tarball version" "reloca.to $VER " "$out";;
-	*)	skip "installed reloca.to reports the tarball version" "driver resolves libs at \$HERE/../lib or /usr/local/lib/reloca.to, not under PREFIX=$PREFIX";;
+	*"lib=$PREFIX/lib/migrator"*)
+		assert_has "installed migrator reports the tarball version" "migrator $VER " "$out";;
+	*)	skip "installed migrator reports the tarball version" "driver resolves libs at \$HERE/../lib or /usr/local/lib/migrator, not under PREFIX=$PREFIX";;
 esac
-assert_ok  "installed reloca.to parses"             bash -n "$PREFIX/sbin/reloca.to"
+assert_ok  "installed migrator parses"             bash -n "$PREFIX/sbin/migrator"
 
 # --- re-install replaces the old lib dir wholesale -----------------------------
-touch "$PREFIX/lib/reloca.to/stale.sh"
-out=$(RELOCA_URL=$URL RELOCA_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
+touch "$PREFIX/lib/migrator/stale.sh"
+out=$(MIGRATOR_URL=$URL MIGRATOR_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
 assert_eq   "re-install exits 0"                   0 "$rc"
-assert_fail "re-install drops files of the old lib" test -e "$PREFIX/lib/reloca.to/stale.sh"
+assert_fail "re-install drops files of the old lib" test -e "$PREFIX/lib/migrator/stale.sh"
 
 # --- failures leave the installed tree alone -----------------------------------
 cp "$DIST/SHA256SUMS" "$DIST/SHA256SUMS.good"
 sed -i "s/^[0-9a-f]\{8\}/00000000/" "$DIST/SHA256SUMS"
-out=$(RELOCA_URL=$URL RELOCA_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
+out=$(MIGRATOR_URL=$URL MIGRATOR_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
 assert_eq  "bad checksum exits 1"                  1 "$rc"
 assert_has "bad checksum says so"                  "checksum" "$out"
-assert_eq  "bad checksum keeps the installed lib"  "$VER" "$(cat "$PREFIX/lib/reloca.to/VERSION")"
-assert_ok  "bad checksum keeps the installed bin"  test -x "$PREFIX/sbin/reloca.to"
+assert_eq  "bad checksum keeps the installed lib"  "$VER" "$(cat "$PREFIX/lib/migrator/VERSION")"
+assert_ok  "bad checksum keeps the installed bin"  test -x "$PREFIX/sbin/migrator"
 
-grep -v 'reloca-.*\.tar\.gz' "$DIST/SHA256SUMS.good" > "$DIST/SHA256SUMS"
-out=$(RELOCA_URL=$URL RELOCA_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
+grep -v 'migrator-.*\.tar\.gz' "$DIST/SHA256SUMS.good" > "$DIST/SHA256SUMS"
+out=$(MIGRATOR_URL=$URL MIGRATOR_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
 assert_eq  "SHA256SUMS without a tarball exits 1"  1 "$rc"
 assert_has "SHA256SUMS without a tarball says so"  "tarball" "$out"
 cp "$DIST/SHA256SUMS.good" "$DIST/SHA256SUMS"
 
-out=$(RELOCA_URL=$URL/nowhere RELOCA_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
+out=$(MIGRATOR_URL=$URL/nowhere MIGRATOR_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
 assert_eq  "404 exits 1"                           1 "$rc"
 assert_has "404 names the URL"                     "$URL/nowhere/SHA256SUMS" "$out"
 

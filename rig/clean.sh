@@ -9,7 +9,7 @@ sleep 1
 KEY=/root/rig/rig_ed25519
 SSHOPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=8 -i $KEY"
 for port in 2255 2233 2266; do
-	timeout 15 ssh $SSHOPTS -p $port root@127.0.0.1 "tmux kill-server 2>/dev/null; pkill -f 'reloca[.]to'; pkill -f 'relay-tunnel[.]sh'; true" >/dev/null 2>&1
+	timeout 15 ssh $SSHOPTS -p $port root@127.0.0.1 "tmux kill-server 2>/dev/null; pkill -f 'migrator[.]to'; pkill -f 'relay-tunnel[.]sh'; true" >/dev/null 2>&1
 done
 for p in donor recipient target; do
 	[ -f /root/rig/$p.pid ] && kill "$(cat /root/rig/$p.pid)" 2>/dev/null && rm -f /root/rig/$p.pid

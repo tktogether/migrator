@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/agent-test.sh — the quick test of agent/reloca-agent on THIS host (root,
+# tools/agent-test.sh — the quick test of agent/migrator-agent on THIS host (root,
 # loop devices, no QEMU, about a minute): a filesystem on a loop device is
 # written to all the time by a generator while "pull" copies it from a local
 # "serve" (the --ssh command is just the agent itself), freezes it for the
@@ -7,14 +7,14 @@
 # Cases: ext4 on a whole loop device, by bpf and by ftrace; ext4 on a
 # PARTITION of a loop device (traced on the whole disk with the partition's
 # start subtracted); a block device as the target (O_DIRECT writes, BLKZEROOUT);
-# the cutover poller (pull --cutover, then ping/thaw through reloca-agent cutover);
+# the cutover poller (pull --cutover, then ping/thaw through migrator-agent cutover);
 # a vfat (no freeze) under a filesystem that must still be frozen.
 # usage: tools/agent-test.sh [-k] [-s SIZE_MiB] [-g GENSLEEP]
 # exit: 0 PASS · 1 a case failed · 2 environment
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 set -u
 REPO=$(readlink -f "$(dirname "$0")/..")
-AGENT=$REPO/agent/reloca-agent
+AGENT=$REPO/agent/migrator-agent
 KEEP=0; SIZE=2048; GENSLEEP=0.05
 while getopts ks:g:h o; do case $o in k) KEEP=1;; s) SIZE=$OPTARG;; g) GENSLEEP=$OPTARG;; *) sed -n '2,/^export PATH/p' "$0" | sed '$d;s/^# \{0,1\}//'; exit 2;; esac; done
 [ "$(id -u)" -eq 0 ] || { echo "run as root"; exit 2; }

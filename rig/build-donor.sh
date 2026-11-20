@@ -3,7 +3,7 @@
 # system (partition table + ext4 root with kernel/initramfs/services/payload).
 # D13: mmdebstrap (unprivileged containers cannot mknod, debootstrap fails).
 # Pure userspace: mkfs.ext4 -d populates the filesystem, the image is dd'd into
-# the partition; no loop mounts. GRUB is NOT installed here — reloca.to's
+# the partition; no loop mounts. GRUB is NOT installed here — migrator's
 # postfix installs it on the target from the migrated rootfs.
 # Output: $HOME/rig/donor-disk.raw (2 GiB, sparse)
 set -euo pipefail

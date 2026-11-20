@@ -1,5 +1,5 @@
 #!/bin/bash
-# tests/cases/driver.sh — bin/reloca.to's CLI surface that needs no Live:
+# tests/cases/driver.sh — bin/migrator's CLI surface that needs no Live:
 # usage, -h, version, unknown command, bad -o, the full-Live gate, and the
 # "not implemented yet" stop of a phase whose lib is still a placeholder.
 # Everything runs with -n or stops before set_roles, so the build host's
@@ -7,7 +7,7 @@
 set -u
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/../lib.sh"
-M=$REPO/bin/reloca.to
+M=$REPO/bin/migrator
 
 out=$(bash "$M" 2>&1); rc=$?
 assert_eq  "no args exits 2"           2 "$rc"
@@ -15,7 +15,7 @@ assert_has "no args says DONOR is required" "DONOR is required" "$out"
 
 out=$(bash "$M" -h 2>&1); rc=$?
 assert_eq  "-h exits 0"                0 "$rc"
-assert_has "-h prints usage"           "usage: reloca.to" "$out"
+assert_has "-h prints usage"           "usage: migrator" "$out"
 assert_has "usage lists the exit codes" "exit: 0 ok" "$out"
 assert_has "usage is the header block, not a comment dump" "  -s STEP" "$out"
 case "$out" in *"export PATH"*) _fail "usage stops at the first code line" "contains export PATH";; *) _pass "usage stops at the first code line";; esac
@@ -25,9 +25,9 @@ assert_eq  "--help exits 0"            0 "$rc"
 out=$(bash "$M" -V 2>&1); rc=$?
 assert_eq  "version exits 0"           0 "$rc"
 if [ -e "$REPO/lib/VERSION" ]; then
-	skip "version prints 'reloca.to dev'" "lib/VERSION exists in the tree: $(cat "$REPO/lib/VERSION")"
+	skip "version prints 'migrator dev'" "lib/VERSION exists in the tree: $(cat "$REPO/lib/VERSION")"
 else
-	assert_has "version prints 'reloca.to dev' without lib/VERSION" "reloca.to dev" "$out"
+	assert_has "version prints 'migrator dev' without lib/VERSION" "migrator dev" "$out"
 fi
 assert_has "version names the lib dir" "lib=$REPO/lib" "$out"
 out=$(bash "$M" -n -y -i /dev/null -d /dev/sdz -o data=raw -o compress=none --option cutover=none -V 2>&1); rc=$?
@@ -42,7 +42,7 @@ assert_has "-o without = says so"      "bad -o badopt" "$out"
 out=$(bash "$M" -z -V 2>&1); rc=$?
 assert_eq  "unknown flag exits 2"      2 "$rc"
 
-if [ -r /etc/reloca-live-release ] || [ -r /etc/xserver-live-release ]; then
+if [ -r /etc/migrator-live-release ] || [ -r /etc/xserver-live-release ]; then
 	skip "all off-Live" "this host is a Live"
 else
 	rm -f "$RUN/failure" "$RUN/lock"
@@ -72,7 +72,7 @@ assert_has "-s plan without DONOR says so"   "DONOR is required" "$out"
 out=$(bash "$M" -n -l 1:2 -V 2>&1); rc=$?
 assert_eq  "-l is gone (usage error)"   2 "$rc"
 out=$(bash "$M" -n -o force=1 -s check /nonexistent 2>&1); rc=$?
-assert_has "role tag is 'destination'"  "[reloca.to destination]" "$out"
+assert_has "role tag is 'destination'"  "[migrator destination]" "$out"
 
 # check needs no Live; its lib is a placeholder until M1, and the driver has to
 # say so instead of pretending. Under -n set_roles never calls hostnamectl.

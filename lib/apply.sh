@@ -25,8 +25,8 @@
 #                             raid=1 ([target] disk2=): every disk step runs on both disks
 #                             ([sfdisk] on disk, [sfdisk2] on disk2), the gate shows both,
 #                             the fingerprint covers both (state target.*2)
-#   cleanup_all               "reloca.to -s cleanup" and the crash path: registered cleanup
-#                             snippets, umount under /mnt/reloca.to (and /mnt/localboot),
+#   cleanup_all               "migrator -s cleanup" and the crash path: registered cleanup
+#                             snippets, umount under /mnt/migrator (and /mnt/localboot),
 #                             vgchange -an the plan's VGs, setrw the disks apply marked
 #                             (state setro.disks), the donor's data sshd and mounts through
 #                             the master, ssh_disconnect, the lock; idempotent, never dies
@@ -65,7 +65,7 @@
 # shellcheck disable=SC2119,SC2120  # apply_target_disk/apply_setro_others take optional arguments other libs pass
 APPLY_NODE_TIMEOUT=${APPLY_NODE_TIMEOUT:-30}   # seconds to wait for partition/LV nodes
 APPLY_MD_RETRIES=${APPLY_MD_RETRIES:-5}        # mdadm --stop attempts (udev holds members for a while)
-APPLY_MNT=/mnt/reloca.to
+APPLY_MNT=/mnt/migrator
 APPLY_SFDISK=/usr/sbin/sfdisk                  # absolute on purpose: the image carries two sfdisk binaries
 AP_PLAN=${AP_PLAN:-}                           # the plan apply_run works on ($RUN/plan)
 AP_TREE=                                       # lsblk's view of the target disk at the start of apply_run
@@ -247,7 +247,7 @@ apply_md_create() {
 		if [ -n "$DRY" ]; then echo "(dry) would check that $md is at least $want bytes"; else
 			have=$(apply_read_size "$md")
 			if [ -z "$want" ] || [ -z "$have" ] || [ "$have" -lt "$want" ]; then
-				die "$EX_FAIL" "$md is ${have:-?} bytes, the plan needs ${want:-?} (mdadm reserved more than --data-offset=8M?): re-run 'reloca.to -s plan DONOR'"
+				die "$EX_FAIL" "$md is ${have:-?} bytes, the plan needs ${want:-?} (mdadm reserved more than --data-offset=8M?): re-run 'migrator -s plan DONOR'"
 			fi
 			say "$md: $(human "$have") as planned"
 		fi
@@ -432,7 +432,7 @@ apply_pregate() {   # DISK [SFX]
 		elif [ "$(opt force 0)" = 1 ]; then
 			warn "target disk changed since the plan (force=1): ${bad[*]}"
 		else
-			die "$EX_ENV" "target disk changed since the plan: ${bad[*]} (re-run 'reloca.to -s plan DONOR', or force=1)"
+			die "$EX_ENV" "target disk changed since the plan: ${bad[*]} (re-run 'migrator -s plan DONOR', or force=1)"
 		fi
 	fi
 	say "fingerprint: $disk is $pid, $size bytes, $lsec/$psec sectors, as planned"
@@ -491,7 +491,7 @@ apply_deactivate() {   # DISK [DISK2]
 			case $t in raid*) [ -n "${seen[md:$p]:-}" ] || { seen[md:$p]=1; mds+=("$p"); };; esac
 		done <<< "$trees"
 	fi
-	[ ${#busy[@]} -eq 0 ] || die "$EX_ENV" "unmount first: ${busy[*]} (reloca.to never unmounts what it did not mount)"
+	[ ${#busy[@]} -eq 0 ] || die "$EX_ENV" "unmount first: ${busy[*]} (migrator never unmounts what it did not mount)"
 	for p in "${AP_SWAPS[@]}"; do grep -q "^$p " /proc/swaps 2>/dev/null && swaps+=("$p"); done
 	for p in "${swaps[@]}"; do [ -n "${seen[$p]:-}" ] && continue; seen[$p]=1; must swapoff "$p"; acted=$((acted+1)); done
 	for vg in "${AP_VGS[@]}"; do must vgchange -an "$vg"; acted=$((acted+1)); done
@@ -626,7 +626,7 @@ apply_run() {
 	AP_PLAN=$RUN/plan
 	local inv=$RUN/recipient.inv disk id label why disk2='' id2=''
 	plan_check "$AP_PLAN"                                  # dies 4 on anything it dislikes
-	[ -r "$inv" ] || die "$EX_ENV" "no recipient inventory at $inv (run 'reloca.to -s plan DONOR' first)"
+	[ -r "$inv" ] || die "$EX_ENV" "no recipient inventory at $inv (run 'migrator -s plan DONOR' first)"
 	disk=$(plan_get "$AP_PLAN" target disk); id=$(ap_dec "$(plan_get "$AP_PLAN" target id)"); label=$(plan_get "$AP_PLAN" target label)
 	[ -n "$disk" ] || die "$EX_PLAN" "[target] lacks disk="
 	[ -n "$label" ] || die "$EX_PLAN" "[target] lacks label="
@@ -694,17 +694,17 @@ apply_run() {
 }
 
 # ==============================================================================
-# cleanup_all — "reloca.to -s cleanup" and the crash path; idempotent, never dies
+# cleanup_all — "migrator -s cleanup" and the crash path; idempotent, never dies
 # ==============================================================================
 cleanup_all() {
 	local undid=() m vg d list plan=$RUN/plan target user host port fd
 	local -a mounts=()
-	say "cleanup: undoing what reloca.to left behind"
+	say "cleanup: undoing what migrator left behind"
 	# 1. what this process registered (setrw, umounts, the donor's data sshd)
 	if [ ${#CLEANUP_CMDS[@]} -gt 0 ]; then
 		say "cleanup: ${#CLEANUP_CMDS[@]} registered action(s)"; undid+=("${#CLEANUP_CMDS[@]} registered actions"); run_cleanup
 	fi
-	# 2. mounts under /mnt/reloca.to and /mnt/localboot, deepest first (mounted with
+	# 2. mounts under /mnt/migrator and /mnt/localboot, deepest first (mounted with
 	#    --make-private, so a plain umount suffices; lazy as the last resort)
 	mapfile -t mounts < <(findmnt -rn -o TARGET 2>/dev/null | grep -E "^($APPLY_MNT|/mnt/localboot)(/|$)" | awk '{ print length($0), $0 }' | sort -rn | cut -d' ' -f2-)
 	for m in "${mounts[@]}"; do
@@ -735,12 +735,12 @@ cleanup_all() {
 	#    and our mount points; then the master itself. Rule 4: nothing else is touched there.
 	target=$(state_get donor.target)
 	if [ "$(state_get mode)" = online ]; then
-		say "cleanup: on-line donor: nothing to undo there (the agent's tmpfs stays; a frozen donor is thawed only by 'reloca.to -s cutover -o cutover=rollback')"
+		say "cleanup: on-line donor: nothing to undo there (the agent's tmpfs stays; a frozen donor is thawed only by 'migrator -s cutover -o cutover=rollback')"
 	elif [ -S "$RUN/ssh.sock" ] && [ -n "$target" ]; then
 		user=${target%%@*}; host=${target#*@}; port=${host##*:}; host=${host%:*}
 		# shellcheck disable=SC2016  # $p and $m expand on the donor, not here
 		run ssh -S "$RUN/ssh.sock" -o ControlMaster=no -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR -p "${port:-22}" "${user:-root}@$host" -- \
-			sh -c 'p=$(cat /run/reloca-sshd.pid 2>/dev/null); [ -n "$p" ] && [ "$(cat /proc/$p/comm 2>/dev/null)" = sshd ] && kill "$p"; rm -f /run/reloca-sshd.pid; for m in $(findmnt -rn -o TARGET | grep "^/mnt/reloca.to/" | sort -r); do umount "$m"; done; true' \
+			sh -c 'p=$(cat /run/migrator-sshd.pid 2>/dev/null); [ -n "$p" ] && [ "$(cat /proc/$p/comm 2>/dev/null)" = sshd ] && kill "$p"; rm -f /run/migrator-sshd.pid; for m in $(findmnt -rn -o TARGET | grep "^/mnt/migrator/" | sort -r); do umount "$m"; done; true' \
 			|| warn "cleanup: the donor could not be reached through the master"
 		undid+=("donor sshd/mounts")
 	fi
@@ -752,7 +752,7 @@ cleanup_all() {
 	if [ -e "$RUN/lock" ]; then
 		if { exec {fd}<"$RUN/lock"; } 2>/dev/null && flock -n "$fd"; then
 			[ -n "$DRY" ] || rm -f "$RUN/lock"; undid+=("lock")
-		else say "cleanup: $RUN/lock is held by a running reloca.to, left in place"; fi
+		else say "cleanup: $RUN/lock is held by a running migrator, left in place"; fi
 		[ -z "${fd:-}" ] || exec {fd}<&-
 	fi
 	if [ ${#undid[@]} -gt 0 ]; then say "cleanup: done (${undid[*]})"; else say "cleanup: done, nothing to undo"; fi

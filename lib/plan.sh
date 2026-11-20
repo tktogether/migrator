@@ -117,8 +117,8 @@ pc_refuse() { pc_header; echo "# ERROR: $*"; echo "ERROR: $*" >&2; exit 4; }
 pc_header() {
 	local dsum rsum
 	dsum=$(sha256sum "$D" | cut -c1-64); rsum=$(sha256sum "$R" | cut -c1-64)
-	echo "# reloca.to plan  donor=$(pc_f "$D_HOST" bootip -)/$(pc_f "$D_HOST" hostname -) ($(pl_enc_sp "$(pc_f "$D_HOST" dmi_vendor -) $(pc_f "$D_HOST" dmi_product -) SN=$(pc_f "$D_HOST" dmi_serial -)"), $(pl_enc_sp "$(pc_f "$D_OS" pretty unknown-os)"))  recipient=$(pc_f "$R_HOST" hostname -) ($(pl_enc_sp "$(pc_f "$R_HOST" dmi_vendor -) $(pc_f "$R_HOST" dmi_product -) SN=$(pc_f "$R_HOST" dmi_serial -)"), boot=$(pc_f "$R_HOST" bootnic -)/$(pc_f "$R_HOST" bootmac -))"
-	echo "# inv_sha256=$dsum:$rsum  reloca=${O[reloca]}  live=${O[live]}  date=${O[date]}"
+	echo "# migrator plan  donor=$(pc_f "$D_HOST" bootip -)/$(pc_f "$D_HOST" hostname -) ($(pl_enc_sp "$(pc_f "$D_HOST" dmi_vendor -) $(pc_f "$D_HOST" dmi_product -) SN=$(pc_f "$D_HOST" dmi_serial -)"), $(pl_enc_sp "$(pc_f "$D_OS" pretty unknown-os)"))  recipient=$(pc_f "$R_HOST" hostname -) ($(pl_enc_sp "$(pc_f "$R_HOST" dmi_vendor -) $(pc_f "$R_HOST" dmi_product -) SN=$(pc_f "$R_HOST" dmi_serial -)"), boot=$(pc_f "$R_HOST" bootnic -)/$(pc_f "$R_HOST" bootmac -))"
+	echo "# inv_sha256=$dsum:$rsum  migrator=${O[migrator]}  live=${O[live]}  date=${O[date]}"
 	local w; for w in "${WARNS[@]}"; do echo "# WARN: $w"; done
 }
 
@@ -126,7 +126,7 @@ pc_main() {
 	local D=$1 R=$2 DISK=$3; shift 3
 	[ -r "$D" ] || { echo "ERROR: cannot read donor inventory $D" >&2; echo "# ERROR: cannot read donor inventory $D"; exit 4; }
 	[ -r "$R" ] || { echo "ERROR: cannot read recipient inventory $R" >&2; echo "# ERROR: cannot read recipient inventory $R"; exit 4; }
-	local -A O=([label]=auto [root]=auto [data]=ssh [compress]=lz4 [driver]="" [nic]=eth0 [donor-nic]="" [nic-pin]=1 [boot-part]="" [cloudinit]=disable [bootorder]=pxe [force]=0 [raid]=0 [reloca]=- [live]=- [date]=-)
+	local -A O=([label]=auto [root]=auto [data]=ssh [compress]=lz4 [driver]="" [nic]=eth0 [donor-nic]="" [nic-pin]=1 [boot-part]="" [cloudinit]=disable [bootorder]=pxe [force]=0 [raid]=0 [migrator]=- [live]=- [date]=-)
 	local kv k; for kv in "$@"; do case $kv in *=*) k=${kv%%=*}; O[${k//_/-}]=${kv#*=};; *) echo "ERROR: bad option '$kv' (want key=value)" >&2; exit 4;; esac; done
 	case ${O[label]} in auto|gpt|dos) ;; *) echo "ERROR: label=${O[label]}: want auto|gpt|dos" >&2; exit 4;; esac
 	case ${O[root]} in auto|block|files) ;; *) echo "ERROR: root=${O[root]}: want auto|block|files" >&2; exit 4;; esac
@@ -253,10 +253,10 @@ pc_target_disk() {
 	fi
 	R_FW=$(pc_f "$R_HOST" fw bios); R_SB=$(pc_f "$R_HOST" secureboot 0)
 	R_BOOTMAC=$(pc_f "$R_HOST" bootmac -); R_BOOTNIC=$(pc_f "$R_HOST" bootnic -)
-	# on-line relocation: the inventory came from the donor's running OS (host.online=1);
+	# on-line migration: the inventory came from the donor's running OS (host.online=1);
 	# the volumes are copied by the agent in passes and frozen for the last one
 	ONLINE=$(pc_f "$D_HOST" online 0)
-	[ "$ONLINE" != 1 ] || pc_warn "on-line relocation: the donor keeps running; block volumes are copied in passes by reloca-agent, file volumes by tar incremental passes, all frozen for the final pass (mode=online)"
+	[ "$ONLINE" != 1 ] || pc_warn "on-line migration: the donor keeps running; block volumes are copied in passes by migrator-agent, file volumes by tar incremental passes, all frozen for the final pass (mode=online)"
 }
 
 # --- R2: firmware ----------------------------------------------------------------------
@@ -422,7 +422,7 @@ pc_slots() {
 			pc_content "$dev"; kind=$CT_KIND; md=$dev
 		fi
 		case $kind in
-			none) [ "$(pc_f "$r" disk)" = "$BASE" ] && [ "$(pc_f "$r" fstype -)" != - ] && pc_warn "donor partition $dev ($(pc_f "$r" fstype)) has nothing reloca.to can carry: skipped"; continue;;
+			none) [ "$(pc_f "$r" disk)" = "$BASE" ] && [ "$(pc_f "$r" fstype -)" != - ] && pc_warn "donor partition $dev ($(pc_f "$r" fstype)) has nothing migrator can carry: skipped"; continue;;
 			pv) [ "$(pc_f "$r" disk)" = "$BASE" ] || [ -n "$(pc_f "$CT_REC" vg)" ] || continue;;
 		esac
 		if [ "$(pc_f "$r" disk)" = "$BASE" ]; then pc_add_slot "$r" "$md" "$kind" ""
@@ -557,7 +557,7 @@ pc_layout() {
 	# disk2 (own GUIDs) and one mdadm --create per data slot (R16)
 	SFDISK=(); SFDISK2=(); MDLINES=(); MD_DEVS=; ESP2_TARGET=-
 	local hn mduuid line2 geom
-	hn=$(pc_f "$D_OS" hostname reloca); hn=${hn%%.*}; hn=${hn:0:24}
+	hn=$(pc_f "$D_OS" hostname migrator); hn=${hn%%.*}; hn=${hn:0:24}
 	pos=$PL_MIB
 	if [ "$BIOS_GRUB" != - ]; then
 		geom="start=$((pos / T_LSEC)), size=$((PL_MIB / T_LSEC)), type=$PL_GPT_BIOS"
@@ -1024,15 +1024,15 @@ plan_check() {
 	local plan=${1:-$RUN/plan} p=() inv cur disk size lsec label dev start psize end prev=0 prevdev="" line n
 	local raid disk2 size2 geom sec thisdisk thissize md a b
 	local -A PSIZE=() LVSZ=() LVFREE=() VGPV=() VGOTH=() MKT=() IDK=() PNUM=()
-	[ -r "$plan" ] || die "$EX_PLAN" "no plan to check at $plan (run 'reloca.to -s plan DONOR' first)"
-	grep -q '^\[target\]' "$plan" && grep -q '^\[volumes\]' "$plan" && grep -q '^\[sfdisk\]' "$plan" || die "$EX_PLAN" "$plan is not a reloca.to plan (missing [target]/[volumes]/[sfdisk])"
+	[ -r "$plan" ] || die "$EX_PLAN" "no plan to check at $plan (run 'migrator -s plan DONOR' first)"
+	grep -q '^\[target\]' "$plan" && grep -q '^\[volumes\]' "$plan" && grep -q '^\[sfdisk\]' "$plan" || die "$EX_PLAN" "$plan is not a migrator plan (missing [target]/[volumes]/[sfdisk])"
 	# 1. the inventories the plan was computed from must be the ones on disk now
 	inv=$(sed -n 's/^# inv_sha256=\([^ ]*\).*/\1/p' "$plan" | head -1)
 	if [ -r "$RUN/donor.inv" ] && [ -r "$RUN/recipient.inv" ]; then
 		cur="$(sha256sum "$RUN/donor.inv" | cut -c1-64):$(sha256sum "$RUN/recipient.inv" | cut -c1-64)"
 		if [ "$inv" != "$cur" ]; then
 			if [ "$(opt force 0)" = 1 ]; then warn "inventories changed since the plan was made (inv_sha256 differs): continuing because force=1"
-			else p+=("inventories changed since the plan was made (inv_sha256 differs): re-run 'reloca.to -s plan DONOR', or force=1 to override"); fi
+			else p+=("inventories changed since the plan was made (inv_sha256 differs): re-run 'migrator -s plan DONOR', or force=1 to override"); fi
 		fi
 	elif [ "$(opt force 0)" = 1 ]; then warn "no inventories in $RUN to compare the plan against (force=1)"
 	else p+=("no $RUN/{donor,recipient}.inv to compare the plan against (force=1 to skip)"); fi
@@ -1174,7 +1174,7 @@ plan_build() {
 		v=$(opt "$k"); [ -z "$v" ] || args+=("$k=$v")
 	done
 	v=${LIVE_ID:-$(live_build_id)}
-	args+=("reloca=$(reloca_version)" "live=${v:--}" "date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')")
+	args+=("migrator=$(migrator_version)" "live=${v:--}" "date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')")
 	say "planning $disk from $d and $r${args[*]:+ (${args[*]})}"
 	plan_compute "$d" "$r" "$disk" "${args[@]}" > "$RUN/plan.new" 2> "$RUN/plan.warn"; rc=$?
 	while read -r line; do
@@ -1204,7 +1204,7 @@ plan_build() {
 plan_summary() {
 	local plan=$1 line k v
 	say "план записан: $plan${DRY:+ (dry)}"
-	sed -n '1s/^# reloca.to plan  //p' "$plan" | awk '{
+	sed -n '1s/^# migrator plan  //p' "$plan" | awk '{
 		d = ""; r = ""
 		for (i = 1; i <= NF; i++) { if (index($i, "donor=") == 1) side = "d"; if (index($i, "recipient=") == 1) side = "r"
 			if (side == "d") d = d " " $i; else r = r " " $i }
@@ -1229,5 +1229,5 @@ plan_summary() {
 	echo "  postfix:   $(plan_section "$plan" postfix)"
 	echo "  network:   $(plan_section "$plan" network | tr '\n' ' ')"
 	grep '^# WARN: ' "$plan" | sed 's/^# WARN: /  WARN: /'
-	echo "  далее: ${EDITOR:-vi} $plan  →  reloca.to -s check  →  reloca.to -s apply"
+	echo "  далее: ${EDITOR:-vi} $plan  →  migrator -s check  →  migrator -s apply"
 }

@@ -1,18 +1,18 @@
 #!/bin/bash
 # tests/cases/options.sh — the -o surface, in one place. The registry in
 # lib/common.sh is the source of truth; this case keeps the usage header, the
-# operator manual and the table on reloca.to from drifting away from it, and
+# operator manual and the table on migrator from drifting away from it, and
 # proves that a mistyped key is refused instead of being quietly ignored.
 set -u
 # shellcheck source=tests/lib.sh
 . "$(dirname "$0")/../lib.sh"
-M=$REPO/bin/reloca.to
+M=$REPO/bin/migrator
 
 # the registry: three lines in lib/common.sh, read without sourcing it
-keys=$(sed -n 's/^RELOCA_OPTS_[A-Z]*="\(.*\)"$/\1/p' "$REPO/lib/common.sh" | tr ' ' '\n' | grep -c .)
-assert_eq "the registry has three groups" 3 "$(grep -c '^RELOCA_OPTS_[A-Z]*=' "$REPO/lib/common.sh")"
+keys=$(sed -n 's/^MIGRATOR_OPTS_[A-Z]*="\(.*\)"$/\1/p' "$REPO/lib/common.sh" | tr ' ' '\n' | grep -c .)
+assert_eq "the registry has three groups" 3 "$(grep -c '^MIGRATOR_OPTS_[A-Z]*=' "$REPO/lib/common.sh")"
 if [ "$keys" -gt 30 ]; then _pass "the registry lists the options ($keys)"; else _fail "the registry lists the options" "only $keys"; fi
-ALL=$(sed -n 's/^RELOCA_OPTS_[A-Z]*="\(.*\)"$/\1/p' "$REPO/lib/common.sh" | tr ' ' '\n' | grep . | LC_ALL=C sort)
+ALL=$(sed -n 's/^MIGRATOR_OPTS_[A-Z]*="\(.*\)"$/\1/p' "$REPO/lib/common.sh" | tr ' ' '\n' | grep . | LC_ALL=C sort)
 
 # 1. no key is listed twice, and every key is one -o would accept
 dups=$(echo "$ALL" | uniq -d)
@@ -24,17 +24,17 @@ assert_eq "every key is lowercase with hyphens" "" "$bad"
 usage=$(bash "$M" -h 2>&1)
 miss=
 for k in $ALL; do case "$usage" in *"$k="*) ;; *) miss="$miss $k";; esac; done
-assert_eq "reloca.to -h documents every key" "" "$miss"
-assert_has "the usage header points at the full reference" "reloca.to/options/" "$usage"
+assert_eq "migrator -h documents every key" "" "$miss"
+assert_has "the usage says how every key is found" "migrator -h" "$usage"
 
-# 3. the operator manual documents each of them (it is published at reloca.to
+# 3. the operator manual documents each of them (it is published at migrator
 #    and kept out of the public tree, so this runs where the manual is)
-if [ -r "$REPO/docs/reloca.to.md" ]; then
+if [ -r "$REPO/docs/migrator.md" ]; then
 	miss=
-	for k in $ALL; do grep -q "\`$k=\`" "$REPO/docs/reloca.to.md" || miss="$miss $k"; done
-	assert_eq "docs/reloca.to.md documents every key" "" "$miss"
+	for k in $ALL; do grep -q "\`$k=\`" "$REPO/docs/migrator.md" || miss="$miss $k"; done
+	assert_eq "docs/migrator.md documents every key" "" "$miss"
 else
-	skip "the manual documents every key" "no docs/reloca.to.md in this tree"
+	skip "the manual documents every key" "no docs/migrator.md in this tree"
 fi
 
 # 4. the site's reference page carries exactly the same keys, no more, no less
@@ -65,7 +65,7 @@ out=$(bash "$M" -o maxest=600 -V 2>&1); rc=$?
 assert_eq  "a mistyped -o key exits 2"      2 "$rc"
 assert_has "it names the key"               "unknown option -o maxest" "$out"
 assert_has "it names the near miss"         "did you mean max-est=" "$out"
-assert_has "it points at the reference"     "reloca.to/options/" "$out"
+assert_has "it says where the keys are listed" "migrator -h" "$out"
 out=$(bash "$M" -o nonsense=1 -V 2>&1); rc=$?
 assert_eq  "a key nobody knows exits 2"     2 "$rc"
 case "$out" in *"did you mean"*) _fail "no near miss is invented" "got: $out";; *) _pass "no near miss is invented";; esac

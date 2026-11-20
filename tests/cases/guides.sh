@@ -45,8 +45,8 @@ for g in guides.GUIDES:
 print('; '.join(bad))")
 assert_eq "every guide is complete and in three languages" "" "$out"
 
-# the gate: a guide dated tomorrow is nowhere, with RELOCA_PREVIEW_ALL it is everywhere
-OUT=$(mktemp -d /var/tmp/xslive-reloca-guides.XXXXXX) || exit 1
+# the gate: a guide dated tomorrow is nowhere, with MIGRATOR_PREVIEW_ALL it is everywhere
+OUT=$(mktemp -d /var/tmp/xslive-migrator-guides.XXXXXX) || exit 1
 trap 'rm -rf "$OUT"' EXIT
 today=$(cd "$REPO" && python3 -c "
 import datetime, sys; sys.path.insert(0, 'site'); import guides
@@ -75,7 +75,7 @@ for s in $fut; do
 	if grep -q "guides/$s/" "$OUT/now/sitemap.xml"; then _fail "not in the sitemap yet: $s" "it is there"; else _pass "not in the sitemap yet: $s"; fi
 	if grep -q "guides/$s/" "$OUT/now/ru/guides/index.html"; then _fail "not on the index yet: $s" "it is there"; else _pass "not on the index yet: $s"; fi
 done
-out=$(cd "$REPO" && RELOCA_PREVIEW_ALL=1 python3 site/build.py "$OUT/all" 2>&1)
+out=$(cd "$REPO" && MIGRATOR_PREVIEW_ALL=1 python3 site/build.py "$OUT/all" 2>&1)
 assert_has "preview renders the whole queue" "($total of $total guides live, preview" "$out"
 for s in $fut; do
 	if [ -s "$OUT/all/guides/$s/index.html" ]; then _pass "preview shows: $s"; else _fail "preview shows: $s" "missing"; fi
@@ -84,11 +84,11 @@ done
 # a guide page must carry what a search engine and a reader need
 for s in $pub; do
 	html=$(cat "$OUT/now/ru/guides/$s/index.html")
-	assert_has "$s: canonical"      '<link rel="canonical" href="https://reloca.to/ru/guides/' "$html"
+	assert_has "$s: canonical"      '<link rel="canonical" href="https://migrator/ru/guides/' "$html"
 	assert_has "$s: hreflang"       'hreflang="x-default"' "$html"
 	assert_has "$s: breadcrumbs"    '"@type":"BreadcrumbList"' "$html"
 	assert_has "$s: the prose body" '<div class="prose">' "$html"
-	assert_has "$s: the way on"     'curl -fsSL reloca.to | bash' "$html"
+	assert_has "$s: the way on"     'curl -fsSL migrator | bash' "$html"
 	break
 done
 

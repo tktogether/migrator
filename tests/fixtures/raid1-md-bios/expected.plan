@@ -1,5 +1,5 @@
-# reloca.to plan  donor=10.0.0.12/24/web1 (Supermicro%20X11SSH-F%20SN=S123456, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-456 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-456, boot=eth0/52:54:00:cc:dd:01)
-# inv_sha256=cfcd465f2b6b0eddeaf13e7a229fdb5ef4e1784a7524678d9a46bc5ee830d6c8:d26c7760686ab69b2e7d59a1b3e31ff51f176c66bd0299c79f12b65b9a79cf90  reloca=-  live=-  date=-
+# migrator plan  donor=10.0.0.12/24/web1 (Supermicro%20X11SSH-F%20SN=S123456, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-456 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-456, boot=eth0/52:54:00:cc:dd:01)
+# inv_sha256=cfcd465f2b6b0eddeaf13e7a229fdb5ef4e1784a7524678d9a46bc5ee830d6c8:d26c7760686ab69b2e7d59a1b3e31ff51f176c66bd0299c79f12b65b9a79cf90  migrator=-  live=-  date=-
 # WARN: raid=1: /dev/vda + /dev/vdb become md RAID1 pairs per slot, ESP/bios_grub on both disks, the resync runs in the background after the copy (the donor's 2 md array(s) keep their UUIDs)
 # WARN: raid=1: the filesystems live on md arrays, not on partitions: PARTUUID= references are rewritten to UUID=
 [target]

@@ -25,10 +25,10 @@
 #   initrd-live.img       the initrd, for tools/live-entry.sh
 #   live/live/filesystem.squashfs   the same squashfs the ISO carries
 #
-# The Live carries: reloca.to + libs + the static agent, zram swap sized to
-# half the RAM (D23), a static-network unit driven by reloca.ip= on the boot
+# The Live carries: migrator + libs + the static agent, zram swap sized to
+# half the RAM (D23), a static-network unit driven by migrator.ip= on the boot
 # line (no DHCP bet), virtio/squashfs/overlay in the initramfs, and
-# /etc/reloca-live-release (E1: our own marker instead of XServer's).
+# /etc/migrator-live-release (E1: our own marker instead of XServer's).
 set -ex
 export DEBIAN_FRONTEND=noninteractive
 
@@ -79,22 +79,22 @@ iface eth0 inet dhcp
 IF
 printf 'nameserver 192.168.8.1\nnameserver 114.114.114.114\n' > "$CH/etc/resolv.conf"
 echo migrator-live > "$CH/etc/hostname"
-cat > "$CH/etc/reloca-live-release" <<REL
+cat > "$CH/etc/migrator-live-release" <<REL
 BUILD_ID=migrator-dev-$PROFILE-$(date +%Y%m%d)
 CODENAME=bookworm
 MIRROR=$MIRROR
 REL
 
-install -D -m0755 bin/reloca.to "$CH/usr/local/sbin/reloca.to"
-sed -i 's/\r$//' "$CH/usr/local/sbin/reloca.to"
-install -d -m0755 "$CH/usr/local/lib/reloca.to"
-install -m0644 lib/*.sh "$CH/usr/local/lib/reloca.to/"
-sed -i 's/\r$//' "$CH/usr/local/lib/reloca.to/"*.sh
-install -m0755 agent/reloca-agent "$CH/usr/local/sbin/reloca-agent"
-[ -f lib/VERSION ] && install -m0644 lib/VERSION "$CH/usr/local/lib/reloca.to/VERSION"
+install -D -m0755 bin/migrator "$CH/usr/local/sbin/migrator"
+sed -i 's/\r$//' "$CH/usr/local/sbin/migrator"
+install -d -m0755 "$CH/usr/local/lib/migrator"
+install -m0644 lib/*.sh "$CH/usr/local/lib/migrator/"
+sed -i 's/\r$//' "$CH/usr/local/lib/migrator/"*.sh
+install -m0755 agent/migrator-agent "$CH/usr/local/sbin/migrator-agent"
+[ -f lib/VERSION ] && install -m0644 lib/VERSION "$CH/usr/local/lib/migrator/VERSION"
 
 # zram: half the RAM as zstd swap, so a 1 GiB recipient can still run (D23)
-cat > "$CH/usr/local/sbin/reloca-zram" <<'ZRAM'
+cat > "$CH/usr/local/sbin/migrator-zram" <<'ZRAM'
 #!/bin/sh
 command -v zramctl >/dev/null 2>&1 || exit 0
 [ -e /dev/zram0 ] || modprobe zram 2>/dev/null || exit 0
@@ -103,25 +103,25 @@ dev=$(zramctl --find --size "${sz}K" --algorithm zstd 2>/dev/null) || exit 0
 mkswap "$dev" >/dev/null 2>&1 || exit 0
 swapon -p 100 "$dev" 2>/dev/null || true
 ZRAM
-cat > "$CH/etc/systemd/system/reloca-zram.service" <<'UNIT'
+cat > "$CH/etc/systemd/system/migrator-zram.service" <<'UNIT'
 [Unit]
-Description=reloca zram swap (half the RAM, zstd)
+Description=migrator zram swap (half the RAM, zstd)
 After=local-fs.target
 Before=swap.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/reloca-zram
+ExecStart=/usr/local/sbin/migrator-zram
 [Install]
 WantedBy=swap.target
 UNIT
-printf 'vm.swappiness=100\n' > "$CH/etc/sysctl.d/99-reloca-zram.conf"
+printf 'vm.swappiness=100\n' > "$CH/etc/sysctl.d/99-migrator-zram.conf"
 
-# static network from the boot line: reloca.ip=IP/PREFIX,GW,DNS1[,DNS2]
-cat > "$CH/usr/local/sbin/reloca-live-net" <<'NET'
+# static network from the boot line: migrator.ip=IP/PREFIX,GW,DNS1[,DNS2]
+cat > "$CH/usr/local/sbin/migrator-live-net" <<'NET'
 #!/bin/sh
 spec=
-for w in $(cat /proc/cmdline); do case $w in reloca.ip=*) spec=${w#reloca.ip=} ;; esac; done
+for w in $(cat /proc/cmdline); do case $w in migrator.ip=*) spec=${w#migrator.ip=} ;; esac; done
 [ -n "$spec" ] || exit 0
 addr=${spec%%,*}; rest=${spec#*,}; gw=${rest%%,*}; dns=${rest#*,}
 # eth0 only when net.ifnames=0 is on the boot line; a kernel that did not get it
@@ -139,22 +139,22 @@ ip addr add "$addr" dev "$dev" || exit 0
 [ -z "$dns" ] || for d in $(echo "$dns" | tr ',' ' '); do echo "nameserver $d" >> /etc/resolv.conf; done
 exit 0
 NET
-cat > "$CH/etc/systemd/system/reloca-live-net.service" <<'UNIT'
+cat > "$CH/etc/systemd/system/migrator-live-net.service" <<'UNIT'
 [Unit]
-Description=reloca live static network (reloca.ip=)
+Description=migrator live static network (migrator.ip=)
 After=local-fs.target
 Before=network.target ssh.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/reloca-live-net
+ExecStart=/usr/local/sbin/migrator-live-net
 [Install]
 WantedBy=multi-user.target
 UNIT
-chmod 0755 "$CH/usr/local/sbin/reloca-zram" "$CH/usr/local/sbin/reloca-live-net"
+chmod 0755 "$CH/usr/local/sbin/migrator-zram" "$CH/usr/local/sbin/migrator-live-net"
 install -d "$CH/etc/systemd/system/swap.target.wants" "$CH/etc/systemd/system/multi-user.target.wants"
-ln -sf /etc/systemd/system/reloca-zram.service "$CH/etc/systemd/system/swap.target.wants/reloca-zram.service"
-ln -sf /etc/systemd/system/reloca-live-net.service "$CH/etc/systemd/system/multi-user.target.wants/reloca-live-net.service"
+ln -sf /etc/systemd/system/migrator-zram.service "$CH/etc/systemd/system/swap.target.wants/migrator-zram.service"
+ln -sf /etc/systemd/system/migrator-live-net.service "$CH/etc/systemd/system/multi-user.target.wants/migrator-live-net.service"
 
 # the Live is often the first thing a virtio/NVMe host has to boot from
 grep -q '^squashfs' "$CH/etc/initramfs-tools/modules" 2>/dev/null || cat >> "$CH/etc/initramfs-tools/modules" <<'MOD'

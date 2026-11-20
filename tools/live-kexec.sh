@@ -2,10 +2,10 @@
 # live-kexec.sh — reboot THIS server (the migration source, usually at another
 # hosting provider where XServer's PXE is not available) into XServer Live OS
 # through kexec, keeping its IP address. Nothing on the disks is touched: the
-# Live runs from RAM. Afterwards reloca.to on the destination connects to it.
+# Live runs from RAM. Afterwards migrator on the destination connects to it.
 #
-#   curl -fsSL reloca.to/live | bash             # on the source, as root
-#   curl -fsSL reloca.to/live | bash -s -- -n    # show what would happen
+#   curl -fsSL migrator/live | bash             # on the source, as root
+#   curl -fsSL migrator/live | bash -s -- -n    # show what would happen
 #
 # usage: live-kexec.sh [-n] [-y] [-v] [-i IFACE] [-p PASSWORD] [-a PUBKEY] [-d DNS[,DNS]] [-c CMDLINE] [-u URL]
 #   -n          dry run: detect, download, build the command line, do not kexec
@@ -17,11 +17,12 @@
 #               destination can log in without the password (Live builds that know authorized_key=)
 #   -d DNS      resolver(s) for the Live (default: from /etc/resolv.conf, then 1.1.1.1 8.8.8.8)
 #   -c CMDLINE  extra kernel parameters (default: the console= of the running kernel)
-#   -u URL      the Live artefacts (kernel, image, rootfs, SHA256SUMS; default $RELOCA_LIVE_URL
-#               or http://boot.xserver.cloud/iso - the ISO flavour: Hyper-V/Xen drivers, NIC
-#               firmware; http://boot.xserver.cloud/live is the PXE flavour for XServer's own hardware)
-# env: RELOCA_LIVE_URL, RELOCA_KEXEC_URL (static kexec for systems without kexec-tools,
-#      default https://reloca.to/kexec)
+#   -u URL      the Live artefacts: a directory holding kernel, image, rootfs and
+#               SHA256SUMS. There is no built-in source - the Live is yours to host.
+#               This is the kexec path into a Live OS whose initramfs understands
+#               root=<URL>/rootfs; our own Live (rig/build-live-debootstrap.sh) does.
+# env: MIGRATOR_LIVE_URL (same as -u), MIGRATOR_KEXEC_URL (a static kexec binary for
+#      systems without kexec-tools)
 # exit: 0 kexec issued (or dry run) · 1 failure · 2 cannot run here (not root, no kexec,
 #       no network facts, too little RAM, unsupported interface)
 #
@@ -33,8 +34,8 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 set -u
 
-DRY=; YES=; VERB=; IFACE=; PASSWORD=; PUBKEY=; DNS=; EXTRA=; URL=${RELOCA_LIVE_URL:-http://boot.xserver.cloud/iso}
-KEXEC_URL=${RELOCA_KEXEC_URL:-https://reloca.to/kexec}
+DRY=; YES=; VERB=; IFACE=; PASSWORD=; PUBKEY=; DNS=; EXTRA=; URL=${MIGRATOR_LIVE_URL:-}
+KEXEC_URL=${MIGRATOR_KEXEC_URL:-}
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit "${1:-2}"; }
 while getopts "nyvi:p:a:d:c:u:h" o; do
 	case $o in
@@ -43,11 +44,13 @@ while getopts "nyvi:p:a:d:c:u:h" o; do
 	esac
 done
 shift $((OPTIND-1))
-say()  { echo "[reloca.to live] $*"; }
+say()  { echo "[migrator live] $*"; }
 vsay() { [ -z "$VERB" ] || say "$@"; }    # details: only with -v
-die()  { local c=1; case "$1" in [0-9]) c=$1; shift;; esac; echo "[reloca.to live] ERROR: $*" >&2; exit "$c"; }
+die()  { local c=1; case "$1" in [0-9]) c=$1; shift;; esac; echo "[migrator live] ERROR: $*" >&2; exit "$c"; }
 run()  { if [ -n "$DRY" ]; then echo "(dry) $*"; else [ -z "$VERB" ] || echo "+ $*"; "$@"; fi; }
 have() { command -v "$1" >/dev/null 2>&1; }
+
+[ -n "$URL" ] || die 2 "no Live artefacts: pass -u URL or set MIGRATOR_LIVE_URL (a directory holding kernel, image, rootfs, SHA256SUMS)"
 
 [ "$(id -u)" = 0 ] || die 2 "run as root"
 for t in ip awk sed sha256sum; do have "$t" || die 2 "$t is missing"; done
@@ -108,7 +111,7 @@ if [ -n "$GPU_DRV" ]; then EXTRA="$EXTRA xsdrm"; vsay "screen: $GPU_DRV here, th
 else vsay "screen: firmware framebuffer, kept as it is"; fi
 
 # --- the Live ------------------------------------------------------------------
-WORK=$(mktemp -d /run/reloca-live.XXXXXX 2>/dev/null) || WORK=$(mktemp -d /tmp/reloca-live.XXXXXX) || die "mktemp failed"
+WORK=$(mktemp -d /run/migrator-live.XXXXXX 2>/dev/null) || WORK=$(mktemp -d /tmp/migrator-live.XXXXXX) || die "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
 # which build: the PXE flavour (boot.xserver.cloud/live) is cut down for XServer's
 # own hardware; the ISO flavour (FLAVOR=iso in release) carries the drivers and
@@ -129,7 +132,7 @@ fi
 if [ -z "$PASSWORD" ]; then
 	PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 12)
 fi
-HOSTNAME_LIVE=source.reloca.to
+HOSTNAME_LIVE=source.migrator
 CMDLINE="ip=$IPADDR::$GW:$MASK:$HOSTNAME_LIVE::none:$DNS0:$DNS1 BOOTIF=01-${MAC//:/-} root=$URL/rootfs password=$PASSWORD $EXTRA"
 if [ -n "$PUBKEY" ]; then
 	[ -r "$PUBKEY" ] && PUBKEY=$(head -1 "$PUBKEY")
@@ -148,7 +151,7 @@ B=; N=; [ -t 1 ] && { B=$'\e[1m'; N=$'\e[0m'; }
 TITLE="XServer Live OS ${BUILD:-?}"; [ "$FLAVOR" != iso ] || TITLE="$TITLE (ISO build)"
 NOTE="Reboots this server into RAM; disks untouched."
 ROWS=("interface|$IFACE  $MAC" "address|$IPADDR/$PREFIX" "gateway|$GW" "dns|$DNS0  $DNS1"
-	"hostname|$HOSTNAME_LIVE" "-" "password|$PASSWORD" "ssh|ssh root@$IPADDR" "then|reloca.to $IPADDR on the destination")
+	"hostname|$HOSTNAME_LIVE" "-" "password|$PASSWORD" "ssh|ssh root@$IPADDR" "then|migrator $IPADDR on the destination")
 W=50
 for t in "$TITLE" "$NOTE"; do [ $(( ${#t} + 4 )) -le "$W" ] || W=$(( ${#t} + 4 )); done
 for r in "${ROWS[@]}"; do v=${r#*|}; [ $(( ${#v} + 15 )) -le "$W" ] || W=$(( ${#v} + 15 )); done
@@ -192,7 +195,7 @@ if [ ! -s "$WORK/kernel" ] || [ ! -s "$WORK/image" ]; then [ -n "$VERB" ] || ech
 if [ -n "$SUMS" ]; then vsay "kernel and image verified against SHA256SUMS"
 else say "WARN: no SHA256SUMS at $URL, downloads not verified"; fi
 
-# kexec binary: the distribution's package, else a static one from reloca.to.
+# kexec binary: the distribution's package, else a static one from migrator.
 # systemctl kexec execs /usr/sbin/kexec itself, so the static one lands there.
 if [ -z "$KEXEC" ]; then
 	if have apt-get; then
@@ -209,6 +212,7 @@ fi
 if [ -z "$KEXEC" ] && [ -n "$DRY" ]; then
 	echo "(dry) fetch $KEXEC_URL -> /usr/sbin/kexec (no kexec-tools here)"; KEXEC=/usr/sbin/kexec
 elif [ -z "$KEXEC" ]; then
+	[ -n "$KEXEC_URL" ] || die 2 "no kexec on this system: install kexec-tools, or set MIGRATOR_KEXEC_URL to a static kexec binary"
 	vsay "no kexec-tools: fetching a static kexec from $KEXEC_URL"
 	fetch "$KEXEC_URL" "$WORK/kexec" || die 2 "no kexec on this system and $KEXEC_URL is unreachable"
 	# tried from its final place: /run (initramfs-tools mounts it noexec) and a
@@ -240,7 +244,7 @@ rm -rf "$WORK"; trap - EXIT     # the segments live in kernel memory now
 echo "Rebooting into the Live. Reconnect in ~1 min: ssh root@$IPADDR"
 sync
 # systemd stops services and unmounts filesystems before the jump — clean
-# journals on the disks reloca.to is about to read; a bare kexec -e only when
+# journals on the disks migrator is about to read; a bare kexec -e only when
 # there is no systemd to do that
 if [ -d /run/systemd/system ] && have systemctl; then
 	systemctl kexec 2>/dev/null || { sleep 2; exec "$KEXEC" -e; }

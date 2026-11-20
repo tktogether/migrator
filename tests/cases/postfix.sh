@@ -27,7 +27,7 @@ set -u
 . "$REPO/lib/netfix.sh"
 FIX=$REPO/tests/fixtures
 TREE=$FIX/stand-debian-md-ext4-bios/raw/tree
-RELOCA_LIB=$REPO/lib; export RELOCA_LIB
+MIGRATOR_LIB=$REPO/lib; export MIGRATOR_LIB
 W=$RUN/pf-work; mkdir -p "$W"
 TAB=$(printf '\t')
 
@@ -87,7 +87,7 @@ assert_eq "shims come first on PATH" "$SHIM/grub-install $SHIM/chroot $SHIM/dd" 
 target_chroot() {
 	echo "chroot: $*" >> "$RUN/chroot.log"; echo "chroot: $*" >> "$RUN/seq.log"
 	case "$*" in
-		update-grub) [ -f "$TARGET_MNT/etc/default/grub.d/99-reloca-osprober.cfg" ] && echo "note: os-prober is off during update-grub" >> "$RUN/chroot.log";;
+		update-grub) [ -f "$TARGET_MNT/etc/default/grub.d/99-migrator-osprober.cfg" ] && echo "note: os-prober is off during update-grub" >> "$RUN/chroot.log";;
 		"dnf -y --setopt=install_weak_deps=False install "*|"yum -y install "*)
 			[ -z "${DNF_FAIL:-}" ] || return 1
 			if [ -n "${DNF_MAKES_EFI:-}" ]; then
@@ -146,7 +146,7 @@ pfrun() {
 }
 # changed DIR: every file that differs between DIR/pristine and DIR/t (our own bookkeeping apart)
 changed() {
-	( cd "$1" && { cd pristine && find . -type f; cd ../t && find . -type f; } | sort -u | grep -v '^\./var/lib/reloca\.to/' | while IFS= read -r f; do
+	( cd "$1" && { cd pristine && find . -type f; cd ../t && find . -type f; } | sort -u | grep -v '^\./var/lib/migrator\.to/' | while IFS= read -r f; do
 		cmp -s "pristine/$f" "t/$f" || echo "${f#./}"
 	done | xargs )
 }
@@ -181,7 +181,7 @@ printf '%s\n' "/dev/md0${TAB}-> UUID=6f1c9e2a-1111-4c3b-9d2e-0a1b2c3d4e50" "LABE
 	"UUID=A1B2-C3D4${TAB}+ /boot/efi vfat umask=0077 0 1" "UUID=FFFF-0000${TAB}+ /boot vfat defaults 0 2" > "$W/ident.mix"
 pf_fstab_rewrite "$W/ident.mix" < "$FIX/raw/fstab.txt" > "$W/fstab.mix.out"
 assert_has "fstab: a removed entry is commented out with its original line" \
-	"# reloca.to: removed (no target): LABEL=DATA              /data                   ext4    defaults,nofail 0 2" "$(cat "$W/fstab.mix.out")"
+	"# migrator: removed (no target): LABEL=DATA              /data                   ext4    defaults,nofail 0 2" "$(cat "$W/fstab.mix.out")"
 assert_eq "fstab: /dev/md0 /srv rewritten in place" "UUID=6f1c9e2a-1111-4c3b-9d2e-0a1b2c3d4e50                /srv                    ext4    defaults        1 2" "$(grep ' /srv ' "$W/fstab.mix.out")"
 assert_eq "fstab: unknown specs and comments untouched" "$(grep -v -e '^LABEL=DATA' -e '^/dev/md0' "$FIX/raw/fstab.txt")" "$(grep -v -e 'LABEL=DATA' -e ' /srv ' "$W/fstab.mix.out")"
 assert_eq "fstab: '+' entry is not added when the mount point is taken (/boot/efi, /boot)" "0" "$(grep -c -e '^UUID=A1B2-C3D4' -e '^UUID=FFFF-0000' "$W/fstab.mix.out")"
@@ -201,17 +201,17 @@ assert_eq "resume: anything else untouched"         "RESUME=auto"     "$(echo 'R
 pf_mdadm_conf_rewrite "" < "$TREE/etc/mdadm/mdadm.conf" > "$W/mdadm.out"
 assert_eq "mdadm: no active ARRAY line left" "0" "$(grep -c '^ARRAY' "$W/mdadm.out")"
 assert_eq "mdadm: both ARRAY lines commented, text kept" \
-	"# reloca.to: ARRAY /dev/md0 metadata=1.2 UUID=21422b8e:6e58604b:368cc1d7:0699304b|# reloca.to: ARRAY /dev/md1 metadata=1.2 UUID=af3c7edd:88ed4780:b9ebe855:da9d6a1a" \
-	"$(grep '^# reloca.to: ARRAY' "$W/mdadm.out" | paste -sd'|' -)"
-assert_eq "mdadm: other lines intact" "$(grep -v '^ARRAY' "$TREE/etc/mdadm/mdadm.conf")" "$(grep -v '^# reloca.to: ARRAY' "$W/mdadm.out")"
+	"# migrator: ARRAY /dev/md0 metadata=1.2 UUID=21422b8e:6e58604b:368cc1d7:0699304b|# migrator: ARRAY /dev/md1 metadata=1.2 UUID=af3c7edd:88ed4780:b9ebe855:da9d6a1a" \
+	"$(grep '^# migrator: ARRAY' "$W/mdadm.out" | paste -sd'|' -)"
+assert_eq "mdadm: other lines intact" "$(grep -v '^ARRAY' "$TREE/etc/mdadm/mdadm.conf")" "$(grep -v '^# migrator: ARRAY' "$W/mdadm.out")"
 assert_eq "mdadm: idempotent" "$(cat "$W/mdadm.out")" "$(pf_mdadm_conf_rewrite "" < "$W/mdadm.out")"
 assert_eq "lvm.conf: the stock file (every filter commented) is untouched" "$(sha256sum < "$TREE/etc/lvm/lvm.conf")" "$(pf_lvm_conf_rewrite < "$TREE/etc/lvm/lvm.conf" | sha256sum)"
 printf 'devices {\n\tfilter = [ "a|^/dev/md.*|", "r|.*|" ]\n\tglobal_filter = [ "a|x|",\n\t\t"r|.*|" ]\n\t# filter = [ "a|.*|" ]\n\tobtain_device_list_from_udev = 1\n}\n' > "$W/lvm.in"
 pf_lvm_conf_rewrite < "$W/lvm.in" > "$W/lvm.out"
 assert_eq "lvm.conf: active filter and (multi-line) global_filter commented, indentation kept" \
-	"${TAB}# reloca.to: filter = [ \"a|^/dev/md.*|\", \"r|.*|\" ]|${TAB}# reloca.to: global_filter = [ \"a|x|\",|${TAB}${TAB}# reloca.to: \"r|.*|\" ]" \
-	"$(grep 'reloca.to' "$W/lvm.out" | paste -sd'|' -)"
-assert_eq "lvm.conf: the rest intact" "$(grep -v 'filter = \|"r|' "$W/lvm.in"; echo; grep '# filter' "$W/lvm.in")" "$(grep -v 'reloca.to' "$W/lvm.out" | grep -v '# filter'; echo; grep '# filter' "$W/lvm.out")"
+	"${TAB}# migrator: filter = [ \"a|^/dev/md.*|\", \"r|.*|\" ]|${TAB}# migrator: global_filter = [ \"a|x|\",|${TAB}${TAB}# migrator: \"r|.*|\" ]" \
+	"$(grep 'migrator' "$W/lvm.out" | paste -sd'|' -)"
+assert_eq "lvm.conf: the rest intact" "$(grep -v 'filter = \|"r|' "$W/lvm.in"; echo; grep '# filter' "$W/lvm.in")" "$(grep -v 'migrator' "$W/lvm.out" | grep -v '# filter'; echo; grep '# filter' "$W/lvm.out")"
 assert_eq "lvm.conf: idempotent" "$(cat "$W/lvm.out")" "$(pf_lvm_conf_rewrite < "$W/lvm.out")"
 
 # --- (d) pure: kernel command line ----------------------------------------------------------------------
@@ -248,11 +248,11 @@ printf '%s\n' "GRUB_CMDLINE_LINUX_DEFAULT='quiet net.ifnames=1 rd.md.uuid=1:2'" 
 pf_grub_default_rewrite dropin keep "432b9631-01 432b9631-02" < "$W/grub.in" > "$W/grub.dropin"
 assert_eq "grub: single quotes kept, _DEFAULT only stripped (identity applies to both)" "GRUB_CMDLINE_LINUX_DEFAULT='quiet'" "$(sed -n 1p "$W/grub.dropin")"
 assert_eq "grub: an unquoted value gets quotes when it grows" 'GRUB_CMDLINE_LINUX="root=UUID=aaa net.ifnames=0 biosdevname=0"' "$(sed -n 2p "$W/grub.dropin")"
-assert_eq "grub: GRUB_FORCE_PARTUUID that is no partition of the target is commented out" '# reloca.to: GRUB_FORCE_PARTUUID=abcd0123-01' "$(sed -n 3p "$W/grub.dropin")"
+assert_eq "grub: GRUB_FORCE_PARTUUID that is no partition of the target is commented out" '# migrator: GRUB_FORCE_PARTUUID=abcd0123-01' "$(sed -n 3p "$W/grub.dropin")"
 assert_eq "grub: a dropin appending to \$GRUB_CMDLINE_LINUX inherits the tokens, comment kept" 'export GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX console=ttyS0"   # appended' "$(sed -n 4p "$W/grub.dropin")"
 assert_eq "grub: a value that does not end on its line is left alone" 'GRUB_CMDLINE_LINUX="broken' "$(sed -n 5p "$W/grub.dropin")"
 assert_eq "grub: GRUB_FORCE_PARTUUID of the target stays" 'GRUB_FORCE_PARTUUID=432B9631-02' "$(echo 'GRUB_FORCE_PARTUUID=432B9631-02' | pf_grub_default_rewrite dropin keep "432b9631-01 432b9631-02")"
-assert_eq "grub: ... unless the plan rewrote a PARTUUID" '# reloca.to: GRUB_FORCE_PARTUUID=432B9631-02' "$(echo 'GRUB_FORCE_PARTUUID=432B9631-02' | pf_grub_default_rewrite dropin comment "432b9631-01 432b9631-02")"
+assert_eq "grub: ... unless the plan rewrote a PARTUUID" '# migrator: GRUB_FORCE_PARTUUID=432B9631-02' "$(echo 'GRUB_FORCE_PARTUUID=432B9631-02' | pf_grub_default_rewrite dropin comment "432b9631-01 432b9631-02")"
 PF_IDENT=/dev/null
 assert_eq "grub: main without the variable gains it" "GRUB_TIMEOUT=1|GRUB_CMDLINE_LINUX=\"$NET\"" "$(echo 'GRUB_TIMEOUT=1' | pf_grub_default_rewrite main | paste -sd'|' -)"
 assert_eq "grub: a dropin without the variable does not" "GRUB_TIMEOUT=1" "$(echo 'GRUB_TIMEOUT=1' | pf_grub_default_rewrite dropin)"
@@ -268,10 +268,10 @@ assert_fail "partuuid_changed: not for the stand plan"      pu_changed "$(ident 
 
 # --- (e) pure: initramfs-tools ------------------------------------------------------------------------------
 pf_modules_rewrite virtio_blk,virtio_pci,virtio_net < "$TREE/etc/initramfs-tools/modules" > "$W/modules.out"
-assert_eq "modules: header + one line per driver appended" "# reloca.to: storage/network drivers of the recipient|virtio_blk|virtio_pci|virtio_net" "$(tail -4 "$W/modules.out" | paste -sd'|' -)"
+assert_eq "modules: header + one line per driver appended" "# migrator: storage/network drivers of the recipient|virtio_blk|virtio_pci|virtio_net" "$(tail -4 "$W/modules.out" | paste -sd'|' -)"
 assert_eq "modules: the original lines stay" "$(cat "$TREE/etc/initramfs-tools/modules")" "$(head -n -4 "$W/modules.out")"
 assert_eq "modules: idempotent" "$(cat "$W/modules.out")" "$(pf_modules_rewrite virtio_blk,virtio_pci,virtio_net < "$W/modules.out")"
-assert_eq "modules: virtio-blk already listed counts as virtio_blk" "virtio-blk|# reloca.to: storage/network drivers of the recipient|virtio_pci" "$(echo 'virtio-blk' | pf_modules_rewrite virtio_blk,virtio_pci | paste -sd'|' -)"
+assert_eq "modules: virtio-blk already listed counts as virtio_blk" "virtio-blk|# migrator: storage/network drivers of the recipient|virtio_pci" "$(echo 'virtio-blk' | pf_modules_rewrite virtio_blk,virtio_pci | paste -sd'|' -)"
 assert_eq "modules: driver=- adds nothing" "raid1" "$(echo 'raid1' | pf_modules_rewrite -)"
 assert_eq "initramfs.conf: MODULES=dep -> most (quoted too), others untouched" "MODULES=most|MODULES=\"most\" # x|MODULES=list|BUSYBOX=auto" "$(printf 'MODULES=dep\nMODULES="dep" # x\nMODULES=list\nBUSYBOX=auto\n' | pf_initramfs_conf_rewrite | paste -sd'|' -)"
 
@@ -290,15 +290,15 @@ A=$W/apply; mkdir -p "$A/t/etc" "$A/run"
 	RUN=$A/run; TARGET_MNT=$A/t; DRY=
 	printf 'one\ntwo\n' > "$A/t/etc/f"; chmod 0600 "$A/t/etc/f"; ino=$(stat -c %i "$A/t/etc/f")
 	printf 'one\ntwo\n' | pf_apply /etc/f > "$A/same.out"
-	echo "identical: out=[$(cat "$A/same.out")] backup=$([ -e "$A/t/var/lib/reloca.to/orig/etc/f" ] && echo y || echo n)"
+	echo "identical: out=[$(cat "$A/same.out")] backup=$([ -e "$A/t/var/lib/migrator/orig/etc/f" ] && echo y || echo n)"
 	printf 'one\n2\n' | pf_apply /etc/f > "$A/chg.out"
-	echo "changed: content=$(paste -sd, "$A/t/etc/f") inode=$([ "$(stat -c %i "$A/t/etc/f")" = "$ino" ] && echo same || echo new) mode=$(stat -c %a "$A/t/etc/f") backup=$(paste -sd, "$A/t/var/lib/reloca.to/orig/etc/f") bmode=$(stat -c %a "$A/t/var/lib/reloca.to/orig/etc/f")"
+	echo "changed: content=$(paste -sd, "$A/t/etc/f") inode=$([ "$(stat -c %i "$A/t/etc/f")" = "$ino" ] && echo same || echo new) mode=$(stat -c %a "$A/t/etc/f") backup=$(paste -sd, "$A/t/var/lib/migrator/orig/etc/f") bmode=$(stat -c %a "$A/t/var/lib/migrator/orig/etc/f")"
 	printf 'one\n3\n' | pf_apply "$A/t/etc/f" > /dev/null
-	echo "again: content=$(paste -sd, "$A/t/etc/f") backup=$(paste -sd, "$A/t/var/lib/reloca.to/orig/etc/f")"
+	echo "again: content=$(paste -sd, "$A/t/etc/f") backup=$(paste -sd, "$A/t/var/lib/migrator/orig/etc/f")"
 	printf 'x\n' | pf_new /etc/sub/new.conf 0640 > "$A/new.out"
-	echo "new: content=$(cat "$A/t/etc/sub/new.conf") mode=$(stat -c %a "$A/t/etc/sub/new.conf") backup=$([ -e "$A/t/var/lib/reloca.to/orig/etc/sub/new.conf" ] && echo y || echo n)"
+	echo "new: content=$(cat "$A/t/etc/sub/new.conf") mode=$(stat -c %a "$A/t/etc/sub/new.conf") backup=$([ -e "$A/t/var/lib/migrator/orig/etc/sub/new.conf" ] && echo y || echo n)"
 	printf 'y\n' | pf_new /etc/sub/new.conf 0640 > /dev/null
-	echo "new-again: content=$(cat "$A/t/etc/sub/new.conf") backup=$([ -e "$A/t/var/lib/reloca.to/orig/etc/sub/new.conf" ] && echo y || echo n)"
+	echo "new-again: content=$(cat "$A/t/etc/sub/new.conf") backup=$([ -e "$A/t/var/lib/migrator/orig/etc/sub/new.conf" ] && echo y || echo n)"
 	printf '' | pf_new /etc/empty.conf 0644
 	echo "empty-new: $([ -e "$A/t/etc/empty.conf" ] && echo created || echo absent)"
 	DRY=y
@@ -306,11 +306,11 @@ A=$W/apply; mkdir -p "$A/t/etc" "$A/run"
 	echo "dry: content=$(paste -sd, "$A/t/etc/f") new=$([ -e "$A/t/etc/dry.conf" ] && echo created || echo absent)"
 	DRY=
 	pf_remove /etc/sub/new.conf > /dev/null; pf_remove /etc/f > "$A/rm.out"; pf_remove /etc/nothing
-	echo "removed: f=$([ -e "$A/t/etc/f" ] && echo there || echo gone) backup=$(paste -sd, "$A/t/var/lib/reloca.to/orig/etc/f") created=$([ -e "$A/t/etc/sub/new.conf" ] && echo there || echo gone)"
+	echo "removed: f=$([ -e "$A/t/etc/f" ] && echo there || echo gone) backup=$(paste -sd, "$A/t/var/lib/migrator/orig/etc/f") created=$([ -e "$A/t/etc/sub/new.conf" ] && echo there || echo gone)"
 	# an absolute symlink is followed INSIDE the target; a path leading out of it is refused
 	mkdir -p "$A/t/usr/lib" "$A/outside"; echo inner > "$A/t/usr/lib/real.conf"; ln -s /usr/lib/real.conf "$A/t/etc/link.conf"
 	echo changed | pf_apply /etc/link.conf > /dev/null
-	echo "symlink: target=$(cat "$A/t/usr/lib/real.conf") still-link=$([ -L "$A/t/etc/link.conf" ] && echo y || echo n) backup=$(cat "$A/t/var/lib/reloca.to/orig/usr/lib/real.conf")"
+	echo "symlink: target=$(cat "$A/t/usr/lib/real.conf") still-link=$([ -L "$A/t/etc/link.conf" ] && echo y || echo n) backup=$(cat "$A/t/var/lib/migrator/orig/usr/lib/real.conf")"
 	echo keep > "$A/outside/x"; ln -s "../../outside" "$A/t/etc/out"
 	echo evil | pf_apply /etc/out/x > "$A/esc.out" 2>&1
 	echo "escape: outside=$(cat "$A/outside/x")"
@@ -350,8 +350,8 @@ done
 in_order "stand: steps run in order" "$D/out" "--- fstab" "--- mdadm" "--- kernel cmdline" "--- lvm" "--- network" "--- initramfs" "--- bootloader" "--- swapfiles" "--- cloud-init" "--- sysctl" "postfix done"
 assert_eq "stand: fstab unchanged (every UUID kept)" "$(cat "$TREE/etc/fstab")" "$(cat "$D/t/etc/fstab")"
 assert_eq "stand: mdadm.conf has no ARRAY" "0" "$(grep -c '^ARRAY' "$D/t/etc/mdadm/mdadm.conf")"
-assert_eq "stand: mdadm.conf keeps the rest" "$(grep -v '^ARRAY' "$TREE/etc/mdadm/mdadm.conf")" "$(grep -v '^# reloca.to: ARRAY' "$D/t/etc/mdadm/mdadm.conf")"
-assert_eq "stand: device.map removed, original kept" "gone (hd0)" "$([ -e "$D/t/boot/grub/device.map" ] && echo there || echo gone) $(head -1 "$D/t/var/lib/reloca.to/orig/boot/grub/device.map" | cut -f1)"
+assert_eq "stand: mdadm.conf keeps the rest" "$(grep -v '^ARRAY' "$TREE/etc/mdadm/mdadm.conf")" "$(grep -v '^# migrator: ARRAY' "$D/t/etc/mdadm/mdadm.conf")"
+assert_eq "stand: device.map removed, original kept" "gone (hd0)" "$([ -e "$D/t/boot/grub/device.map" ] && echo there || echo gone) $(head -1 "$D/t/var/lib/migrator/orig/boot/grub/device.map" | cut -f1)"
 assert_eq "stand: GRUB_CMDLINE_LINUX" 'GRUB_CMDLINE_LINUX="console=ttyS0,115200 console=tty0 net.ifnames=0 biosdevname=0"' "$(grep '^GRUB_CMDLINE_LINUX=' "$D/t/etc/default/grub")"
 assert_eq "stand: GRUB_CMDLINE_LINUX_DEFAULT untouched" 'GRUB_CMDLINE_LINUX_DEFAULT=""' "$(grep '^GRUB_CMDLINE_LINUX_DEFAULT=' "$D/t/etc/default/grub")"
 assert_eq "stand: GRUB_DISABLE_OS_PROBER is not written permanently" "0" "$(grep -rl 'GRUB_DISABLE_OS_PROBER' "$D/t/etc" | wc -l)"
@@ -363,7 +363,7 @@ assert_eq "stand: the exact chroot sequence" \
 	"chroot: update-initramfs -u -k all|chroot: grub-install --target=i386-pc --recheck /dev/vda|chroot: update-grub|note: os-prober is off during update-grub|chroot-q: sh -c command -v debconf-set-selections|chroot-q: dpkg-query -W grub-pc|chroot-sh: echo 'grub-pc grub-pc/install_devices multiselect /dev/vda' | debconf-set-selections" \
 	"$(paste -sd'|' "$D/chroot.log")"
 assert_eq "stand: nothing ran from the Live (no grub-install, dd, efibootmgr)" "" "$(cat "$D/live.log")"
-assert_eq "stand: the temporary os-prober cfg is gone" "gone" "$([ -e "$D/t/etc/default/grub.d/99-reloca-osprober.cfg" ] && echo there || echo gone)"
+assert_eq "stand: the temporary os-prober cfg is gone" "gone" "$([ -e "$D/t/etc/default/grub.d/99-migrator-osprober.cfg" ] && echo there || echo gone)"
 assert_eq "stand: interfaces renamed to eth0" "auto eth0|iface eth0 inet dhcp" "$(grep -E '^(auto|iface) e' "$D/t/etc/network/interfaces" | paste -sd'|' -)"
 assert_eq "stand: lo untouched" "auto lo|iface lo inet loopback" "$(grep -E ' lo( |$)' "$D/t/etc/network/interfaces" | paste -sd'|' -)"
 assert_eq "stand: udev pin for eth0 at the recipient's MAC" \
@@ -371,15 +371,15 @@ assert_eq "stand: udev pin for eth0 at the recipient's MAC" \
 assert_has "stand: netfix summary" "network: ens3 -> eth0 (interfaces), mac -> 52:54:00:cc:dd:01, pin=1 rules" "$(cat "$D/out")"
 assert_has "stand: list-only WARN for the iptables file" "WARN: /etc/iptables/rules.v4 mentions ens3" "$(cat "$D/out")"
 assert_eq "stand: ... which is never edited" "$(cat "$D/pristine/etc/iptables/rules.v4")" "$(cat "$D/t/etc/iptables/rules.v4")"
-assert_eq "stand: sysctl arp_notify" "net.ipv4.conf.all.arp_notify = 1" "$(grep -v '^#' "$D/t/etc/sysctl.d/99-reloca.conf")"
-assert_eq "stand: no cloud-init file (cloudinit=keep)" "absent" "$([ -e "$D/t/etc/cloud/cloud.cfg.d/99-reloca.cfg" ] && echo there || echo absent)"
+assert_eq "stand: sysctl arp_notify" "net.ipv4.conf.all.arp_notify = 1" "$(grep -v '^#' "$D/t/etc/sysctl.d/99-migrator.conf")"
+assert_eq "stand: no cloud-init file (cloudinit=keep)" "absent" "$([ -e "$D/t/etc/cloud/cloud.cfg.d/99-migrator.cfg" ] && echo there || echo absent)"
 for f in etc/default/grub etc/mdadm/mdadm.conf etc/network/interfaces etc/initramfs-tools/modules etc/initramfs-tools/initramfs.conf boot/grub/device.map; do
-	assert_ok "stand: original of /$f kept under var/lib/reloca.to/orig" cmp -s "$D/pristine/$f" "$D/t/var/lib/reloca.to/orig/$f"
+	assert_ok "stand: original of /$f kept under var/lib/migrator/orig" cmp -s "$D/pristine/$f" "$D/t/var/lib/migrator/orig/$f"
 done
-assert_eq "stand: unchanged files have no backup (fstab, lvm.conf)" "absent absent" "$([ -e "$D/t/var/lib/reloca.to/orig/etc/fstab" ] && echo there || echo absent) $([ -e "$D/t/var/lib/reloca.to/orig/etc/lvm/lvm.conf" ] && echo there || echo absent)"
-assert_eq "stand: files it created are listed, not backed up" "/etc/sysctl.d/99-reloca.conf /etc/udev/rules.d/70-persistent-net.rules" "$(sort "$D/t/var/lib/reloca.to/created" | xargs)"
+assert_eq "stand: unchanged files have no backup (fstab, lvm.conf)" "absent absent" "$([ -e "$D/t/var/lib/migrator/orig/etc/fstab" ] && echo there || echo absent) $([ -e "$D/t/var/lib/migrator/orig/etc/lvm/lvm.conf" ] && echo there || echo absent)"
+assert_eq "stand: files it created are listed, not backed up" "/etc/sysctl.d/99-migrator.conf /etc/udev/rules.d/70-persistent-net.rules" "$(sort "$D/t/var/lib/migrator/created" | xargs)"
 assert_eq "stand: every file postfix touched" \
-	"boot/grub/device.map etc/default/grub etc/initramfs-tools/initramfs.conf etc/initramfs-tools/modules etc/mdadm/mdadm.conf etc/network/interfaces etc/sysctl.d/99-reloca.conf etc/udev/rules.d/70-persistent-net.rules" \
+	"boot/grub/device.map etc/default/grub etc/initramfs-tools/initramfs.conf etc/initramfs-tools/modules etc/mdadm/mdadm.conf etc/network/interfaces etc/sysctl.d/99-migrator.conf etc/udev/rules.d/70-persistent-net.rules" \
 	"$(changed "$D")"
 assert_eq "stand: state: phase.postfix, netfix.done" "done 1" "$(RUN=$D state_get phase.postfix) $(RUN=$D state_get netfix.done)"
 assert_has "stand: diffs were printed" "@@" "$(cat "$D/out")"
@@ -401,7 +401,7 @@ before=$(treesum "$D/t")
 rc=$(pfrun "$D" 'DRY=y')
 assert_eq "dry: exits 0" 0 "$rc"
 assert_eq "dry: the tree is byte-identical" "$before" "$(treesum "$D/t")"
-assert_eq "dry: no var/lib/reloca.to in the tree" "absent" "$([ -e "$D/t/var/lib/reloca.to" ] && echo there || echo absent)"
+assert_eq "dry: no var/lib/migrator in the tree" "absent" "$([ -e "$D/t/var/lib/migrator" ] && echo there || echo absent)"
 assert_eq "dry: diffs printed (grub, mdadm, interfaces, modules, initramfs.conf, udev, sysctl)" "7" "$(grep -c '^@@' "$D/out")"
 assert_has "dry: chroot commands shown" "(dry) chroot update-initramfs -u -k all" "$(cat "$D/out")"
 assert_has "dry: device.map" "(dry) would remove /boot/grub/device.map" "$(cat "$D/out")"
@@ -417,7 +417,7 @@ rc=$(pfrun "$D" 'OPT[console]=ttyS1,115200')
 assert_eq "md: exits 0" 0 "$rc"
 assert_eq "md: /boot line's first field rewritten" "UUID=6f1c9e2a-1111-4c3b-9d2e-0a1b2c3d4e50   /boot   ext4${TAB}defaults   0 2" "$(grep '/boot' "$D/t/etc/fstab")"
 assert_eq "md: and nothing else in fstab" "1" "$(diff "$D/pristine/etc/fstab" "$D/t/etc/fstab" | grep -c '^>')"
-assert_ok "md: fstab original kept" cmp -s "$D/pristine/etc/fstab" "$D/t/var/lib/reloca.to/orig/etc/fstab"
+assert_ok "md: fstab original kept" cmp -s "$D/pristine/etc/fstab" "$D/t/var/lib/migrator/orig/etc/fstab"
 assert_eq "md: conf.d/resume of a kept swap untouched" "RESUME=UUID=3c4d5e6f-3333-4a2b-9c1d-7e8f9a0b1c02" "$(cat "$D/t/etc/initramfs-tools/conf.d/resume")"
 assert_has "md: -o console= appended" "console=tty0 net.ifnames=0 biosdevname=0 console=ttyS1,115200\"" "$(grep '^GRUB_CMDLINE_LINUX=' "$D/t/etc/default/grub")"
 assert_has "md: debconf gets the by-id name of the recipient disk" "multiselect /dev/disk/by-id/virtio-XSREC0' | debconf-set-selections" "$(cat "$D/chroot.log")"
@@ -464,7 +464,7 @@ in_order "rhel uefi: steps in order, selinux before sysctl" "$D/out" "--- fstab"
 assert_eq  "rhel uefi: dracut per donor kernel, grub2-mkconfig into the REAL grub.cfg, no grub2-install, nothing of initramfs-tools/update-grub" \
 	"chroot: dracut --force /boot/initramfs-5.14.0-427.13.1.el9_4.x86_64.img 5.14.0-427.13.1.el9_4.x86_64|chroot: dracut --force /boot/initramfs-5.14.0-362.24.1.el9_3.x86_64.img 5.14.0-362.24.1.el9_3.x86_64|chroot: env GRUB_DISABLE_OS_PROBER=true grub2-mkconfig -o /boot/grub2/grub.cfg" \
 	"$(grep '^chroot: ' "$D/chroot.log" | paste -sd'|' -)"
-assert_eq  "rhel uefi: dracut drop-in" "$(printf '%s\n' '# reloca.to: this system was migrated; the recipient needs these drivers in every initramfs' 'add_drivers+=" mpt3sas bnxt_en "' '# the command line comes from the boot entry, never baked into the image' 'hostonly_cmdline="no"' '# the udev pin of eth0 (netfix) must act before the network comes up in the initramfs' 'install_items+=" /etc/udev/rules.d/70-persistent-net.rules "')" "$(cat "$D/t/etc/dracut.conf.d/90-reloca.conf")"
+assert_eq  "rhel uefi: dracut drop-in" "$(printf '%s\n' '# migrator: this system was migrated; the recipient needs these drivers in every initramfs' 'add_drivers+=" mpt3sas bnxt_en "' '# the command line comes from the boot entry, never baked into the image' 'hostonly_cmdline="no"' '# the udev pin of eth0 (netfix) must act before the network comes up in the initramfs' 'install_items+=" /etc/udev/rules.d/70-persistent-net.rules "')" "$(cat "$D/t/etc/dracut.conf.d/90-migrator.conf")"
 assert_eq  "rhel uefi: the literal BLS options line gets the eth0 tokens, root=/resume=/rd.lvm.lv and \$tuned_params kept" \
 	'options root=/dev/mapper/rl-root ro resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root rd.lvm.lv=rl/swap $tuned_params net.ifnames=0 biosdevname=0' \
 	"$(grep '^options' "$D/t/boot/loader/entries/4f1c2d3e4a5b4c6d8e7f9a0b1c2d3e4f-5.14.0-503.el9.x86_64.conf")"
@@ -531,7 +531,7 @@ assert_has "rhel uefi->bios, second run: says they are there" "grub2-pc is in th
 D=$W/rhel-u2b-fail; mkrhel "$D" rocky9-uefi-to-bios
 rc=$(pfrun "$D" 'DNF_FAIL=1')
 assert_eq  "rhel uefi->bios, dnf fails: exit $EX_FAIL" "$EX_FAIL" "$rc"
-assert_has "rhel uefi->bios, dnf fails: the manual path" "installing grub2-pc grub2-pc-modules into the target failed: the BIOS boot code cannot be set up. By hand: 'rescue', chroot <root>, check /etc/resolv.conf and the repositories (dnf repolist; a RHEL without a subscription needs a reachable repo or the rpms by hand), dnf -y install grub2-pc grub2-pc-modules, then repeat 'reloca.to -s postfix'" "$(cat "$D/out")"
+assert_has "rhel uefi->bios, dnf fails: the manual path" "installing grub2-pc grub2-pc-modules into the target failed: the BIOS boot code cannot be set up. By hand: 'rescue', chroot <root>, check /etc/resolv.conf and the repositories (dnf repolist; a RHEL without a subscription needs a reachable repo or the rpms by hand), dnf -y install grub2-pc grub2-pc-modules, then repeat 'migrator -s postfix'" "$(cat "$D/out")"
 assert_eq  "rhel uefi->bios, dnf fails: no grub2-install" 0 "$(grep -c grub2-install "$D/chroot.log")"
 
 # --- (k3) rhel firmware change bios -> uefi (CentOS 7, yum): shim + grub2-efi onto the NEW ESP, a stub grub.cfg, mkconfig to /boot/grub2 ----
@@ -592,7 +592,7 @@ assert_eq  "dracut on deb: update-initramfs not called" 0 "$(grep -c update-init
 D=$W/rhel-dry; mk "$D" rocky9-lvm-xfs-uefi
 ( RUN=$D; DRY=y; pf_target_present() { return 1; }; postfix_run ) > "$D/out" 2>&1; rc=$?
 assert_eq  "rhel dry outline: exit 0" 0 "$rc"
-assert_has "rhel dry outline: dracut line" "(dry)   initramfs: /etc/dracut.conf.d/90-reloca.conf (add_drivers mpt3sas bnxt_en, hostonly_cmdline=no); chroot dracut --force per donor kernel (2)" "$(cat "$D/out")"
+assert_has "rhel dry outline: dracut line" "(dry)   initramfs: /etc/dracut.conf.d/90-migrator.conf (add_drivers mpt3sas bnxt_en, hostonly_cmdline=no); chroot dracut --force per donor kernel (2)" "$(cat "$D/out")"
 assert_has "rhel dry outline: no grub2-install on uefi" "(dry)   bootloader: no grub2-install on uefi (the signed shim/grub of the packages stay); chroot grub2-mkconfig into the real grub.cfg; NVRAM entry with shimx64.efi" "$(cat "$D/out")"
 assert_has "rhel dry outline: BLS + grubenv" "(dry)   kernel cmdline: also BLS entries (boot/loader/entries/*.conf) and grubenv kernelopts" "$(cat "$D/out")"
 assert_has "rhel dry outline: autorelabel" "(dry)   selinux: /.autorelabel (the first boot relabels and reboots once)" "$(cat "$D/out")"
@@ -653,7 +653,7 @@ assert_has "uefi->bios: follow-ups header" "manual follow-ups after the first bo
 assert_has "uefi->bios: and kept in state" "apt install grub-pc && apt purge grub-efi-amd64" "$(RUN=$D state_get postfix.followups)"
 assert_eq "uefi->bios: netplan key renamed, set-name gone, match MAC replaced" \
 	'    eth0:|      match:|        macaddress: "52:54:00:cc:dd:01"|      addresses: [10.0.0.37/24]' "$(sed -n '4,7p' "$D/t/etc/netplan/00-installer-config.yaml" | paste -sd'|' -)"
-assert_eq "uefi->bios: cloud-init network config disabled" "network: {config: disabled}|preserve_hostname: true" "$(grep -v '^#' "$D/t/etc/cloud/cloud.cfg.d/99-reloca.cfg" | paste -sd'|' -)"
+assert_eq "uefi->bios: cloud-init network config disabled" "network: {config: disabled}|preserve_hostname: true" "$(grep -v '^#' "$D/t/etc/cloud/cloud.cfg.d/99-migrator.cfg" | paste -sd'|' -)"
 assert_eq "uefi->bios: swapfile recreated (files method): dd, mkswap" "dd if=/dev/zero of=$D/t/swapfile bs=1M count=8 conv=fsync|mkswap $D/t/swapfile" "$(grep -e '^dd' -e '^mkswap' "$D/live.log" | paste -sd'|' -)"
 assert_eq "uefi->bios: swapfile size and mode" "8388608 600" "$(stat -c '%s %a' "$D/t/swapfile")"
 assert_eq "uefi->bios: dropin _DEFAULT untouched, GRUB_FORCE_PARTUUID of the target kept" "$(cat "$D/pristine/etc/default/grub.d/50-cloudimg-settings.cfg")" "$(cat "$D/t/etc/default/grub.d/50-cloudimg-settings.cfg")"
@@ -665,7 +665,7 @@ D=$W/u2b-nogrub; mk "$D" ubuntu-nvme-uefi-to-bios-vm
 rc=$(pfrun "$D" 'pf_live_grub_ready() { return 1; }')
 assert_eq "uefi->bios without grub in the Live: exit 2" 2 "$rc"
 assert_eq "uefi->bios without grub in the Live: grub-install not attempted" "0" "$(grep -c '^grub-install' "$D/live.log")"
-assert_eq "uefi->bios without grub in the Live: the os-prober cfg does not outlive the failure" "gone" "$([ -e "$D/t/etc/default/grub.d/99-reloca-osprober.cfg" ] && echo there || echo gone)"
+assert_eq "uefi->bios without grub in the Live: the os-prober cfg does not outlive the failure" "gone" "$([ -e "$D/t/etc/default/grub.d/99-migrator-osprober.cfg" ] && echo there || echo gone)"
 
 # --- (m) uefi -> uefi (crafted from the stand plan): two chroot grub-installs, NVRAM only on a UEFI Live ------------------------------------
 mkuefi() {
@@ -714,15 +714,15 @@ mkdir -p "$D/t/etc/lvm/devices"; echo 'IDTYPE=sys_wwid IDNAME=naa.5000 DEVNAME=/
 cp "$W/lvm.in" "$D/t/etc/lvm/lvm.conf"
 rc=$(pfrun "$D")
 assert_eq "lvm: exits 0, system.devices removed (original kept), filters commented" "0 gone IDTYPE=sys_wwid 0 3" \
-	"$rc $([ -e "$D/t/etc/lvm/devices/system.devices" ] && echo there || echo gone) $(cut -d' ' -f1 "$D/t/var/lib/reloca.to/orig/etc/lvm/devices/system.devices") $(grep -c '^[[:space:]]*\(global_\)\?filter' "$D/t/etc/lvm/lvm.conf") $(grep -c 'reloca.to' "$D/t/etc/lvm/lvm.conf")"
+	"$rc $([ -e "$D/t/etc/lvm/devices/system.devices" ] && echo there || echo gone) $(cut -d' ' -f1 "$D/t/var/lib/migrator/orig/etc/lvm/devices/system.devices") $(grep -c '^[[:space:]]*\(global_\)\?filter' "$D/t/etc/lvm/lvm.conf") $(grep -c 'migrator' "$D/t/etc/lvm/lvm.conf")"
 
 # --- (n2) raid=1: mdadm into the target, mdadm.conf = our arrays, grub on both disks ---------------------------------------
 pf_mdadm_conf_rewrite "$W/arrays.none" < "$TREE/etc/mdadm/mdadm.conf" > "$W/mdadm-r0.out" 2>/dev/null
 printf 'ARRAY /dev/md1 metadata=1.2 name=web1:1 UUID=1f2e3d4c:5b6a7988:9a0b1c2d:3e4f5a6b\nARRAY /dev/md3 metadata=1.2 name=web1:3 UUID=7a8b9c0d:1e2f3a4b:5c6d7e8f:9a0b1c2e\n' > "$W/arrays"
 pf_mdadm_conf_rewrite "$W/arrays" < "$TREE/etc/mdadm/mdadm.conf" > "$W/mdadm-r.out"
-assert_eq "raid rewriter: the donor's ARRAY lines are commented out" "2" "$(grep -c '^# reloca.to: ARRAY /dev/md[01] ' "$W/mdadm-r.out")"
+assert_eq "raid rewriter: the donor's ARRAY lines are commented out" "2" "$(grep -c '^# migrator: ARRAY /dev/md[01] ' "$W/mdadm-r.out")"
 assert_eq "raid rewriter: ours appended, in order" "ARRAY /dev/md1 metadata=1.2 name=web1:1 UUID=1f2e3d4c:5b6a7988:9a0b1c2d:3e4f5a6b|ARRAY /dev/md3 metadata=1.2 name=web1:3 UUID=7a8b9c0d:1e2f3a4b:5c6d7e8f:9a0b1c2e" "$(grep '^ARRAY' "$W/mdadm-r.out" | paste -sd'|' -)"
-assert_eq "raid rewriter: the rest of the file intact" "$(grep -v '^ARRAY' "$TREE/etc/mdadm/mdadm.conf")" "$(grep -v '^ARRAY' "$W/mdadm-r.out" | grep -v '^# reloca.to: ARRAY')"
+assert_eq "raid rewriter: the rest of the file intact" "$(grep -v '^ARRAY' "$TREE/etc/mdadm/mdadm.conf")" "$(grep -v '^ARRAY' "$W/mdadm-r.out" | grep -v '^# migrator: ARRAY')"
 assert_eq "raid rewriter: idempotent" "$(cat "$W/mdadm-r.out")" "$(pf_mdadm_conf_rewrite "$W/arrays" < "$W/mdadm-r.out")"
 assert_eq "raid rewriter: a line of ours already there stays in place, is not duplicated" "1 ARRAY /dev/md1 metadata=1.2 name=web1:1 UUID=1f2e3d4c:5b6a7988:9a0b1c2d:3e4f5a6b" \
 	"$(printf 'DEVICE partitions\nARRAY /dev/md1 metadata=1.2 name=web1:1 UUID=1f2e3d4c:5b6a7988:9a0b1c2d:3e4f5a6b\nMAILADDR root\n' | pf_mdadm_conf_rewrite "$W/arrays" | grep -c '/dev/md1 ') $(printf 'DEVICE partitions\nARRAY /dev/md1 metadata=1.2 name=web1:1 UUID=1f2e3d4c:5b6a7988:9a0b1c2d:3e4f5a6b\nMAILADDR root\n' | pf_mdadm_conf_rewrite "$W/arrays" | sed -n 2p)"
@@ -737,7 +737,7 @@ assert_eq  "raid: nothing of the host was called" "0" "$(cat "$D/live.log" "$D/c
 assert_has "raid: mdadm found, no apt" "mdadm is in the target" "$(cat "$D/out")"
 assert_eq  "raid: no apt-get in the chroot" 0 "$(grep -c apt-get "$D/chroot.log")"
 assert_eq  "raid: mdadm.conf carries exactly our 3 arrays" "$(plan_md_arrays "$D/plan")" "$(grep '^ARRAY' "$D/t/etc/mdadm/mdadm.conf")"
-assert_eq  "raid: the donor's 2 arrays commented out" 2 "$(grep -c '^# reloca.to: ARRAY' "$D/t/etc/mdadm/mdadm.conf")"
+assert_eq  "raid: the donor's 2 arrays commented out" 2 "$(grep -c '^# migrator: ARRAY' "$D/t/etc/mdadm/mdadm.conf")"
 assert_has "raid: says so" "mdadm.conf: 3 ARRAY line(s) of this recipient's arrays" "$(cat "$D/out")"
 assert_eq  "raid: grub-install on both disks, update-grub once" "chroot: grub-install --target=i386-pc --recheck /dev/vda|chroot: grub-install --target=i386-pc --recheck /dev/vdb|chroot: update-grub" "$(grep -E 'grub-install|update-grub' "$D/chroot.log" | grep -v '^note' | paste -sd'|' -)"
 assert_has "raid: debconf names both disks" "grub-pc grub-pc/install_devices multiselect /dev/vda, /dev/vdb" "$(cat "$D/chroot.log")"
@@ -770,7 +770,7 @@ sed -i '/^\[lvm\]/i [md]\nmdadm --create /dev/md2 --run --level=1 --raid-devices
 mkdir -p "$D/t/usr/sbin"; : > "$D/t/usr/sbin/mdadm"
 rc=$(pfrun "$D" 'DRY=y; EFI_STATE=$RUN/efi.state; export EFI_STATE')
 assert_eq  "raid uefi, dry: exits 0" 0 "$rc"
-assert_has "raid uefi, dry: the second ESP step" "(dry) would mount /dev/vdb1 at /run/reloca-esp2, copy /boot/efi onto it, grub-install --target=x86_64-efi --efi-directory=/run/reloca-esp2 (+ --removable) into it, and register it in NVRAM" "$(cat "$D/out")"
+assert_has "raid uefi, dry: the second ESP step" "(dry) would mount /dev/vdb1 at /run/migrator-esp2, copy /boot/efi onto it, grub-install --target=x86_64-efi --efi-directory=/run/migrator-esp2 (+ --removable) into it, and register it in NVRAM" "$(cat "$D/out")"
 assert_has "raid uefi, dry: the ESP follow-up" "the second ESP (/dev/vdb1) is a copy made now" "$(cat "$D/out")"
 assert_eq  "raid uefi, dry: mdadm.conf diff shows our two arrays" "2" "$(grep -c '^+ARRAY /dev/md[24] ' "$D/out")"
 
@@ -778,18 +778,18 @@ assert_eq  "raid uefi, dry: mdadm.conf diff shows our two arrays" "2" "$(grep -c
 D=$W/stand
 ( RUN=$D; postfix_record "$D/t" ) > "$D/rec.out" 2>&1; rc=$?
 assert_eq "record: exits 0" 0 "$rc"
-rec=$(find "$D/t/root" -maxdepth 1 -type d -name 'reloca.to-*' | head -1)
-assert_has "record: root/reloca.to-<YYYYmmdd-HHMMSS>/" "reloca.to-20" "$(basename "${rec:-none}")"
+rec=$(find "$D/t/root" -maxdepth 1 -type d -name 'migrator-*' | head -1)
+assert_has "record: root/migrator-<YYYYmmdd-HHMMSS>/" "migrator-20" "$(basename "${rec:-none}")"
 assert_eq "record: the directory is 0700" "700" "$(stat -c %a "$rec")"
 assert_eq "record: plan, log, state and both inventories are there" "donor.inv log plan recipient.inv state" "$(find "$rec" -type f -printf '%f\n' | sort | xargs)"
 assert_ok "record: the plan is the plan" cmp -s "$D/plan" "$rec/plan"
-assert_eq "record: the stamp's keys" "date donor_serial recipient_serial plan_sha256 donor_machine_id reloca_version record" "$(cut -d= -f1 "$D/t/etc/reloca-migrated" | xargs)"
+assert_eq "record: the stamp's keys" "date donor_serial recipient_serial plan_sha256 donor_machine_id migrator_version record" "$(cut -d= -f1 "$D/t/etc/migrator-migrated" | xargs)"
 assert_eq "record: serials, plan hash, the DONOR OS machine-id" "XS-STAND-DONOR XS-456 $(sha256sum "$D/plan" | cut -c1-64) bd7b8aa0e92940cf983a3aa8925fb464" \
-	"$(sed -n 's/^donor_serial=//p' "$D/t/etc/reloca-migrated") $(sed -n 's/^recipient_serial=//p' "$D/t/etc/reloca-migrated") $(sed -n 's/^plan_sha256=//p' "$D/t/etc/reloca-migrated") $(sed -n 's/^donor_machine_id=//p' "$D/t/etc/reloca-migrated")"
+	"$(sed -n 's/^donor_serial=//p' "$D/t/etc/migrator-migrated") $(sed -n 's/^recipient_serial=//p' "$D/t/etc/migrator-migrated") $(sed -n 's/^plan_sha256=//p' "$D/t/etc/migrator-migrated") $(sed -n 's/^donor_machine_id=//p' "$D/t/etc/migrator-migrated")"
 ( RUN=$D; postfix_record "$D/t" ) >> "$D/rec.out" 2>&1
-assert_eq "record: called twice, still one record directory" "1" "$(find "$D/t/root" -maxdepth 1 -type d -name 'reloca.to-*' | wc -l)"
-( RUN=$D; DRY=y; rm -f "$D/t/etc/reloca-migrated"; postfix_record "$D/t" ) > "$D/rec.dry" 2>&1
-assert_eq "record: not under -n" "absent" "$([ -e "$D/t/etc/reloca-migrated" ] && echo there || echo absent)"
+assert_eq "record: called twice, still one record directory" "1" "$(find "$D/t/root" -maxdepth 1 -type d -name 'migrator-*' | wc -l)"
+( RUN=$D; DRY=y; rm -f "$D/t/etc/migrator-migrated"; postfix_record "$D/t" ) > "$D/rec.dry" 2>&1
+assert_eq "record: not under -n" "absent" "$([ -e "$D/t/etc/migrator-migrated" ] && echo there || echo absent)"
 assert_eq "record: nothing unexpected ran" "0" "$(cat "$D/chroot.log" "$D/live.log" | grep -c UNEXPECTED)"
 
 t_end

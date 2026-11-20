@@ -29,7 +29,7 @@
 #            (persistent) instead of grub-reboot (one shot).
 #
 # usage: live-entry.sh [-n] [-s] [-r] [-f DIR] -i IP[/PREFIX][,GW[,DNS1[,DNS2]]]
-#   -i SPEC   static address for the Live, passed as reloca.ip=, e.g.
+#   -i SPEC   static address for the Live, passed as migrator.ip=, e.g.
 #             "192.168.8.111/24,192.168.8.1,192.168.8.1" (required unless -r:
 #             the Live must not depend on this network handing out DHCP)
 #   -f DIR    where the artefacts are (default /root): vmlinuz-live,
@@ -52,7 +52,7 @@ set -u
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 TITLE='migrator Live'
-DRY=; SETDEF=; REMOVE=; SRC=/root; SPEC=; GRUB_D=/etc/grub.d/41_reloca-live; CFG=/boot/grub/grub.cfg
+DRY=; SETDEF=; REMOVE=; SRC=/root; SPEC=; GRUB_D=/etc/grub.d/41_migrator-live; CFG=/boot/grub/grub.cfg
 
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit "${1:-2}"; }
 say() { printf '%s\n' "$*"; }
@@ -131,7 +131,7 @@ fi
 
 # --- checks ----------------------------------------------------------------------
 pick_fs || die "no non-LVM filesystem to host the Live: live-boot cannot see inside LVM (D30), so give this machine a plain ext4 /boot"
-[ -n "$SPEC" ] || die "-i is required: the Live needs reloca.ip=IP/PREFIX,GW,DNS (do not bet on DHCP here)"
+[ -n "$SPEC" ] || die "-i is required: the Live needs migrator.ip=IP/PREFIX,GW,DNS (do not bet on DHCP here)"
 avail=$(df -B1 --output=avail "$MP" | tail -1 | tr -d ' ')
 [ "$avail" -gt "$need" ] || die "$MP has $(iec "$avail") free, the artefacts need $(iec "$need")"
 mem=$(awk '/^MemTotal:/ { print $2 * 1024 }' /proc/meminfo)
@@ -158,7 +158,7 @@ menuentry '$TITLE' {
 	search --no-floppy --set=root --fs-uuid $UUID
 	linux /live/vmlinuz-live boot=live components toram=filesystem.squashfs \\
 		net.ifnames=0 biosdevname=0 systemd.default_timeout_start_sec=600 \\
-		console=tty0 console=ttyS0,115200n8 panic=30 reloca.ip=$SPEC
+		console=tty0 console=ttyS0,115200n8 panic=30 migrator.ip=$SPEC
 	initrd /live/initrd-live.img
 }
 EOF
@@ -195,7 +195,7 @@ fi
 say ""
 say "after the reboot:"
 say "  ssh root@${ADDR%%/*}                    # the Live carries /root/rig-key"
-say "  cat /etc/reloca-live-release"
+say "  cat /etc/migrator-live-release"
 say "  free -m; swapon --show                  # zram does the swapping"
 say "  findmnt -S $TGT_DEV || echo '$TGT_DEV free'   # toram released the disk"
 exit 0

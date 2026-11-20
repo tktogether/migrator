@@ -1,5 +1,5 @@
-# captured by tools/reloca-test.sh: fixture debian-md-ext4-bios (10eb41ce60d9), live 20260922c, 2026-09-30
-# reloca.to inventory role=donor date=2026-09-30T13:22:05Z host=XS-Live-OS
+# captured by tools/migrator-test.sh: fixture debian-md-ext4-bios (10eb41ce60d9), live 20260922c, 2026-09-30
+# migrator inventory role=donor date=2026-09-30T13:22:05Z host=XS-Live-OS
 host	role=donor	hostname=XS-Live-OS	live=20260922c	fw=bios	secureboot=0	bootnic=eth0	bootmac=52:54:00:ab:cd:01	bootip=10.0.2.15/24	gw=10.0.2.2	dmi_vendor=QEMU	dmi_product=Standard PC (i440FX + PIIX, 1996)	dmi_serial=XS-STAND-DONOR	dmi_uuid=	ncpu=2	ram=3123257344	awk=mawk
 disk	dev=/dev/vda	size=8589934592	lsec=512	psec=512	model=	serial=XSDONOR0	wwn=	byid=virtio-XSDONOR0	tran=virtio	rm=0	ro=0	pttype=dos	ptuuid=432b9631	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-debian Debian GNU/Linux 11 (bullseye) mtime=2026-09-29
 disk	dev=/dev/vdb	size=8589934592	lsec=512	psec=512	model=	serial=XSDONOR1	wwn=	byid=virtio-XSDONOR1	tran=virtio	rm=0	ro=0	pttype=dos	ptuuid=8a640434	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-debian Debian GNU/Linux 11 (bullseye) mtime=2026-09-29

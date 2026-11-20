@@ -1,3 +1,7 @@
+> 上游变更记录（保留原样，仅存档）。
+> 本文件来自 reloca.to 1.2（MIT，Copyright (c) 2026 XServer），其中的链接、版本号与
+> 商店描述指向上游，与本项目的发行物无关。本项目的变更见 git 历史与 docs/DECISIONS.md。
+
 # Changelog
 
 What each release of reloca.to brought, newest first. The same notes are
