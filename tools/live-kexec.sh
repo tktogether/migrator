@@ -1,7 +1,7 @@
 #!/bin/bash
-# live-kexec.sh — reboot THIS server (the migration source, usually at another
-# hosting provider where XServer's PXE is not available) into XServer Live OS
-# through kexec, keeping its IP address. Nothing on the disks is touched: the
+# live-kexec.sh — reboot THIS server (the migration source, usually at a hosting
+# provider whose PXE you cannot use) into a Live OS through kexec, keeping its
+# IP address. Nothing on the disks is touched: the
 # Live runs from RAM. Afterwards migrator on the destination connects to it.
 #
 #   curl -fsSL migrator/live | bash             # on the source, as root
@@ -26,7 +26,7 @@
 # exit: 0 kexec issued (or dry run) · 1 failure · 2 cannot run here (not root, no kexec,
 #       no network facts, too little RAM, unsupported interface)
 #
-# What the Live needs on its command line (XServer Live OS initramfs):
+# What the Live needs on its command line (a live-boot/initramfs-tools style Live):
 #   ip=IP::GW:MASK:HOST::none:DNS0:DNS1   static network (initramfs-tools ipconfig format)
 #   BOOTIF=01-<mac-with-dashes>           which NIC: by MAC, so its name in the Live does not matter
 #   root=URL/rootfs                        the squashfs the Live unpacks into tmpfs
@@ -113,9 +113,9 @@ else vsay "screen: firmware framebuffer, kept as it is"; fi
 # --- the Live ------------------------------------------------------------------
 WORK=$(mktemp -d /run/migrator-live.XXXXXX 2>/dev/null) || WORK=$(mktemp -d /tmp/migrator-live.XXXXXX) || die "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
-# which build: the PXE flavour (boot.xserver.cloud/live) is cut down for XServer's
-# own hardware; the ISO flavour (FLAVOR=iso in release) carries the drivers and
-# firmware of foreign servers (Hyper-V, QLogic, Realtek, ...)
+# which build: 'release' at MIGRATOR_LIVE_URL says FLAVOR=iso or pxe; the ISO
+# flavour carries the drivers and firmware of foreign servers (Hyper-V, QLogic,
+# Realtek, ...), the pxe one is cut down for hardware you know
 fetch "$URL/release" "$WORK/release" 2>/dev/null || true
 BUILD=$(sed -n 's/^BUILD_ID=//p' "$WORK/release" 2>/dev/null)
 FLAVOR=$(sed -n 's/^FLAVOR=//p' "$WORK/release" 2>/dev/null); FLAVOR=${FLAVOR:-pxe}
@@ -148,7 +148,7 @@ case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
 	*) TL=+ TR=+ ML=+ MR=+ BL=+ BR=+ H=- V='|' ;;
 esac
 B=; N=; [ -t 1 ] && { B=$'\e[1m'; N=$'\e[0m'; }
-TITLE="XServer Live OS ${BUILD:-?}"; [ "$FLAVOR" != iso ] || TITLE="$TITLE (ISO build)"
+TITLE="Live OS ${BUILD:-?}"; [ "$FLAVOR" != iso ] || TITLE="$TITLE (ISO build)"
 NOTE="Reboots this server into RAM; disks untouched."
 ROWS=("interface|$IFACE  $MAC" "address|$IPADDR/$PREFIX" "gateway|$GW" "dns|$DNS0  $DNS1"
 	"hostname|$HOSTNAME_LIVE" "-" "password|$PASSWORD" "ssh|ssh root@$IPADDR" "then|migrator $IPADDR on the destination")

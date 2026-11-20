@@ -1,6 +1,6 @@
 #!/bin/bash
 # migrator — move a Linux server from a donor machine onto this one (the
-# recipient) over the network, both booted into the XServer Live OS. Replaces
+# recipient) over the network, both booted into a Live OS. Replaces
 # the manual runbook: inventory both sides, write a plan you can read and edit,
 # partition and format the recipient, stream every filesystem, fix the copy up
 # in a chroot (fstab, initramfs drivers, grub, network), verify it boots, and
