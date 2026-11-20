@@ -228,7 +228,7 @@ mk() {
 # nfrun DIR [SNIPPET]: netfix_run on DIR/t in a subshell; output -> DIR/out, status echoed
 nfrun() { ( RUN=$1; TARGET_MNT=$1/t; PF_PLAN=; PF_DIR=; PF_WARNS=(); eval "${2:-}"; netfix_run ) > "$1/out" 2>&1; echo $?; }
 treesum() { ( cd "$1" && { find . -type f -print0 | sort -z | xargs -0 sha256sum; find . -type f -printf '%p %s %T@\n' | sort; } | sha256sum | cut -c1-64 ); }
-files() { ( cd "$1" && find . -type f | grep -v '^\./var/lib/migrator\.to/' | sort | sed 's|^\./||' | xargs ); }
+files() { ( cd "$1" && find . -type f | grep -v '^\./var/lib/migrator/' | sort | sed 's|^\./||' | xargs ); }
 
 # ifupdown (the stand plan: ens3/-/interfaces): an interfaces.d file, the donor's udev rules, other places naming ens3
 D=$W/e-if; mk "$D" stand-debian-md-ext4-bios

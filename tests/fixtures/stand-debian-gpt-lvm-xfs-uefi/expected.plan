@@ -1,5 +1,5 @@
-# reloca.to plan  donor=10.0.2.15/24/XS-Live-OS (QEMU%20Standard%20PC%20(i440FX%20+%20PIIX,%201996)%20SN=XS-STAND-DONOR, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-2 (QEMU%20Standard%20PC%20(i440FX%20+%20PIIX,%201996)%20SN=XS-STAND-RECIP, boot=eth0/52:54:00:cc:dd:01)
-# inv_sha256=bd87ed547217923ac4f018f08a3520d5a23dfb361da5339c840c778fa9439313:cead8e00874fd363e1ead5f7ea1643d67269928c3c74e73366ec5838e637050d  reloca=-  live=-  date=-
+# migrator plan  donor=10.0.2.15/24/XS-Live-OS (QEMU%20Standard%20PC%20(i440FX%20+%20PIIX,%201996)%20SN=XS-STAND-DONOR, Debian%20GNU/Linux%2012%20(bookworm))  recipient=to-XS-2 (QEMU%20Standard%20PC%20(i440FX%20+%20PIIX,%201996)%20SN=XS-STAND-RECIP, boot=eth0/52:54:00:cc:dd:01)
+# inv_sha256=bd87ed547217923ac4f018f08a3520d5a23dfb361da5339c840c778fa9439313:cead8e00874fd363e1ead5f7ea1643d67269928c3c74e73366ec5838e637050d  migrator=-  live=-  date=-
 # WARN: recipient modalias not checked against the donor kernels (no pci_drivers in the kernel records): drivers virtio_blk,virtio_pci,virtio_net are assumed present
 [target]
 disk=/dev/vda id=serial:XSRECIP0 size=21474836480 lsec=512 psec=512 ptuuid=- head=-

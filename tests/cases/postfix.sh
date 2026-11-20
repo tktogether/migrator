@@ -146,7 +146,7 @@ pfrun() {
 }
 # changed DIR: every file that differs between DIR/pristine and DIR/t (our own bookkeeping apart)
 changed() {
-	( cd "$1" && { cd pristine && find . -type f; cd ../t && find . -type f; } | sort -u | grep -v '^\./var/lib/migrator\.to/' | while IFS= read -r f; do
+	( cd "$1" && { cd pristine && find . -type f; cd ../t && find . -type f; } | sort -u | grep -v '^\./var/lib/migrator/' | while IFS= read -r f; do
 		cmp -s "pristine/$f" "t/$f" || echo "${f#./}"
 	done | xargs )
 }

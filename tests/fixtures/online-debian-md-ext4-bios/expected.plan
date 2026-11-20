@@ -1,6 +1,6 @@
-# reloca.to plan  donor=10.0.2.15/24/XS-Live-OS (QEMU%20Standard%20PC%20(i440FX%20+%20PIIX,%201996)%20SN=XS-STAND-DONOR, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-456 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-456, boot=eth0/52:54:00:cc:dd:01)
-# inv_sha256=1f483c059f5e9ff638e6bbf7cce4e7463fe9ac15837902285423883b299ebce0:8d434ca59f213391c020f0dad2e272928421098907f5f159ca8e09826641a942  reloca=-  live=-  date=-
-# WARN: on-line relocation: the donor keeps running; block volumes are copied in passes by reloca-agent, file volumes by tar incremental passes, all frozen for the final pass (mode=online)
+# migrator plan  donor=10.0.2.15/24/XS-Live-OS (QEMU%20Standard%20PC%20(i440FX%20+%20PIIX,%201996)%20SN=XS-STAND-DONOR, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-456 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-456, boot=eth0/52:54:00:cc:dd:01)
+# inv_sha256=1f483c059f5e9ff638e6bbf7cce4e7463fe9ac15837902285423883b299ebce0:8d434ca59f213391c020f0dad2e272928421098907f5f159ca8e09826641a942  migrator=-  live=-  date=-
+# WARN: on-line migratortion: the donor keeps running; block volumes are copied in passes by migrator-agent, file volumes by tar incremental passes, all frozen for the final pass (mode=online)
 # WARN: partitions of other donor disks are appended to /dev/vda as extra slots: /dev/vdb2(swap)
 # WARN: partitions are renumbered (physical order on dos): PARTUUID= and /dev/vdaN references are rewritten to UUID=
 # WARN: recipient modalias not checked against the donor kernels (no pci_drivers in the kernel records): drivers virtio_blk,virtio_pci,virtio_net are assumed present

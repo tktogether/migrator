@@ -53,6 +53,9 @@
 #            measures how fast the donor writes and how fast the link carries, says how many
 #            passes and minutes a shorter freeze would cost, and stops at this budget
 #         verify-hash=1 (sha256 of every frozen volume against the copy) cutover-port=2223
+#         dpkg-wait=600  seconds to let the donor finish an interrupted dpkg before the freeze
+#            (0 skips the wait): freezing mid-upgrade leaves the target unable to install
+#            what postfix needs, which is how the first RAID1 run lost half a day
 #   long forms: --dry-run --yes --key K --disk D --step S --option k=v --version --help
 # exit: 0 ok · 1 runtime failure · 2 usage/environment/identity · 3 verify failed
 #       (disk written, do NOT reboot) · 4 plan infeasible or edited plan rejected

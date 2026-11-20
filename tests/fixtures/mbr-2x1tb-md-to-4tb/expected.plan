@@ -1,5 +1,5 @@
-# reloca.to plan  donor=10.0.0.12/24/web1 (Supermicro%20X11SSH-F%20SN=S123456, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-789 (Dell%20Inc.%20PowerEdge%20R340%20SN=7XK2Q33, boot=eno1/b0:83:fe:00:00:11)
-# inv_sha256=aa8ecb8a822801947ad0d07ccc21cd67547d6b8f9799db2841e1faafaaa39768:5ad0a7095c9493b31463351ccb5c8d1aefa863d6083f698302244a66f1dfd341  reloca=-  live=-  date=-
+# migrator plan  donor=10.0.0.12/24/web1 (Supermicro%20X11SSH-F%20SN=S123456, Debian%20GNU/Linux%2011%20(bullseye))  recipient=to-XS-789 (Dell%20Inc.%20PowerEdge%20R340%20SN=7XK2Q33, boot=eno1/b0:83:fe:00:00:11)
+# inv_sha256=aa8ecb8a822801947ad0d07ccc21cd67547d6b8f9799db2841e1faafaaa39768:5ad0a7095c9493b31463351ccb5c8d1aefa863d6083f698302244a66f1dfd341  migrator=-  live=-  date=-
 # WARN: partition table dos -> gpt: new label-id and partition GUIDs, PARTUUID= references are rewritten to UUID=
 [target]
 disk=/dev/sda id=wwn:0x5000c500c1234567 size=4000787030016 lsec=512 psec=4096 ptuuid=1a2b3c4d-0000-4000-8000-00000000abcd head=-
