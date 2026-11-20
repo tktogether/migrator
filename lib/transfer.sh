@@ -715,11 +715,36 @@ tx_ol_cmd() {
 	return "$rc"
 }
 # the agent's hooks land here (bash $RUN/ol-hook.sh before|after sources the libs and calls this)
+# A donor whose dpkg is mid-transaction has a torn package database, and freezing
+# copies it as-is: the recipient then comes up half-configured (initramfs-tools
+# unpacked but never configured) and its own first apt call refuses with "dpkg was
+# interrupted".  That is not a corner case - unattended-upgrades holds that lock
+# for hours on a slow guest while it rebuilds initramfs, which is exactly what the
+# R16 run on .115 froze into (D34).  Wait for it to settle, and refuse instead of
+# freezing a tree that cannot boot cleanly.
+tx_ol_wait_dpkg() {
+	local limit waited=0 busy
+	limit=$(( $(opt dpkg-wait 600) ))
+	[ "$limit" -gt 0 ] || return 0
+	while :; do
+		busy=
+		if command -v fuser >/dev/null 2>&1 && fuser -s /var/lib/dpkg/lock-frontend 2>/dev/null; then
+			busy="a package transaction holds the dpkg lock"
+		elif [ -n "$(timeout 15 dpkg --audit 2>/dev/null)" ]; then
+			busy="dpkg --audit reports unfinished work"
+		fi
+		[ -n "$busy" ] || return 0
+		[ "$waited" -lt "$limit" ] || die "$EX_ENV" "donor: $busy, still after ${limit}s.  Freezing now would copy a torn package database and the recipient would come up half-configured.  Let it finish, or stop it on the donor (systemctl stop unattended-upgrades; dpkg --configure -a).  -o dpkg-wait=SECONDS raises the wait, 0 skips this check"
+		[ "$waited" -ne 0 ] || say "donor: $busy - waiting up to ${limit}s for it to settle before the freeze"
+		sleep 10; waited=$((waited + 10))
+	done
+}
 tx_ol_hook() {
 	local what=$1 level prev bytes n=0 row src ddir sdir
 	case $what in
 		before)
 			[ -s "$RUN/ol.files" ] || return 0
+			tx_ol_wait_dpkg
 			# incremental passes until a pass is small or stops shrinking: the tree is then
 			# close to the donor's and the last pass under the freeze stays short
 			prev=; level=$(( $(cat "$RUN/ol.level" 2>/dev/null || echo 0) + 1 ))

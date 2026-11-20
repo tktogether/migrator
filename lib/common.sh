@@ -84,7 +84,7 @@ opt() { local v=${OPT[$1]-}; if [ -n "$v" ]; then echo "$v"; else echo "${2-}"; 
 # spelling settled keep working.
 RELOCA_OPTS_BOTH="boot-part bootorder boottest cipher cloudinit compress console cutover donor-nic driver expect force fsck label mode nic nic-pin offline raid raw redo relay root"
 RELOCA_OPTS_OFFLINE="data sshd-port watchdog"
-RELOCA_OPTS_ONLINE="chunk converge cutover-port max-est passes patience precheck precheck-cow precheck-dir settle stall tracker verify-hash"
+RELOCA_OPTS_ONLINE="chunk converge cutover-port dpkg-wait max-est passes patience precheck precheck-cow precheck-dir settle stall tracker verify-hash"
 # opt_check — refuse unknown -o keys, naming the near miss when there is one
 opt_check() {
 	local k n c all="$RELOCA_OPTS_BOTH $RELOCA_OPTS_OFFLINE $RELOCA_OPTS_ONLINE" hint
