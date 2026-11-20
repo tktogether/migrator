@@ -9,7 +9,7 @@ Fork 自 [migrator](https://github.com/Vitalium/migrator) 1.2（MIT，XServer �
 | **E1 去 XServer 化** | 自有 Live 标记 `/etc/migrator-live-release`（兼容接受上游标记）；bootstrap 默认镜像 deb.debian.org/bookworm；自建 Debian bookworm Live（手搓：mmdebstrap + live-boot + squashfs + xorriso），烘焙全部运行时依赖与工具本体 | `lib/common.sh` `live_release_file()`、`lib/bootstrap.sh`、`lib/ssh.sh`、`lib/inventory.sh`、`bin/migrator`（8 处触点）+ `rig/build-live.sh` | ✅ 已实现；ISO 316M 实测可引导 |
 | **E4 试启动验证** | `-o boottest=1`：verify 全绿后用 qcow2 overlay 把目标盘在 qemu 里试启动（direct kernel boot + 串口断言 multi-user），目标盘零写入；qemu 缺失/小内存优雅降级 | `lib/verify.sh`（verify_boottest_*、vf_boottest_* seams）、`lib/bootstrap.sh`（boottest 工具组） | ✅ 实现并在真机跑通（D20）；slim Live 按内存门控自动跳过（D23） |
 | **E2 中继模式** | `-o relay=USER@HOST[:SSHPORT]`：donor 侧 `tools/relay-tunnel.sh` 反向隧道（中继:2222/2223 ← donor:22/2222），recipient 以 `root@RELAY:2222` 迁移；recipient 的 cutover 反向隧道走中继（中继:2224 → recipient:2224）。传输层零改动 | `lib/ssh.sh`（relay_spec/ssh_relay_start）、`lib/transfer.sh`（poller 覆盖）、`tools/relay-tunnel.sh` | 🟡 真机 E2E 已跑（D35）：双端 blackhole 造 NAT，apply/transfer/verify 全过、收端独立引导成功；cutover 因端口映射差一（已修）失败，待复跑 |
-| **E3 状态持久化** | 趟外存活 + 趟内续传：`serve --listen` 让会话（tracker 位图/冻结）活过链路，`attach` 作客户端重连；通道断后 `resume ID OFF` 从已覆盖位置续走 full 并补发 pending 集；跨 run 仍待 journal | `agent/main.c`（serve/attach/resume、pull 的 `P_step`）`lib/transfer.sh` | 🟡 趟内续传实现并实测（D41：rig 两次注入断链 → `resumed=2`、`sha256 equal`、`RIG_OK`）；跨 run 续传待做（partclone 无续传项，D40 的 B 已撤销） |
+| **E3 状态持久化** | 趟外存活 + 趟内续传 + 跨 run 续传：`serve --listen` 让会话（tracker 位图/冻结）活过链路，`attach` 作客户端重连；通道断后 `resume ID OFF` 从已覆盖位置续走 full 并补发 pending 集；pull 侧 journal（session+卷+size+have）让**下一个 run** 也能接上，前提是 donor 还握着那个 session | `agent/main.c`（serve/attach/resume、pull 的 `P_step`、journal）、`rig/test-journal.sh` | 🟡 趟内（D41）与跨 run（D42）都已实现并实测；donor 自身重启不可续（不可知）；真机离线续传待做 |
 
 测试基线：`tests/run.sh` 2302 断言，2 失败与上游纯净树完全一致（环境性 mawk 差异），**零回归**；新增 relay.sh 17 断言全绿。
 
@@ -51,5 +51,5 @@ bash rig/clean.sh                # 清理全部 rig 进程
 - ✅ cutover poller 闭环（D27）：systemd-run 瞬态服务（d4b638b）在 .116→.111 上首次实测存活并连回，rollback thaw 成功；同轮修掉四个交付级缺陷（条目计数口径、mawk 科学计数、FITHAW EINVAL、postfix 重建被剪挂载点，015cb8f/68d4da2/796f341/d8d6b66）。⚠ 宿主 TK-Nas 内存不足会 OOM 杀 qemu（D26），开跑前先降 VM 内存/少开 VM；现存机器：.111/.117 已是迁移系统，.116 原系统，.115 原系统在线（重建最终 Live 中）
 - 🟡 E2 中继拓扑 E2E（数据与独立引导已过；cutover 端口修复后待复跑，见 D35） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - ⏳ 工件与真机收口（D31/D32）：Live iso 改为**从 HEAD 重建**（现存工件停在 `d8d6b66`，缺 dm-uuid 修复）；自包含引导已收编为 `tools/live-entry.sh`（D25/D28/D29/D30 四条约束）；虚拟机用随机 MAC，**IP 每开机漂移**，按硬件角色认机（D32，见 HANDOFF §1）；`.116` 仍停在 emergency 待控制台修复
-- 🟡 M3=E3：趟内续传已实现实测（D41）；跨 run 续传需 pull 侧 journal（D16 的位图落盘只是其中一半，另一半是"谁在缺口期追踪"）
+- 🟡 M3=E3：趟内续传（D41）与跨 run 续传（D42）都已实现实测；donor 自身重启不可续（它停机期间自己的写没人看见），真机离线续传待做
 - 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）

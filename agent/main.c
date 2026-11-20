@@ -343,6 +343,19 @@ static void S_send(struct volume *v, int final, int say_ok)
 }
 
 static uint64_t S_lost_seen;
+/* S_pending_clear_from: forget every pending chunk at or above off. Called right
+ * after [off,size) has been read again -- what the tracker put there while nobody
+ * was reading is now stale knowledge, the fresh bytes are already on the wire. */
+static void S_pending_clear_from(struct volume *v, uint64_t off)
+{
+	uint64_t c0 = off >> S_chunk_shift, w, b;
+	if (!v->pending.w) return;
+	if (c0 >= v->chunks) c0 = v->chunks;
+	w = c0 >> 6; b = c0 & 63;
+	if (w >= v->pending.nwords) return;
+	v->pending.w[w] &= b ? ((1ULL << b) - 1) : 0ULL;
+	for (w++; w < v->pending.nwords; w++) v->pending.w[w] = 0;
+}
 /* S_resume: the recipient has [0, off) already; give it the rest of the pass,
  * then whatever the tracker saw while nobody was reading (chunks below off that
  * were written in that window: they were sent before the break, so they are
@@ -351,8 +364,17 @@ static void S_resume(struct volume *v, uint64_t off)
 {
 	double t0 = now_s();
 	if (off >= v->size) { OK("resume id=%d from=%llu nothing to send", v->id, (unsigned long long)off); return; }
+	/* The gap's writes are still in the current epoch, not in pending: only a flip
+	 * moves them there. Without this the pass below re-reads [off,size) -- which
+	 * does cover that range -- and then sends an empty pending, so a chunk BELOW
+	 * off written during the gap is never sent again: the copy keeps its pre-gap
+	 * bytes and nobody knows until sha256 at the end. D41 exercised this mechanism
+	 * with no writer on the donor, which is precisely the case that cannot show
+	 * it, and a resumed pass that only repeats what it already had looks fine. */
+	if (S_tracker.mode) tracker_flip(&S_tracker);
 	S_full_from(v, off, 0);
 	if (S_dead) return;
+	S_pending_clear_from(v, off);   /* those bytes were just read again */
 	S_send(v, 0, 0);
 	if (S_dead) return;
 	OK("resume id=%d from=%llu secs=%.2f", v->id, (unsigned long long)off, now_s() - t0);
@@ -873,7 +895,25 @@ static int cmd_serve(int argc, char **argv)
 					(unsigned long long)S_vols[k].size,
 					(unsigned long long)(bitmap_count(&S_vols[k].pending) << S_chunk_shift));
 			if (sl >= sizeof vols) sl = sizeof vols - 1;
-			OK("state session=%s frozen=%d tracking=%d vols=%s", S_session, S_nfrozen, S_tracker.mode, vols[0] ? vols : "-");
+			OK("state session=%s frozen=%d tracking=%d chunk=%llu vols=%s", S_session, S_nfrozen, S_tracker.mode,
+				(unsigned long long)(S_chunk_shift ? 1ULL << S_chunk_shift : 0), vols[0] ? vols : "-");
+		} else if (!strcmp(a[0], "vols")) {
+			/* D42: what a pull that comes back needs in order to adopt this session
+			 * instead of registering the volumes again -- "vol" refuses once we
+			 * track, and rightly: a second registration would orphan the bitmaps.
+			 * One line, id:size:mnt per volume; ':' and ';' inside a mountpoint
+			 * become '_', since those are the two characters this line gives a
+			 * meaning to. */
+			char list[2048] = ""; size_t sl = 0;
+			for (int k = 0; k < S_nvols && sl + 300 < sizeof list; k++) {
+				char mnt[280];
+				snprintf(mnt, sizeof mnt, "%s", S_vols[k].mnt[0] ? S_vols[k].mnt : "-");
+				for (char *q = mnt; *q; q++) if (*q == ':' || *q == ';') *q = '_';
+				sl += (size_t)snprintf(list + sl, sizeof list - sl, "%s%d:%llu:%s", k ? ";" : "", S_vols[k].id,
+					(unsigned long long)S_vols[k].size, mnt);
+			}
+			OK("vols n=%d chunk=%llu list=%s", S_nvols,
+				(unsigned long long)(S_chunk_shift ? 1ULL << S_chunk_shift : 0), list[0] ? list : "-");
 		} else if (!strcmp(a[0], "vol") && n >= 3) {
 			char err[512]; struct volume *v;
 			if (S_nvols == MAX_VOLS) { ERR("too many volumes"); continue; }
@@ -1011,6 +1051,8 @@ struct target {
 	int is_blk;
 	uint64_t written, zeroed;
 	uint64_t have;           /* how far [0, have) is covered, for resuming a full pass */
+	int resumed;             /* [0, have) came from an earlier run's journal, not from this one */
+	unsigned long long rdev, ino;   /* what the target was, so a different disk is not mistaken for it */
 	char donor_hash[65];
 };
 
@@ -1091,6 +1133,154 @@ static void pinfo(const char *fmt, ...)
 static struct target *P_find(int id) { for (int i = 0; i < P_n; i++) if (P_t[i].id == id) return &P_t[i]; return NULL; }
 static void P_cover(struct target *t, uint64_t off, uint64_t len);
 
+/* ---- the resume journal (D42) --------------------------------------------
+ *
+ * D41 made a pass survive a broken link: the session outlives the ssh channel and
+ * the pull attaches again. It did not survive the pull dying (an OOM kill, a
+ * panic, an operator's ^C), because how far the copy got only ever lived in that
+ * process's memory. This file is that knowledge, and nothing else.
+ *
+ * What it buys, and what it cannot: the journal is worth reading only if the
+ * donor still holds the session whose name is in it, because only then does the
+ * tracker behind that session still know what was written while we were away.
+ * "hello resume=ID" asks; anything but mode=resumed (a donor that restarted, a
+ * session someone took over, a different agent version) means the bitmaps are
+ * gone, and the copy starts over -- said out loud, never done quietly. That is
+ * why this is a session-bound journal and not a byte count: a stale byte count
+ * is a hole in the copy that sha256 would only find at the end.
+ *
+ * A donor that itself restarted cannot be resumed at all, by anyone: while it was
+ * down and booting, its own disks were being written by its own system, and no
+ * tracker saw it. From zero is the only honest answer there, and the donor says
+ * so by answering mode=new.
+ */
+#define JOURNAL_DEFAULT "/var/tmp/migrator-agent.resume"
+#define JOURNAL_EVERY 5.0        /* seconds between checkpoints: often enough to be useful, dull enough to keep */
+#define JOURNAL_JUMP (128u << 20) /* ... or this many bytes, whichever comes first: a fast copy must not move a whole disk between two checkpoints */
+struct jrec { int id; uint64_t size, have; unsigned long long rdev, ino; char dst[256]; };
+static struct jrec J_rec[MAX_VOLS]; static int J_n;
+static char J_path[PATH_MAX] = JOURNAL_DEFAULT;
+static char J_sess[33];
+static int J_use = 1;            /* --no-resume turns the whole thing off */
+static int J_live;               /* the journal belongs to the session this run ended up in */
+static double J_last;
+static uint64_t J_sum;           /* the covered bytes at the last checkpoint */
+
+static void J_fsync_dir(void)
+{
+	char dir[PATH_MAX], *slash; int fd;
+	snprintf(dir, sizeof dir, "%s", J_path);
+	slash = strrchr(dir, '/');
+	if (!slash) return;
+	*slash = 0;
+	fd = open(dir[0] ? dir : "/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+	if (fd >= 0) { fsync(fd); close(fd); }
+}
+static int journal_save(void)
+{
+	char tmp[PATH_MAX + 8]; FILE *f; int fd;
+	if (!J_use || !J_n || !J_sess[0]) return 0;
+	snprintf(tmp, sizeof tmp, "%s.tmp", J_path);
+	if (!(f = fopen(tmp, "w"))) return -1;
+	for (int i = 0; i < J_n; i++)
+		fprintf(f, "v1 %s %d %llu %llu %llu %llu %s\n", J_sess, J_rec[i].id,
+			(unsigned long long)J_rec[i].size, (unsigned long long)J_rec[i].have,
+			J_rec[i].rdev, J_rec[i].ino, J_rec[i].dst);
+	fflush(f);
+	fd = fileno(f);
+	if (fsync(fd) < 0 || fclose(f) != 0) return -1;
+	if (rename(tmp, J_path) < 0) return -1;
+	J_fsync_dir();   /* a rename is only durable once the directory is */
+	return 0;
+}
+static int journal_load(void)
+{
+	FILE *f; char line[1400];
+	if (!J_use) return 0;
+	if (!(f = fopen(J_path, "r"))) return 0;
+	while (fgets(line, sizeof line, f)) {
+		char sess[64], dst[256], *nl; int id;
+		unsigned long long size, have, rdev, ino;
+		if (sscanf(line, "v1 %63s %d %llu %llu %llu %llu %255[^\n]", sess, &id, &size, &have, &rdev, &ino, dst) != 7) continue;
+		if ((nl = strchr(dst, '\n'))) *nl = 0;
+		if (!J_sess[0]) snprintf(J_sess, sizeof J_sess, "%s", sess);
+		else if (strcmp(J_sess, sess)) continue;   /* lines from another run are not ours */
+		if (J_n == MAX_VOLS) break;
+		J_rec[J_n].id = id; J_rec[J_n].size = size; J_rec[J_n].have = have;
+		J_rec[J_n].rdev = rdev; J_rec[J_n].ino = ino;
+		snprintf(J_rec[J_n].dst, sizeof J_rec[J_n].dst, "%s", dst);
+		J_n++;
+	}
+	fclose(f);
+	return J_n;
+}
+static const struct jrec *journal_of(int id)
+{
+	for (int i = 0; i < J_n; i++) if (J_rec[i].id == id) return &J_rec[i];
+	return NULL;
+}
+/* journal_drop: the offset is worthless now. Loud when it is the donor's doing
+ * (the operator should know the copy starts over), quiet on the way out of a run
+ * that finished, because there is nothing left to resume.
+ * Why the unlink matters as much as the write: a journal that outlived a
+ * successful migration would have the next run resume onto a disk that is
+ * already correct-but-different, which is exactly the hole above. */
+static void journal_drop(const char *why)
+{
+	if (!J_n && !J_sess[0]) return;
+	if (why) pinfo("the resume journal %s is not usable: %s", J_path, why);
+	unlink(J_path);
+	{ char tmp[PATH_MAX + 8]; snprintf(tmp, sizeof tmp, "%s.tmp", J_path); unlink(tmp); }
+	J_n = 0; J_sess[0] = 0; J_live = 0;
+}
+/* journal_tick: the checkpoint. It must never claim more than the disk holds, so
+ * every volume that moved is fsync'd first: a kill -9 between the two lines below
+ * leaves a journal that is behind the real copy, which costs a little traffic,
+ * while the other order would leave a journal ahead of it, which costs the data.
+ * The cost is one fsync per volume per interval, not per frame. */
+static void journal_tick(int force)
+{
+	double now; uint64_t sum = 0;
+	if (!J_live || !J_n || !J_use) return;
+	for (int i = 0; i < J_n; i++) { const struct target *t = P_find(J_rec[i].id); if (t) sum += t->have; }
+	now = now_s();
+	/* two triggers, because either alone fails: a fast copy (a local disk, a
+	 * 10G link) would move the whole volume between two five-second checkpoints
+	 * and a kill -9 would then cost all of it; a slow one would take minutes to
+	 * cross 128 MiB and a kill would cost up to five seconds of work. Whichever
+	 * comes first. */
+	if (!force && now - J_last < JOURNAL_EVERY && sum - J_sum < JOURNAL_JUMP) return;
+	for (int i = 0; i < J_n; i++) {
+		struct target *t = P_find(J_rec[i].id);
+		if (!t || t->have == J_rec[i].have) continue;
+		fsync(t->fd_buf);
+		J_rec[i].have = t->have;
+		J_rec[i].size = t->size;
+	}
+	journal_save();
+	J_last = now; J_sum = sum;
+}
+/* vols_find: read one volume out of the donor's "vols" answer (id:size:mnt,
+ * separated by ';'). The mountpoint carries only '-' or a path -- the donor has
+ * already replaced any ':' or ';' in it, because those are the two characters
+ * this line uses to mean something else. */
+static int vols_find(const char *list, int id, uint64_t *size, char *mnt, size_t mn)
+{
+	const char *p = list;
+	while (p && *p) {
+		int vid; unsigned long long sz; char m[256] = "-";
+		int n = sscanf(p, "%d:%llu:%255[^;]", &vid, &sz, m);
+		if (n >= 2 && vid == id) {
+			*size = (uint64_t)sz;
+			if (n >= 3) snprintf(mnt, mn, "%s", m);
+			return 1;
+		}
+		p = strchr(p, ';');
+		if (p) p++;
+	}
+	return 0;
+}
+
 static int P_write(struct target *t, uint64_t off, const uint8_t *buf, uint64_t len)
 {
 	int fd = (t->is_blk && (off % 4096 == 0) && (len % 4096 == 0)) ? t->fd : t->fd_buf;
@@ -1130,6 +1320,31 @@ static void P_prezero(struct target *t)
 	}
 	pinfo("vol %d: %s does not take a whole-device zero (%s): every zero range is written on its own", t->id, t->dst, strerror(errno));
 }
+/* P_repunch: a resumed file target has bytes past its last checkpoint that the
+ * earlier run may have written without ever claiming them. They are not zeros --
+ * so P_zero's "a fresh sparse file reads as zeros" shortcut would be a lie here --
+ * and they are not trustworthy either: the writer on the donor goes on while we
+ * are away, so what is on the target there is from before the gap. Punch the hole:
+ * reads come back as zeros, no block is written twice, and the frames the donor
+ * does send land on top of it. A filesystem that will not punch falls back to
+ * P_zero's slow path, which is right but writes every zero out. Block devices need
+ * none of this: their zero frames go through BLKZEROOUT range by range anyway. */
+#ifndef FALLOC_FL_KEEP_SIZE
+#define FALLOC_FL_KEEP_SIZE 0x01
+#endif
+#ifndef FALLOC_FL_PUNCH_HOLE
+#define FALLOC_FL_PUNCH_HOLE 0x02
+#endif
+static void P_repunch(struct target *t)
+{
+	if (t->is_blk || !t->resumed || t->have >= t->size) return;
+	if (fallocate(t->fd_buf, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, (off_t)t->have, (off_t)(t->size - t->have)) == 0) {
+		t->prezeroed = 1;
+		pinfo("vol %d: %s past %llu punched out (the earlier run may have written past its last checkpoint)", t->id, t->dst, (unsigned long long)t->have);
+	} else {
+		pinfo("vol %d: %s will not punch past %llu (%s): every zero range below is written out", t->id, t->dst, (unsigned long long)t->have, strerror(errno));
+	}
+}
 static int P_zero(struct target *t, uint64_t off, uint64_t len, int pass)
 {
 	t->zeroed += len;
@@ -1137,9 +1352,9 @@ static int P_zero(struct target *t, uint64_t off, uint64_t len, int pass)
 	if (t->is_blk) {
 		uint64_t range[2] = { off, len };
 		if (ioctl(t->fd_buf, BLKZEROOUT, range) == 0) { P_cover(t, off, len); return 0; }
-	} else if (pass == 1) {
+	} else if (pass == 1 && !t->resumed) {
 		P_cover(t, off, len);
-		return 0;   /* a fresh sparse file reads as zeros */
+		return 0;   /* a fresh sparse file reads as zeros -- only one this run created */
 	}
 	/* write zeros the slow way */
 	static uint8_t *z; if (!z) z = calloc(1, MAX_RUN);
@@ -1156,6 +1371,7 @@ static char *P_expect(const char *cmd)
 	snprintf(line, sizeof line, "%s\n", cmd);
 	if (write_all(P_cmd_fd, line, strlen(line)) < 0) { pinfo("cannot send '%s': %s", cmd, strerror(errno)); P_died = 1; return NULL; }
 	for (;;) {
+		journal_tick(0);   /* cheap unless the interval is up: the check is one clock read */
 		char *l = reader_line(&P_r);
 		if (!l) {
 			if (errno == ETIMEDOUT) pinfo("nothing from the donor for %d s while waiting for '%s': the path to it is wedged (the donor is NOT frozen; check the network, then run transfer again)", P_r.stall, cmd);
@@ -1228,12 +1444,25 @@ static const char *kv(const char *s, const char *key)
 	return NULL;
 }
 
+/* target_open: open what we write to, and -- when this is a resumed copy --
+ * check that it still is the same thing. The O_TRUNC is the reason this cannot be
+ * left alone: a run that resumes would otherwise wipe the very bytes the journal
+ * says are there, and then resume past them, leaving a hole nobody looks at until
+ * sha256 at the end. Same for a block device that has been swapped underneath: two
+ * half copies of two different disks stitched at an offset are not one copy. */
 static int target_open(struct target *t)
 {
 	struct stat st;
+	const struct jrec *j = t->resumed ? journal_of(t->id) : NULL;
+	if (t->resumed && !j) { pinfo("volume %d: the journal has no record of it", t->id); return -1; }
 	if (stat(t->dst, &st) == 0 && S_ISBLK(st.st_mode)) {
 		uint64_t sz;
 		t->is_blk = 1;
+		if (t->resumed && (unsigned long long)st.st_rdev != j->rdev) {
+			pinfo("%s is not the disk the earlier run wrote (device %llu, that was %llu): resuming onto it would stitch two different copies together", t->dst, (unsigned long long)st.st_rdev, j->rdev);
+			return -1;
+		}
+		t->rdev = (unsigned long long)st.st_rdev;
 		t->fd = open(t->dst, O_WRONLY | O_DIRECT | O_CLOEXEC);
 		t->fd_buf = open(t->dst, O_WRONLY | O_CLOEXEC);
 		if (t->fd < 0 || t->fd_buf < 0) { pinfo("open %s: %s", t->dst, strerror(errno)); return -1; }
@@ -1241,10 +1470,23 @@ static int target_open(struct target *t)
 		if (sz < t->size) { pinfo("%s is %llu bytes, the donor volume %d is %llu: too small", t->dst, (unsigned long long)sz, t->id, (unsigned long long)t->size); return -1; }
 	} else {
 		t->is_blk = 0;
+		if (t->resumed) {
+			/* no O_TRUNC, no O_CREAT: the file the earlier run was building */
+			if (stat(t->dst, &st) < 0) { pinfo("%s is gone, so there is nothing to resume onto", t->dst); return -1; }
+			if ((unsigned long long)st.st_ino != j->ino) { pinfo("%s is not the file the earlier run was writing (inode %llu, that was %llu)", t->dst, (unsigned long long)st.st_ino, j->ino); return -1; }
+			if ((uint64_t)st.st_size < t->size) { pinfo("%s is %llu bytes, the donor volume %d is %llu: the earlier run's copy is shorter than the volume", t->dst, (unsigned long long)st.st_size, t->id, (unsigned long long)t->size); return -1; }
+			t->fd_buf = open(t->dst, O_WRONLY | O_CLOEXEC);
+			if (t->fd_buf < 0) { pinfo("open %s: %s", t->dst, strerror(errno)); return -1; }
+			t->fd = t->fd_buf;
+			t->ino = (unsigned long long)st.st_ino;
+			pinfo("vol %d: keeping %s (inode %llu), the earlier run's copy", t->id, t->dst, t->ino);
+			return 0;
+		}
 		t->fd_buf = open(t->dst, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
 		if (t->fd_buf < 0) { pinfo("open %s: %s", t->dst, strerror(errno)); return -1; }
 		t->fd = t->fd_buf;
 		if (ftruncate(t->fd_buf, t->size) < 0) { pinfo("truncate %s: %s", t->dst, strerror(errno)); return -1; }
+		if (fstat(t->fd_buf, &st) == 0) t->ino = (unsigned long long)st.st_ino;
 	}
 	return 0;
 }
@@ -1380,7 +1622,7 @@ static char *P_step(const char *cmd, int vid)
 	if (ok || !P_died) return ok;
 	for (i = 0; i < P_reattach_n; i++) {
 		if (P_reattach() < 0) return NULL;
-		if (vid >= 0 && !strncmp(cmd, "full ", 5)) {
+		if (vid >= 0 && (!strncmp(cmd, "full ", 5) || !strncmp(cmd, "resume ", 7))) {
 			struct target *t = P_find(vid);
 			uint64_t off = t ? t->have & ~(((uint64_t)1 << P_chunk_shift) - 1) : 0;
 			if (t && off > t->size) off = t->size;
@@ -1414,6 +1656,11 @@ static void usage_pull(void)
 "  --stall SECS      complete silence from the donor for this long = a wedged path, fail instead of hanging (default 300, 0 = never)\n"
 "  --reattach N      when the channel dies, attach to the donor's session again and carry the pass on\n"
 "                    from where the copy got to, N times before giving up (default 3)\n"
+"  --journal PATH    where to keep how far the copy got, so a RUN that dies (not just a link) can be\n"
+"                    resumed by the next one: pass 1 then sends only what is missing. Only the donor\n"
+"                    can make that offer good -- if its session is gone the journal is dropped and\n"
+"                    the copy starts from zero, which is said out loud (default " JOURNAL_DEFAULT ")\n"
+"  --no-resume       do not write or read that journal at all: every run starts from zero\n"
 "  --compress MODE   auto (default) | none | zstd[:LEVEL]: each data frame's payload, compressed on the donor.\n"
 "                    auto climbs the level while the donor's cpu stays ahead of the link and the data compresses,\n"
 "                    and comes back down when it does not; both rates are measured, not assumed. Never the\n"
@@ -1439,6 +1686,7 @@ static int cmd_pull(int argc, char **argv)
 	double wr_rate = 0, t_epoch = 0;   /* how fast the donor dirties blocks, and when the last epoch closed */
 	double patience = 1800;            /* seconds of extra copying worth trading for a shorter freeze */
 	int auto_comp = 0, noncv_now = 0;
+	int resumed = 0;                   /* this run picked up an earlier one's journal */
 	const char *before_freeze = NULL, *after_freeze = NULL, *precheck = NULL; const char *also[MAX_VOLS]; int nalso = 0, hooked = 0, round = 1;
 	int i; char cmd[512], *ok; double t_start = now_s(), rate = 0, t0;
 	uint64_t full_data = 0, total_sent = 0, prev_dirty = 0; int stalled = 0, pass;
@@ -1470,6 +1718,8 @@ static int cmd_pull(int argc, char **argv)
 		else if (!strcmp(argv[i], "--verify")) verify = 1;
 		else if (!strcmp(argv[i], "--thaw")) thaw = 1;
 		else if (!strcmp(argv[i], "--reattach") && i + 1 < argc) P_reattach_n = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "--journal") && i + 1 < argc) snprintf(J_path, sizeof J_path, "%s", argv[++i]);
+		else if (!strcmp(argv[i], "--no-resume")) J_use = 0;
 		else if (!strcmp(argv[i], "--quiet")) P_quiet = 1;
 		else usage_pull();
 	}
@@ -1482,18 +1732,73 @@ static int cmd_pull(int argc, char **argv)
 	P_stall = stall;
 	spawn(ssh);
 
-	if (!(ok = P_expect("hello"))) goto fail;
+	/* D42: an earlier run may have left a journal. It is an offer, and the donor
+	 * decides whether to take it -- only a session it still holds can say what was
+	 * written while we were away. Anything else and the copy starts over, loudly. */
+	if (journal_load() > 0) {
+		snprintf(cmd, sizeof cmd, "hello resume=%s", J_sess);
+		pinfo("an earlier run left %s (%d volume(s), session %s): asking the donor whether it still holds that session", J_path, J_n, J_sess);
+	} else snprintf(cmd, sizeof cmd, "hello");
+	if (!(ok = P_expect(cmd))) goto fail;
 	{ const char *s = kv(ok, "session"); snprintf(P_session, sizeof P_session, "%s", s ? s : "-"); }
+	resumed = kv(ok, "mode") && !strcmp(kv(ok, "mode"), "resumed");
 	pinfo("donor agent %s, kernel %s %s", kv(ok, "version") ? kv(ok, "version") : "?", kv(ok, "kernel") ? kv(ok, "kernel") : "?", kv(ok, "arch") ? kv(ok, "arch") : "");
 	if (kv(ok, "version") && strcmp(kv(ok, "version"), AGENT_VERSION)) pinfo("WARN: this agent is %s, the donor's is %s", AGENT_VERSION, kv(ok, "version"));
-	for (i = 0; i < P_n; i++) {
-		snprintf(cmd, sizeof cmd, "vol %d %s", P_t[i].id, P_t[i].src);
-		if (!(ok = P_expect(cmd))) goto fail;
-		P_t[i].size = strtoull(kv(ok, "size") ? kv(ok, "size") : "0", NULL, 10);
-		snprintf(P_t[i].mnt, sizeof P_t[i].mnt, "%s", kv(ok, "mnt") ? kv(ok, "mnt") : "-");
-		pinfo("vol %d: %s = %s (%s, mounted at %s), %llu bytes, traced on %s+%s -> %s", P_t[i].id, P_t[i].src, kv(ok, "dev"), kv(ok, "fs"), kv(ok, "mnt"),
-			(unsigned long long)P_t[i].size, kv(ok, "trace"), kv(ok, "off"), P_t[i].dst);
-		if (target_open(&P_t[i]) < 0) goto fail;
+	if (resumed && kv(ok, "version") && strcmp(kv(ok, "version"), AGENT_VERSION)) {
+		/* the same session, a different agent: the offsets still mean the same
+		 * thing but the protocol around them may not, and starting over is the
+		 * cheap mistake of the two */
+		pinfo("the donor's session runs migrator-agent %s, this side is %s: not resuming across versions, starting over", kv(ok, "version"), AGENT_VERSION);
+		resumed = 0;
+		if (!(ok = P_expect("hello fresh"))) goto fail;
+		{ const char *s = kv(ok, "session"); snprintf(P_session, sizeof P_session, "%s", s ? s : "-"); }
+	}
+	if (resumed) {
+		/* the donor still holds it. Adopt its volumes rather than registering them
+		 * again (it refuses "vol" once it tracks, and it is right to), and take its
+		 * chunk: the journal's offsets were counted in the tracker's granularity,
+		 * not in whatever this run was asked for. */
+		const char *list; uint64_t dc;
+		char b1[32], b2[32];
+		if (!(ok = P_expect("vols"))) goto fail;
+		dc = strtoull(kv(ok, "chunk") ? kv(ok, "chunk") : "0", NULL, 10);
+		list = kv(ok, "list");
+		if (!dc || (dc & (dc - 1)) || dc < 4096 || dc > MAX_RUN) {
+			pinfo("the donor's session reports chunk=%llu, which cannot be resumed onto (--no-resume starts from zero)", (unsigned long long)dc);
+			goto fail;
+		}
+		if (dc != chunk) pinfo("the donor's session tracks at %llu, not the %llu asked for: using the granularity its offsets are in", (unsigned long long)dc, (unsigned long long)chunk);
+		P_chunk_shift = 0; while (dc > 1) { dc >>= 1; P_chunk_shift++; }
+		chunk = 1ULL << P_chunk_shift;
+		pinfo("session %s is still on the donor: adopting its volumes at chunk %llu", P_session, (unsigned long long)chunk);
+		for (i = 0; i < P_n; i++) {
+			const struct jrec *j = journal_of(P_t[i].id);
+			uint64_t dsz = 0; char dmnt[256] = "-";
+			if (!j) { pinfo("volume %d is not in the journal, so this run cannot resume it (--no-resume starts from zero)", P_t[i].id); goto fail; }
+			if (strcmp(j->dst, P_t[i].dst)) { pinfo("volume %d went to %s in the earlier run, not to %s", P_t[i].id, j->dst, P_t[i].dst); goto fail; }
+			if (!vols_find(list, P_t[i].id, &dsz, dmnt, sizeof dmnt)) { pinfo("the donor's session has no volume %d", P_t[i].id); goto fail; }
+			if (dsz != j->size) {
+				pinfo("volume %d is %llu bytes on the donor now, %llu in the journal: it changed, so the old offset means nothing", P_t[i].id, (unsigned long long)dsz, (unsigned long long)j->size);
+				goto fail;
+			}
+			P_t[i].size = dsz;
+			snprintf(P_t[i].mnt, sizeof P_t[i].mnt, "%s", dmnt);
+			P_t[i].have = (j->have < dsz ? j->have : dsz) & ~(chunk - 1);
+			P_t[i].resumed = 1;
+			if (target_open(&P_t[i]) < 0) goto fail;
+			pinfo("vol %d: %s of %s are on %s from the earlier run, carrying on there", P_t[i].id, mib(P_t[i].have, b1, sizeof b1), mib(P_t[i].size, b2, sizeof b2), P_t[i].dst);
+		}
+	} else {
+		if (J_n) journal_drop("the donor no longer holds that session (it restarted, or another run took it over): the bitmaps a resume would need are gone, so this copy starts from zero");
+		for (i = 0; i < P_n; i++) {
+			snprintf(cmd, sizeof cmd, "vol %d %s", P_t[i].id, P_t[i].src);
+			if (!(ok = P_expect(cmd))) goto fail;
+			P_t[i].size = strtoull(kv(ok, "size") ? kv(ok, "size") : "0", NULL, 10);
+			snprintf(P_t[i].mnt, sizeof P_t[i].mnt, "%s", kv(ok, "mnt") ? kv(ok, "mnt") : "-");
+			pinfo("vol %d: %s = %s (%s, mounted at %s), %llu bytes, traced on %s+%s -> %s", P_t[i].id, P_t[i].src, kv(ok, "dev"), kv(ok, "fs"), kv(ok, "mnt"),
+				(unsigned long long)P_t[i].size, kv(ok, "trace"), kv(ok, "off"), P_t[i].dst);
+			if (target_open(&P_t[i]) < 0) goto fail;
+		}
 	}
 	if (strcmp(compress, "none")) {
 		P_zcap = ZSTD_compressBound(MAX_RUN); P_zbuf = aligned_buf(P_zcap);
@@ -1516,19 +1821,50 @@ static int cmd_pull(int argc, char **argv)
 		if (before_freeze) { pinfo("before the freeze: %s", before_freeze); if (system(before_freeze) != 0) { pinfo("the before-freeze command failed"); goto fail; } }
 		pass = 1; goto freeze;
 	}
-	snprintf(cmd, sizeof cmd, "track %s %llu", tracker, (unsigned long long)chunk);
-	if (!(ok = P_expect(cmd))) goto fail;
-	pinfo("tracking by %s, chunk %llu", kv(ok, "mode"), (unsigned long long)chunk);
-	if (!(ok = P_expect("epoch 0 0"))) goto fail;
+	if (!resumed) {
+		snprintf(cmd, sizeof cmd, "track %s %llu", tracker, (unsigned long long)chunk);
+		if (!(ok = P_expect(cmd))) goto fail;
+		pinfo("tracking by %s, chunk %llu", kv(ok, "mode"), (unsigned long long)chunk);
+		if (!(ok = P_expect("epoch 0 0"))) goto fail;
+	} else pinfo("the tracker in that session has been running all along: it holds what was written while this side was away");
 
-	/* pass 1: everything, onto a target that is zero to begin with */
+	/* pass 1: everything, onto a target that is zero to begin with -- except
+	 * where the earlier run already got to. Those bytes are not zeroed and not
+	 * truncated; the pass adds to them. */
 	P_pass = 1; P_pass_bytes = 0; P_wire_bytes = 0; P_pass_csecs = 0;
-	for (i = 0; i < P_n; i++) P_prezero(&P_t[i]);
-	for (i = 0; i < P_n; i++) P_t[i].have = 0;
+	for (i = 0; i < P_n; i++) {
+		if (P_t[i].resumed) continue;
+		P_prezero(&P_t[i]);
+		P_t[i].have = 0;
+	}
+	for (i = 0; i < P_n; i++) P_repunch(&P_t[i]);
+	/* bind the journal to this run's volumes. It is written before the first byte
+	 * on purpose: a run that dies in its first minute should still be resumable. */
+	J_n = 0; J_live = 0;
+	if (J_use && P_n) {
+		snprintf(J_sess, sizeof J_sess, "%s", P_session);
+		for (i = 0; i < P_n; i++) {
+			J_rec[J_n].id = P_t[i].id; J_rec[J_n].size = P_t[i].size; J_rec[J_n].have = P_t[i].have;
+			J_rec[J_n].rdev = P_t[i].rdev; J_rec[J_n].ino = P_t[i].ino;
+			snprintf(J_rec[J_n].dst, sizeof J_rec[J_n].dst, "%s", P_t[i].dst);
+			J_n++;
+		}
+		J_live = 1;
+		if (journal_save() < 0) pinfo("cannot write %s (%s): this run will not be resumable by the next one", J_path, strerror(errno));
+		J_last = now_s(); J_sum = 0;
+		for (i = 0; i < P_n; i++) J_sum += P_t[i].have;
+	}
 	t0 = now_s();
 	for (i = 0; i < P_n; i++) {
-		snprintf(cmd, sizeof cmd, "full %d", P_t[i].id);
-		if (!(ok = P_step(cmd, P_t[i].id))) goto fail;
+		char b1[32];
+		struct target *t = &P_t[i];
+		if (t->resumed && t->have >= t->size) {
+			pinfo("vol %d: the earlier run got all %s of it, nothing left in this pass", t->id, mib(t->size, b1, sizeof b1));
+			continue;
+		}
+		if (t->resumed) snprintf(cmd, sizeof cmd, "resume %d %llu", t->id, (unsigned long long)t->have);
+		else snprintf(cmd, sizeof cmd, "full %d", t->id);
+		if (!(ok = P_step(cmd, t->id))) goto fail;
 	}
 	{
 		double secs = now_s() - t0; char b1[32], b2[32], b3[32], wire[96] = ""; uint64_t z = 0;
@@ -1536,7 +1872,7 @@ static int cmd_pull(int argc, char **argv)
 		full_data = P_pass_bytes; total_sent = P_pass_bytes; rate = secs > 0 ? P_pass_bytes / secs : 0;
 		if (P_wire_bytes && P_wire_bytes < P_pass_bytes)
 			snprintf(wire, sizeof wire, " (%s on the wire, %.1fx)", mib(P_wire_bytes, b3, sizeof b3), (double)P_pass_bytes / (double)P_wire_bytes);
-		pinfo("pass 1 full: %s data, %s zero, %.1f s, %.1f MiB/s%s", mib(P_pass_bytes, b1, sizeof b1), mib(z, b2, sizeof b2), secs, rate / 1048576, wire);
+		pinfo("pass 1 %s: %s data, %s zero, %.1f s, %.1f MiB/s%s", resumed ? "resumed (only what was missing)" : "full", mib(P_pass_bytes, b1, sizeof b1), mib(z, b2, sizeof b2), secs, rate / 1048576, wire);
 		if (auto_comp && P_tune_comp(secs, P_pass_bytes, P_wire_bytes, P_pass_csecs, cmd, sizeof cmd) && !(ok = P_step(cmd, -1))) goto fail;
 	}
 
@@ -1724,13 +2060,23 @@ freeze:
 			if (!(ok = P_expect(cmd))) goto fail;
 			printf("CUTOVER host=%s port=%s token=%s\n", host, colon + 1, token);
 		} else if (!(ok = P_expect(thaw ? "quit thaw" : "quit"))) goto fail;
-		printf("RESULT ok passes=%d full_data=%llu total_sent=%llu final_bytes=%llu frozen_s=%.2f secs=%.1f resumed=%d donor=%s\n", pass, (unsigned long long)full_data,
-			(unsigned long long)(total_sent + P_pass_bytes), (unsigned long long)P_pass_bytes, tsent, now_s() - t_start, P_resumes, thaw ? "thawed" : "frozen");
+		/* a finished copy has nothing to resume: a journal that outlived it would
+		 * have the next run carry on onto a disk that is already complete */
+		journal_drop(NULL);
+		printf("RESULT ok passes=%d full_data=%llu total_sent=%llu final_bytes=%llu frozen_s=%.2f secs=%.1f resumed=%d journal=%s donor=%s\n", pass, (unsigned long long)full_data,
+			(unsigned long long)(total_sent + P_pass_bytes), (unsigned long long)P_pass_bytes, tsent, now_s() - t_start, P_resumes,
+			resumed ? "resumed" : (J_use && P_n ? "fresh" : "none"), thaw ? "thawed" : "frozen");
 		fflush(stdout);
 	}
 	close(P_cmd_fd); waitpid(P_child, NULL, 0);
 	return 0;
 fail:
+	/* the journal is the one thing worth keeping from a failed run: it says how
+	 * far the copy got, and the donor's session decides whether that is still true */
+	if (J_live && J_n) {
+		journal_tick(1);
+		pinfo("%s holds how far this copy got: run the same command again and it carries on from there (add --no-resume to start over instead)", J_path);
+	}
 	printf("RESULT fail\n"); fflush(stdout);
 	close(P_cmd_fd); kill(P_child, SIGTERM); waitpid(P_child, NULL, 0);
 	return 1;
