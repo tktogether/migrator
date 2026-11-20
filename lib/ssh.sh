@@ -253,7 +253,7 @@ ssh_relay_start() {   # idempotent; needs -i KEYFILE — the relay must carry it
 		-R 0.0.0.0:2224:localhost:2224 "$r_user@$r_host" >"$RUN/relay.log" 2>&1 &
 	echo $! > "$RUN/relay.pid"
 	state_set relay.pid "$(cat "$RUN/relay.pid")"; state_set relay.host "$r_host"; state_set relay.cut_port 2224
-	say "relay: cutover reverse tunnel up ($r_host :2224 -> this box :2223, pid $(cat "$RUN/relay.pid"))"
+	say "relay: cutover reverse tunnel up ($r_host :2224 -> this box :2224, pid $(cat "$RUN/relay.pid"))"
 }
 
 ssh_require_online_donor() {
