@@ -16,7 +16,18 @@ set -euo pipefail
 OUT=${RIG_OUT:-$HOME/rig}
 MIRROR=${MIRROR:-http://deb.debian.org/debian}
 SUITE=${SUITE:-bookworm}
-INC="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny,grub-pc-bin"
+INC="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny,grub-pc-bin,grub2-common"
+# grub2-common is the one that ships /usr/sbin/grub-install; grub-pc-bin only
+# brings the i386-pc platform modules and pulls grub-common. Listing both is
+# what makes "postfix runs grub-install inside the migrated tree" possible.
+# DBCACHE keeps the .deb set between runs: the same ~165 packages every time,
+# and a warm cache turns a 20-minute bootstrap into a couple of minutes.
+DBCACHE=${DBCACHE:-}
+CACHEOPT=""
+if [ -n "$DBCACHE" ]; then
+	mkdir -p "$DBCACHE"
+	CACHEOPT="--cache-dir=$DBCACHE"
+fi
 DISKMIB=2048; PARTMIB=2046
 UUID=$(cat /proc/sys/kernel/random/uuid)
 ROOT=$OUT/donor-rootfs
@@ -36,7 +47,7 @@ else
 	[ "$(id -u)" = 0 ] || { echo "no mmdebstrap and not root: bootstrap the donor on a VM, not in a container" >&2; exit 2; }
 	command -v debootstrap >/dev/null 2>&1 || { echo "neither mmdebstrap nor debootstrap installed" >&2; exit 2; }
 	[ -e "/usr/share/debootstrap/scripts/$SUITE" ] || ln -sfn sid "/usr/share/debootstrap/scripts/$SUITE"
-	debootstrap --variant=minbase --no-check-gpg --include="$INC" "$SUITE" "$ROOT" "$MIRROR"
+	debootstrap --variant=minbase --no-check-gpg $CACHEOPT --include="$INC" "$SUITE" "$ROOT" "$MIRROR"
 fi
 
 # a donor without grub looks fine for 30 minutes and fails at postfix's last
