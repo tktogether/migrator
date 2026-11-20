@@ -244,7 +244,7 @@ ssh_relay_start() {   # idempotent; needs -i KEYFILE — the relay must carry it
 	{ read -r r_user; read -r r_host; read -r r_port; } < <(relay_spec "$spec")
 	nohup ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
 		-o StrictHostKeyChecking=accept-new -o BatchMode=yes -i "$key" -p "$r_port" \
-		-R 2224:localhost:2223 "$r_user@$r_host" >"$RUN/relay.log" 2>&1 &
+		-R 0.0.0.0:2224:localhost:2223 "$r_user@$r_host" >"$RUN/relay.log" 2>&1 &
 	echo $! > "$RUN/relay.pid"
 	state_set relay.pid "$(cat "$RUN/relay.pid")"; state_set relay.host "$r_host"; state_set relay.cut_port 2224
 	say "relay: cutover reverse tunnel up ($r_host :2224 -> this box :2223, pid $(cat "$RUN/relay.pid"))"
