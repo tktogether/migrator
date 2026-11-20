@@ -64,6 +64,8 @@
 #include <linux/reboot.h>
 #include <sys/reboot.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/file.h>
 #include <sys/select.h>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -226,16 +228,28 @@ static int S_clevel = 1;
 static uint8_t *S_zbuf; static size_t S_zcap;
 static int S_frozen_fds[2 * MAX_VOLS], S_nfrozen;
 static char S_mnts[MAX_VOLS][256]; static int S_nmnts;   /* freeze-only mountpoints (files volumes) */
-static int S_out = 1;
+static int S_in = 0;       /* the active channel: commands arrive here ... */
+static int S_out = 1;      /* ... and replies and frames leave here (one fd when it is a socket) */
+static int S_dead;         /* that channel is gone: stop the pass, keep the session */
+static int S_daemon;       /* a listener owns the session: a dead channel is not the end of it */
+static int S_listen_fd = -1;
+static int S_reap = 900;   /* seconds without a client before a daemon gives the session up */
+static char S_session[33]; /* who this session is, for a client that comes back to it */
+static char S_sock[PATH_MAX];
 
+/* A channel that has gone away must not take the session with it: the tracker
+ * and the freeze are the whole point of surviving a broken link. Set S_dead and
+ * let the frame loops stop at their next write; the command loop then waits for
+ * a client to attach again (D40/D41). */
 static void out_line(const char *fmt, ...)
 {
 	char line[4096]; va_list ap; int n;
+	if (S_dead) return;
 	va_start(ap, fmt); n = vsnprintf(line, sizeof line - 1, fmt, ap); va_end(ap);
 	if (n < 0) return;
 	if (n > (int)sizeof line - 2) n = sizeof line - 2;
 	line[n++] = '\n';
-	if (write_all(S_out, line, n) < 0) exit(1);
+	if (write_all(S_out, line, n) < 0) S_dead = 1;
 }
 #define OK(...) out_line("ok " __VA_ARGS__)
 #define ERR(...) out_line("err " __VA_ARGS__)
@@ -256,6 +270,7 @@ static int S_read(struct volume *v, uint64_t off, uint64_t len)
 
 static int S_emit_range(struct volume *v, uint64_t off, uint64_t len, int allow_zero, uint64_t *data, uint64_t *zero)
 {
+	if (S_dead) return -1;
 	if (S_read(v, off, len) < 0) { ERR("read %s at %llu+%llu: %s", v->dev, (unsigned long long)off, (unsigned long long)len, strerror(errno)); return -1; }
 	if (allow_zero && is_zero(S_buf, len)) { out_line("zero %d %llu %llu", v->id, (unsigned long long)off, (unsigned long long)len); *zero += len; return 0; }
 	if (S_comp && S_zbuf) {
@@ -267,37 +282,49 @@ static int S_emit_range(struct volume *v, uint64_t off, uint64_t len, int allow_
 		S_ctime += now_s() - ct0;
 		if (!ZSTD_isError(n) && n && n < len - len / 64) {
 			out_line("zdata %d %llu %llu %llu", v->id, (unsigned long long)off, (unsigned long long)len, (unsigned long long)n);
-			if (write_all(S_out, S_zbuf, n) < 0) exit(1);
+			if (write_all(S_out, S_zbuf, n) < 0) { S_dead = 1; return -1; }
 			*data += len;
 			return 0;
 		}
 	}
 	out_line("data %d %llu %llu", v->id, (unsigned long long)off, (unsigned long long)len);
-	if (write_all(S_out, S_buf, len) < 0) exit(1);
+	if (write_all(S_out, S_buf, len) < 0) { S_dead = 1; return -1; }
 	*data += len;
 	return 0;
 }
 
-static void S_full(struct volume *v)
+/* S_full_from: the [off, size) part of a full pass.
+ *
+ * off is chunk-aligned and comes from the recipient, which already holds
+ * [0, off): that is a resume. pending is only cleared when the pass starts at
+ * zero -- during a resume it must keep what the tracker saw while the channel
+ * was down, because a chunk below off that was written in that window was sent
+ * before the break and has to go again (the gap D40 found; S_resume sends it).
+ */
+static void S_full_from(struct volume *v, uint64_t off, int say_ok)
 {
-	uint64_t off, data = 0, zero = 0; double t0 = now_s();
+	uint64_t data = 0, zero = 0; double t0 = now_s();
 	S_ctime = 0;
-	if (v->pending.w) memset(v->pending.w, 0, v->pending.nwords * sizeof(uint64_t));
-	for (off = 0; off < v->size; off += S_run) {
+	if (!off && v->pending.w) memset(v->pending.w, 0, v->pending.nwords * sizeof(uint64_t));
+	for (; off < v->size; off += S_run) {
 		uint64_t len = v->size - off < S_run ? v->size - off : S_run;
 		if (S_emit_range(v, off, len, 1, &data, &zero) < 0) return;
 	}
 	out_line("stat full id=%d data=%llu zero=%llu secs=%.2f csecs=%.2f", v->id, (unsigned long long)data, (unsigned long long)zero, now_s() - t0, S_ctime);
-	OK("full id=%d", v->id);
+	if (say_ok) OK("full id=%d", v->id);
 }
+static void S_full(struct volume *v) { S_full_from(v, 0, 1); }
 
-static void S_send(struct volume *v, int final)
+static void S_send(struct volume *v, int final, int say_ok)
 {
 	uint64_t c = 0, data = 0, zero = 0, runs = 0, chunks = 0; double t0 = now_s();
 	S_ctime = 0;
 	uint64_t maxc = S_run >> S_chunk_shift; if (!maxc) maxc = 1;
 	struct bitmap *b = &v->pending;
+	/* no tracker, no bitmaps: an off-line volume is copied by a full pass only */
+	if (!b->w || !v->chunks) { if (say_ok) OK("send id=%d", v->id); return; }
 	while (c < v->chunks) {
+		if (S_dead) return;
 		uint64_t w = b->w[c >> 6];
 		if (!w) { c = (c | 63) + 1; continue; }
 		if (!bitmap_test(b, c)) { c++; continue; }
@@ -312,10 +339,24 @@ static void S_send(struct volume *v, int final)
 	memset(b->w, 0, b->nwords * sizeof(uint64_t));
 	out_line("stat send id=%d kind=%s chunks=%llu bytes=%llu runs=%llu secs=%.2f csecs=%.2f", v->id, final ? "final" : "delta",
 		(unsigned long long)chunks, (unsigned long long)data, (unsigned long long)runs, now_s() - t0, S_ctime);
-	OK("send id=%d", v->id);
+	if (say_ok) OK("send id=%d", v->id);
 }
 
 static uint64_t S_lost_seen;
+/* S_resume: the recipient has [0, off) already; give it the rest of the pass,
+ * then whatever the tracker saw while nobody was reading (chunks below off that
+ * were written in that window: they were sent before the break, so they are
+ * stale on the copy and only the tracker knows). */
+static void S_resume(struct volume *v, uint64_t off)
+{
+	double t0 = now_s();
+	if (off >= v->size) { OK("resume id=%d from=%llu nothing to send", v->id, (unsigned long long)off); return; }
+	S_full_from(v, off, 0);
+	if (S_dead) return;
+	S_send(v, 0, 0);
+	if (S_dead) return;
+	OK("resume id=%d from=%llu secs=%.2f", v->id, (unsigned long long)off, now_s() - t0);
+}
 static void S_epoch(long settle_ms, long max_ms)
 {
 	double t0 = now_s(); char dirty[2048]; int n = 0, i; uint64_t lost;
@@ -366,7 +407,7 @@ static void S_freeze(void)
 {
 	const char *order[2 * MAX_VOLS]; int n, i, j; double t0 = now_s();
 	char skipped[1024] = ""; size_t sl = 0;
-	if (S_nfrozen) { ERR("already frozen"); return; }
+	if (S_nfrozen) { OK("freeze n=%d skipped=- secs=0.00 already"); return; }
 	n = S_freeze_list(order);
 	for (i = 0; i < n; i++) {
 		/* ONE ioctl per mountpoint: a second FIFREEZE on a filesystem this loop
@@ -398,6 +439,150 @@ static void S_thaw(void)
 {
 	for (int j = S_nfrozen - 1; j >= 0; j--) { ioctl(S_frozen_fds[j], FITHAW, 0); close(S_frozen_fds[j]); }
 	S_nfrozen = 0;
+}
+
+/* ---- the channel, and the session that outlives it ------------------------ */
+/*
+ * A migration link drops: a flapping WAN, a VPN rekey, a NAT that forgot the
+ * flow. Before D41 that ended the run, and the next one started the pass from
+ * zero -- hours of copying thrown away because a cable hiccuped.
+ *
+ * The state that must survive is not on disk anywhere: it is the tracker's
+ * bitmap (which chunks the donor has written since the last pass) and, later,
+ * the freeze. So the process holding it has to survive the link, which means it
+ * cannot be the child of the ssh session: sshd signals the session's process
+ * group when the connection dies. Hence serve --listen: bind a socket in the
+ * tmpfs the agent already runs from, detach from the session completely, and
+ * let each ssh session attach as a client instead. A client that comes back
+ * says who it was and carries on.
+ */
+static void S_new_session(void)
+{
+	unsigned char r[16]; int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC), i;
+	ssize_t n = fd >= 0 ? read(fd, r, sizeof r) : -1;
+	if (fd >= 0) close(fd);
+	if (n != (ssize_t)sizeof r) { snprintf(S_session, sizeof S_session, "%016llx", (unsigned long long)(now_s() * 1000) & 0xffffffffffffULL); return; }
+	for (i = 0; i < 16; i++) sprintf(S_session + 2 * i, "%02x", r[i]);
+}
+/* S_reset: forget the session. The volumes' bitmaps belong to volumes that are
+ * about to be registered again, and a frozen filesystem must be given back
+ * before anyone looks at it. */
+static void S_reset(void)
+{
+	if (S_nfrozen) S_thaw();
+	if (S_tracker.mode) tracker_stop(&S_tracker);
+	for (int i = 0; i < S_nvols; i++) if (S_vols[i].fd >= 0) { close(S_vols[i].fd); S_vols[i].fd = -1; }
+	S_nvols = 0; S_nmnts = 0;
+	S_new_session();
+}
+/* one line from the channel; 0 when the channel is gone */
+static int S_readline(char *buf, size_t n)
+{
+	size_t i = 0;
+	for (;;) {
+		char c; ssize_t r = read(S_in, &c, 1);
+		if (r < 0) { if (errno == EINTR) continue; return 0; }
+		if (r == 0) return 0;
+		if (c == '\n') break;
+		if (i + 1 < n) buf[i++] = c;
+	}
+	buf[i] = 0;
+	return 1;
+}
+/* S_wait_attach: hold the session open for a client that may still come back,
+ * then give the donor its filesystems back. A daemon that nobody reattaches to
+ * must never leave a frozen filesystem behind (D36's lesson, one layer up). */
+static int S_wait_attach(void)
+{
+	double t0 = now_s();
+	for (;;) {
+		int left = S_reap - (int)(now_s() - t0), n;
+		struct pollfd pfd;
+		if (left <= 0) return 0;
+		pfd.fd = S_listen_fd; pfd.events = POLLIN; pfd.revents = 0;
+		n = poll(&pfd, 1, left * 1000);
+		if (n < 0 && errno == EINTR) continue;
+		if (n <= 0) { if (n < 0) return 0; continue; }
+		n = accept(S_listen_fd, NULL, NULL);
+		if (n < 0) { if (errno == EINTR || errno == ECONNABORTED) continue; return 0; }
+		S_in = S_out = n; S_dead = 0;
+		return 1;
+	}
+}
+static int S_connect(const char *path)
+{
+	struct sockaddr_un sa; int fd;
+	if (strlen(path) >= sizeof sa.sun_path) return -1;
+	memset(&sa, 0, sizeof sa); sa.sun_family = AF_UNIX;
+	snprintf(sa.sun_path, sizeof sa.sun_path, "%s", path);
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (fd < 0) return -1;
+	if (connect(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { close(fd); return -1; }
+	return fd;
+}
+/* bind and listen; --detach leaves the ssh session's process group first */
+static int S_daemon_start(const char *path, int detach)
+{
+	struct sockaddr_un sa; char dir[PATH_MAX], *slash; int fd, lock;
+	memset(&sa, 0, sizeof sa); sa.sun_family = AF_UNIX;
+	if (strlen(path) >= sizeof sa.sun_path) { fprintf(stderr, "socket path too long: %s\n", path); return -1; }
+	snprintf(S_sock, sizeof S_sock, "%s", path);
+	snprintf(sa.sun_path, sizeof sa.sun_path, "%s", path);
+	snprintf(dir, sizeof dir, "%s", path);
+	slash = strrchr(dir, '/');
+	if (slash && slash != dir) { *slash = 0; mkdir(dir, 0700); }
+	/* one daemon per socket: a second one that found the same stale path must
+	 * not unlink the socket of the one that won */
+	snprintf(dir, sizeof dir, "%s.lock", path);
+	lock = open(dir, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+	if (lock >= 0 && flock(lock, LOCK_EX | LOCK_NB) < 0) { close(lock); return -1; }
+	if (detach) {
+		pid_t p = fork();
+		if (p < 0) { fprintf(stderr, "fork: %s\n", strerror(errno)); return -1; }
+		if (p > 0) {
+			/* the parent stays only until the socket answers, so the caller can
+			 * attach immediately instead of racing the bind */
+			int i;
+			for (i = 0; i < 100; i++) { int c = S_connect(path); if (c >= 0) { close(c); break; } usleep(100000); }
+			_exit(0);
+		}
+		setsid();
+		if (!fork()) {
+			int d = open("/dev/null", O_RDWR | O_CLOEXEC);
+			if (d >= 0) { dup2(d, 0); dup2(d, 1); dup2(d, 2); if (d > 2) close(d); }
+		} else _exit(0);
+		{ char log[PATH_MAX + 8]; snprintf(log, sizeof log, "%s.log", path);
+		  int l = open(log, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+		  if (l >= 0) { dup2(l, 2); if (l > 2) close(l); } }
+		if (chdir("/") < 0) { /* the daemon holds no relative paths */ }
+	}
+	unlink(path);
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (fd < 0) { fprintf(stderr, "socket: %s\n", strerror(errno)); return -1; }
+	if (bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { fprintf(stderr, "bind %s: %s\n", path, strerror(errno)); close(fd); return -1; }
+	chmod(path, 0600);
+	if (listen(fd, 4) < 0) { fprintf(stderr, "listen %s: %s\n", path, strerror(errno)); close(fd); return -1; }
+	S_listen_fd = fd; S_daemon = 1;
+	return 0;
+}
+/* S_relay: the attach client, two directions and no cleverness. The daemon owns
+ * the session; this process only carries bytes between the ssh channel and it. */
+static int S_relay(int fd)
+{
+	pid_t p = fork();
+	if (p == 0) {
+		char b[65536]; ssize_t r;
+		signal(SIGPIPE, SIG_IGN);
+		while ((r = read(fd, b, sizeof b)) > 0) if (write_all(1, b, r) < 0) break;
+		shutdown(fd, SHUT_RD);
+		_exit(0);
+	}
+	if (p < 0) return -1;
+	{ char b[65536]; ssize_t r;
+	  while ((r = read(0, b, sizeof b)) > 0) if (write_all(fd, b, r) < 0) break;
+	  shutdown(fd, SHUT_WR); }
+	waitpid(p, NULL, 0);
+	return 0;
 }
 
 static void S_hash(struct volume *v)
@@ -635,19 +820,60 @@ static void S_atexit(void)
 	 * by accident; only "quit" (without thaw) means "stay frozen for the cutover" */
 	if (!S_keep_frozen) S_thaw();
 }
+static void S_daemon_stop(void)
+{
+	if (S_listen_fd >= 0) { close(S_listen_fd); S_listen_fd = -1; }
+	if (S_sock[0]) unlink(S_sock);
+}
 static int cmd_serve(int argc, char **argv)
 {
-	char line[1024]; struct utsname u; (void)argc; (void)argv;
+	char line[1024]; struct utsname u;
+	const char *listen = NULL; int detach = 0, i;
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--listen") && i + 1 < argc) listen = argv[++i];
+		else if (!strncmp(argv[i], "--listen=", 9)) listen = argv[i] + 9;
+		else if (!strcmp(argv[i], "--detach")) detach = 1;
+		else if (!strcmp(argv[i], "--reap") && i + 1 < argc) S_reap = atoi(argv[++i]);
+		else { fprintf(stderr, "serve: unknown option %s\n", argv[i]); return 2; }
+	}
 	signal(SIGPIPE, SIG_IGN);
 	atexit(S_atexit);
 	uname(&u);
 	S_buf = aligned_buf(MAX_RUN);
-	while (fgets(line, sizeof line, stdin)) {
+	S_new_session();
+	if (listen) {
+		if (S_daemon_start(listen, detach) < 0) return 1;
+		S_in = -1; S_dead = 1;
+		if (!S_wait_attach()) { S_thaw(); tracker_stop(&S_tracker); S_daemon_stop(); return 1; }
+	}
+	for (;;) {
+		if (!S_readline(line, sizeof line)) {
+			/* the channel ended. Under a listener the session is not over: hold
+			 * it for a client that may still come back, then carry on with it. */
+			if (!S_daemon) break;
+			if (S_in >= 0) close(S_in);
+			S_in = -1; S_out = 1; S_dead = 1;
+			if (!S_wait_attach()) break;
+			continue;
+		}
 		char *a[8]; int n = 0; char *p = strtok(line, " \t\r\n");
 		while (p && n < 8) { a[n++] = p; p = strtok(NULL, " \t\r\n"); }
 		if (!n) continue;
 		if (!strcmp(a[0], "hello")) {
-			OK("hello version=%s kernel=%s arch=%s pid=%d", AGENT_VERSION, u.release, u.machine, getpid());
+			/* "hello" (or "hello fresh") starts a new run; "hello resume=ID" is a
+			 * client coming back to a session it left -- the same one, or nothing */
+			const char *want = n > 1 ? a[1] : "fresh", *mode = "new";
+			if (!strncmp(want, "resume=", 7) && !strcmp(want + 7, S_session) && S_nvols) mode = "resumed";
+			else if (S_nvols || S_nmnts || S_tracker.mode) { S_reset(); mode = "takeover"; }
+			OK("hello version=%s kernel=%s arch=%s pid=%d session=%s mode=%s frozen=%d", AGENT_VERSION, u.release, u.machine, getpid(), S_session, mode, S_nfrozen);
+		} else if (!strcmp(a[0], "state")) {
+			char vols[1024] = ""; size_t sl = 0;
+			for (int k = 0; k < S_nvols; k++)
+				sl += snprintf(vols + sl, sizeof vols - sl, "%s%d:%llu:%llu", k ? "," : "", S_vols[k].id,
+					(unsigned long long)S_vols[k].size,
+					(unsigned long long)(bitmap_count(&S_vols[k].pending) << S_chunk_shift));
+			if (sl >= sizeof vols) sl = sizeof vols - 1;
+			OK("state session=%s frozen=%d tracking=%d vols=%s", S_session, S_nfrozen, S_tracker.mode, vols[0] ? vols : "-");
 		} else if (!strcmp(a[0], "vol") && n >= 3) {
 			char err[512]; struct volume *v;
 			if (S_nvols == MAX_VOLS) { ERR("too many volumes"); continue; }
@@ -701,9 +927,12 @@ static int cmd_serve(int argc, char **argv)
 		} else if (!strcmp(a[0], "full") && n >= 2) {
 			struct volume *v = S_find(atoi(a[1])); if (!v) { ERR("no volume %s", a[1]); continue; }
 			S_full(v);
+		} else if (!strcmp(a[0], "resume") && n >= 3) {
+			struct volume *v = S_find(atoi(a[1])); if (!v) { ERR("no volume %s", a[1]); continue; }
+			S_resume(v, strtoull(a[2], NULL, 10));
 		} else if (!strcmp(a[0], "send") && n >= 2) {
 			struct volume *v = S_find(atoi(a[1])); if (!v) { ERR("no volume %s", a[1]); continue; }
-			S_send(v, n > 2 && !strcmp(a[2], "final"));
+			S_send(v, n > 2 && !strcmp(a[2], "final"), 1);
 		} else if (!strcmp(a[0], "freeze")) {
 			S_freeze();
 		} else if (!strcmp(a[0], "thaw")) {
@@ -720,15 +949,55 @@ static int cmd_serve(int argc, char **argv)
 			tracker_stop(&S_tracker);
 			if (poll_at && S_spawn_poller(a[poll_at], a[poll_at + 1], a[poll_at + 2]) < 0) { ERR("cannot start the cutover poller"); S_thaw(); S_keep_frozen = 0; return 1; }
 			OK("quit frozen=%d poll=%s", S_nfrozen, poll_at ? "started" : "no");
+			S_daemon_stop();
 			return 0;
 		} else {
 			ERR("unknown command %s", a[0]);
 		}
 	}
-	/* the session dropped: never leave the donor frozen by accident */
+	/* the session is over: never leave the donor frozen by accident */
 	S_thaw();
 	tracker_stop(&S_tracker);
+	S_daemon_stop();
 	return 1;
+}
+
+/* ---- attach (the client of a detached serve) ----------------------------- */
+/* One ssh session = one client of the daemon. Nothing here owns any state, so
+ * when the link dies there is nothing to lose: the pull runs this command again
+ * and asks for the session it was in. The daemon is started by the first client
+ * if it is not there yet, which is why the previous run's `serve` line became
+ * this one command and nothing else had to change. */
+static int cmd_attach(int argc, char **argv)
+{
+	const char *path = NULL; int i, fd = -1;
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--sock") && i + 1 < argc) path = argv[++i];
+		else if (!strncmp(argv[i], "--sock=", 7)) path = argv[i] + 7;
+		else if (path) { fprintf(stderr, "attach: unexpected %s\n", argv[i]); return 2; }
+		else path = argv[i];
+	}
+	if (!path) path = getenv("MIGRATOR_AGENT_SOCK");
+	if (!path) path = "/run/migrator/agent.sock";
+	signal(SIGPIPE, SIG_IGN);
+	for (i = 0; i < 100; i++) {
+		fd = S_connect(path);
+		if (fd >= 0) break;
+		if (i == 0) {
+			/* nobody is listening: start the daemon and wait for its socket */
+			pid_t p = fork();
+			if (p == 0) {
+				int d = open("/dev/null", O_RDWR | O_CLOEXEC);
+				if (d >= 0) { dup2(d, 0); dup2(d, 1); dup2(d, 2); if (d > 2) close(d); }
+				execl("/proc/self/exe", "migrator-agent", "serve", "--listen", path, "--detach", (char *)NULL);
+				_exit(127);
+			}
+			if (p > 0) waitpid(p, NULL, 0);
+		}
+		usleep(100000);
+	}
+	if (fd < 0) { fprintf(stderr, "migrator-agent: nothing is listening on %s and no daemon could be started\n", path); return 3; }
+	return S_relay(fd);
 }
 
 /* ---- pull (the recipient) ------------------------------------------------ */
@@ -741,6 +1010,7 @@ struct target {
 	int fd, fd_buf;          /* O_DIRECT and buffered fds */
 	int is_blk;
 	uint64_t written, zeroed;
+	uint64_t have;           /* how far [0, have) is covered, for resuming a full pass */
 	char donor_hash[65];
 };
 
@@ -804,12 +1074,22 @@ static int P_stall = 300;      /* seconds of complete silence from the donor tha
 static uint8_t *P_zbuf; static size_t P_zcap;
 static uint64_t P_wire_bytes;  /* what actually crossed the link in this pass */
 static double P_pass_csecs;    /* seconds the donor spent compressing this pass */
+/* D41: the donor's session outlives the link, so a broken channel is not a
+ * failed transfer. P_died says the last command lost the channel (as opposed to
+ * the donor answering with err), and P_step turns that into an attach + resume. */
+static int P_died;
+static const char *P_ssh_cmd;  /* --ssh, to be run again for a new channel */
+static int P_reattach_n = 3;
+static int P_resumes;        /* how many times a pass was carried on after a broken link */
+static char P_session[33];     /* who we were, for the donor to recognise */
+static int P_chunk_shift = 16;
 
 static void pinfo(const char *fmt, ...)
 {
 	va_list ap; va_start(ap, fmt); printf("pull: "); vfprintf(stdout, fmt, ap); printf("\n"); va_end(ap); fflush(stdout);
 }
 static struct target *P_find(int id) { for (int i = 0; i < P_n; i++) if (P_t[i].id == id) return &P_t[i]; return NULL; }
+static void P_cover(struct target *t, uint64_t off, uint64_t len);
 
 static int P_write(struct target *t, uint64_t off, const uint8_t *buf, uint64_t len)
 {
@@ -821,7 +1101,16 @@ static int P_write(struct target *t, uint64_t off, const uint8_t *buf, uint64_t 
 		done += w;
 	}
 	t->written += len;
+	if (off <= t->have) P_cover(t, off, len);
 	return 0;
+}
+/* P_cover: how far the target is contiguously covered. Only a range that begins
+ * at (or before) the covered end extends it, so frames arriving out of order
+ * cannot make a hole look filled. A full pass walks the volume upwards, so after
+ * a broken link this is exactly the point to resume from. */
+static void P_cover(struct target *t, uint64_t off, uint64_t len)
+{
+	if (off <= t->have && off + len > t->have) t->have = off + len;
 }
 /* P_prezero: zero the WHOLE target once, before pass 1. A zero frame then costs
  * nothing. Per-frame BLKZEROOUT looked cheap and was not: ~1500 synchronous 4 MiB
@@ -844,11 +1133,12 @@ static void P_prezero(struct target *t)
 static int P_zero(struct target *t, uint64_t off, uint64_t len, int pass)
 {
 	t->zeroed += len;
-	if (t->prezeroed) return 0;
+	if (t->prezeroed) { P_cover(t, off, len); return 0; }
 	if (t->is_blk) {
 		uint64_t range[2] = { off, len };
-		if (ioctl(t->fd_buf, BLKZEROOUT, range) == 0) return 0;
+		if (ioctl(t->fd_buf, BLKZEROOUT, range) == 0) { P_cover(t, off, len); return 0; }
 	} else if (pass == 1) {
+		P_cover(t, off, len);
 		return 0;   /* a fresh sparse file reads as zeros */
 	}
 	/* write zeros the slow way */
@@ -864,12 +1154,13 @@ static char *P_expect(const char *cmd)
 {
 	static char okbuf[2048]; char line[64];
 	snprintf(line, sizeof line, "%s\n", cmd);
-	if (write_all(P_cmd_fd, line, strlen(line)) < 0) { pinfo("cannot send '%s': %s", cmd, strerror(errno)); return NULL; }
+	if (write_all(P_cmd_fd, line, strlen(line)) < 0) { pinfo("cannot send '%s': %s", cmd, strerror(errno)); P_died = 1; return NULL; }
 	for (;;) {
 		char *l = reader_line(&P_r);
 		if (!l) {
 			if (errno == ETIMEDOUT) pinfo("nothing from the donor for %d s while waiting for '%s': the path to it is wedged (the donor is NOT frozen; check the network, then run transfer again)", P_r.stall, cmd);
 			else pinfo("the stream ended while waiting for '%s'", cmd);
+			P_died = 1;
 			return NULL;
 		}
 		if (!strncmp(l, "data ", 5)) {
@@ -879,9 +1170,10 @@ static char *P_expect(const char *cmd)
 			if (reader_exact(&P_r, P_buf, len) < 0) {
 				if (errno == ETIMEDOUT) pinfo("nothing from the donor for %d s inside a data frame of volume %d: the path to it is wedged (the donor is NOT frozen; check the network, then run transfer again)", P_r.stall, id);
 				else pinfo("the stream ended inside a data frame");
+				P_died = 1;
 				return NULL;
 			}
-			if (P_write(t, off, P_buf, len) < 0) { pinfo("write %s at %llu: %s", t->dst, off, strerror(errno)); return NULL; }
+			if (P_write(t, off, P_buf, len) < 0) { pinfo("write %s at %llu: %s", t->dst, off, strerror(errno)); P_died = 0; return NULL; }
 			P_pass_bytes += len; P_wire_bytes += len;
 		} else if (!strncmp(l, "zdata ", 6)) {
 			int id; unsigned long long off, raw, comp;
@@ -890,22 +1182,23 @@ static char *P_expect(const char *cmd)
 			if (reader_exact(&P_r, P_zbuf, comp) < 0) {
 				if (errno == ETIMEDOUT) pinfo("nothing from the donor for %d s inside a compressed frame of volume %d: the path to it is wedged (the donor is NOT frozen)", P_r.stall, id);
 				else pinfo("the stream ended inside a compressed frame");
+				P_died = 1;
 				return NULL;
 			}
 			size_t un = ZSTD_decompress(P_buf, MAX_RUN, P_zbuf, comp);
 			if (ZSTD_isError(un) || un != raw) die("volume %d at %llu: cannot decompress %llu bytes into %llu (%s)", id, off, comp, raw, ZSTD_isError(un) ? ZSTD_getErrorName(un) : "short");
-			if (P_write(t, off, P_buf, raw) < 0) { pinfo("write %s at %llu: %s", t->dst, off, strerror(errno)); return NULL; }
+			if (P_write(t, off, P_buf, raw) < 0) { pinfo("write %s at %llu: %s", t->dst, off, strerror(errno)); P_died = 0; return NULL; }
 			P_pass_bytes += raw; P_wire_bytes += comp;
 		} else if (!strncmp(l, "zero ", 5)) {
 			int id; unsigned long long off, len;
 			if (sscanf(l + 5, "%d %llu %llu", &id, &off, &len) != 3) die("bad zero frame: %s", l);
 			struct target *t = P_find(id); if (!t) die("zero frame for unknown volume %d", id);
-			if (P_zero(t, off, len, P_pass) < 0) { pinfo("zero %s at %llu: %s", t->dst, off, strerror(errno)); return NULL; }
+			if (P_zero(t, off, len, P_pass) < 0) { pinfo("zero %s at %llu: %s", t->dst, off, strerror(errno)); P_died = 0; return NULL; }
 		} else if (!strncmp(l, "ok ", 3) || !strcmp(l, "ok")) {
 			snprintf(okbuf, sizeof okbuf, "%s", l + 2 + (l[2] == ' '));
 			return okbuf;
 		} else if (!strncmp(l, "err ", 4)) {
-			pinfo("donor: %s", l + 4); return NULL;
+			pinfo("donor: %s", l + 4); P_died = 0; return NULL;
 		} else if (!strncmp(l, "hash ", 5)) {
 			int id; char hex[65];
 			if (sscanf(l + 5, "%d %64s", &id, hex) == 2) { struct target *t = P_find(id); if (t) snprintf(t->donor_hash, sizeof t->donor_hash, "%s", hex); }
@@ -1049,6 +1342,58 @@ static int spawn(const char *cmd)
 	return 0;
 }
 
+/* P_reattach: run the ssh command again and ask for the session we were in.
+ * The donor answers with the session it holds and whether it is the same one;
+ * anything else (a fresh daemon, a run that took the donor over) means the
+ * bitmaps are gone and the copy has to start over, which the caller reports. */
+static int P_reattach(void)
+{
+	char cmd[128], sess[64], mode[64]; char *ok; const char *s, *m;
+	if (P_child > 0) { kill(P_child, SIGTERM); waitpid(P_child, NULL, 0); P_child = 0; }
+	if (P_cmd_fd > 0) { close(P_cmd_fd); P_cmd_fd = 0; }
+	pinfo("the link to the donor dropped: attaching to the session again");
+	spawn(P_ssh_cmd);
+	snprintf(cmd, sizeof cmd, "hello resume=%s", P_session);
+	if (!(ok = P_expect(cmd))) return -1;
+	s = kv(ok, "session"); snprintf(sess, sizeof sess, "%s", s ? s : "-");
+	m = kv(ok, "mode"); snprintf(mode, sizeof mode, "%s", m ? m : "-");
+	if (strcmp(sess, P_session) || strcmp(mode, "resumed")) {
+		pinfo("the donor holds no session %s any more (it answered session=%s mode=%s): every pass would have to start over", P_session, sess, mode);
+		return -1;
+	}
+	{ const char *v = kv(ok, "version");
+	  if (v && strcmp(v, AGENT_VERSION)) { pinfo("the session on the donor runs migrator-agent %s, this side is %s: not resuming across versions", v, AGENT_VERSION); return -1; } }
+	pinfo("session %s is still on the donor: carrying on where the copy got to", P_session);
+	P_died = 0;
+	P_resumes++;
+	return 0;
+}
+/* P_step: run one command of a pass, and when the channel dies under it, attach
+ * again and finish it instead of failing the run. A full pass resumes at the
+ * point the target is covered to (chunk-aligned, so a partly written chunk is
+ * simply sent again); deltas resume with the same `send`, whose bitmap is still
+ * on the donor and still holds what was not sent. */
+static char *P_step(const char *cmd, int vid)
+{
+	char again[300], b[32], b2[32]; int i; char *ok;
+	ok = P_expect(cmd);
+	if (ok || !P_died) return ok;
+	for (i = 0; i < P_reattach_n; i++) {
+		if (P_reattach() < 0) return NULL;
+		if (vid >= 0 && !strncmp(cmd, "full ", 5)) {
+			struct target *t = P_find(vid);
+			uint64_t off = t ? t->have & ~(((uint64_t)1 << P_chunk_shift) - 1) : 0;
+			if (t && off > t->size) off = t->size;
+			snprintf(again, sizeof again, "resume %d %llu", vid, (unsigned long long)off);
+			pinfo("volume %d: %s of %s are on the target already, resuming the full pass there", vid, mib(off, b, sizeof b), mib(t ? t->size : 0, b2, sizeof b2));
+		} else snprintf(again, sizeof again, "%s", cmd);
+		ok = P_expect(again);
+		if (ok || !P_died) return ok;
+	}
+	pinfo("gave up after %d attempt(s) to get the session back", P_reattach_n);
+	return NULL;
+}
+
 static void usage_pull(void)
 {
 	fprintf(stderr,
@@ -1067,6 +1412,8 @@ static void usage_pull(void)
 "  --freeze MODE     auto | ask (print ASK and read go/abort on stdin) | never\n"
 "  --settle MS       wait for in-flight writes after every epoch, at least this (default 1000)\n"
 "  --stall SECS      complete silence from the donor for this long = a wedged path, fail instead of hanging (default 300, 0 = never)\n"
+"  --reattach N      when the channel dies, attach to the donor's session again and carry the pass on\n"
+"                    from where the copy got to, N times before giving up (default 3)\n"
 "  --compress MODE   auto (default) | none | zstd[:LEVEL]: each data frame's payload, compressed on the donor.\n"
 "                    auto climbs the level while the donor's cpu stays ahead of the link and the data compresses,\n"
 "                    and comes back down when it does not; both rates are measured, not assumed. Never the\n"
@@ -1122,17 +1469,21 @@ static int cmd_pull(int argc, char **argv)
 		else if (!strcmp(argv[i], "--precheck") && i + 1 < argc) precheck = argv[++i];
 		else if (!strcmp(argv[i], "--verify")) verify = 1;
 		else if (!strcmp(argv[i], "--thaw")) thaw = 1;
+		else if (!strcmp(argv[i], "--reattach") && i + 1 < argc) P_reattach_n = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--quiet")) P_quiet = 1;
 		else usage_pull();
 	}
 	if (!ssh || (!P_n && !nalso)) usage_pull();
 	if (run > MAX_RUN) die("--run above 8M");
+	P_ssh_cmd = ssh;
+	{ uint64_t c = chunk; P_chunk_shift = 0; while (c > 1) { c >>= 1; P_chunk_shift++; } }
 	signal(SIGPIPE, SIG_IGN);
 	P_buf = aligned_buf(MAX_RUN);
 	P_stall = stall;
 	spawn(ssh);
 
 	if (!(ok = P_expect("hello"))) goto fail;
+	{ const char *s = kv(ok, "session"); snprintf(P_session, sizeof P_session, "%s", s ? s : "-"); }
 	pinfo("donor agent %s, kernel %s %s", kv(ok, "version") ? kv(ok, "version") : "?", kv(ok, "kernel") ? kv(ok, "kernel") : "?", kv(ok, "arch") ? kv(ok, "arch") : "");
 	if (kv(ok, "version") && strcmp(kv(ok, "version"), AGENT_VERSION)) pinfo("WARN: this agent is %s, the donor's is %s", AGENT_VERSION, kv(ok, "version"));
 	for (i = 0; i < P_n; i++) {
@@ -1173,10 +1524,11 @@ static int cmd_pull(int argc, char **argv)
 	/* pass 1: everything, onto a target that is zero to begin with */
 	P_pass = 1; P_pass_bytes = 0; P_wire_bytes = 0; P_pass_csecs = 0;
 	for (i = 0; i < P_n; i++) P_prezero(&P_t[i]);
+	for (i = 0; i < P_n; i++) P_t[i].have = 0;
 	t0 = now_s();
 	for (i = 0; i < P_n; i++) {
 		snprintf(cmd, sizeof cmd, "full %d", P_t[i].id);
-		if (!(ok = P_expect(cmd))) goto fail;
+		if (!(ok = P_step(cmd, P_t[i].id))) goto fail;
 	}
 	{
 		double secs = now_s() - t0; char b1[32], b2[32], b3[32], wire[96] = ""; uint64_t z = 0;
@@ -1185,7 +1537,7 @@ static int cmd_pull(int argc, char **argv)
 		if (P_wire_bytes && P_wire_bytes < P_pass_bytes)
 			snprintf(wire, sizeof wire, " (%s on the wire, %.1fx)", mib(P_wire_bytes, b3, sizeof b3), (double)P_pass_bytes / (double)P_wire_bytes);
 		pinfo("pass 1 full: %s data, %s zero, %.1f s, %.1f MiB/s%s", mib(P_pass_bytes, b1, sizeof b1), mib(z, b2, sizeof b2), secs, rate / 1048576, wire);
-		if (auto_comp && P_tune_comp(secs, P_pass_bytes, P_wire_bytes, P_pass_csecs, cmd, sizeof cmd) && !(ok = P_expect(cmd))) goto fail;
+		if (auto_comp && P_tune_comp(secs, P_pass_bytes, P_wire_bytes, P_pass_csecs, cmd, sizeof cmd) && !(ok = P_step(cmd, -1))) goto fail;
 	}
 
 	/* the epochs; a pre-check (round 1 frozen, thawed, precheckd) is followed by round 2 */
@@ -1193,7 +1545,7 @@ round:
 	for (pass = (round == 1 ? 2 : pass + 1); ; pass++) {
 		uint64_t dirty = 0, lost; double est; const char *d; char b1[32];
 		snprintf(cmd, sizeof cmd, "epoch %ld %ld", settle, settle * 10 > 10000 ? settle * 10 : 10000);
-		if (!(ok = P_expect(cmd))) goto fail;
+		if (!(ok = P_step(cmd, -1))) goto fail;
 		d = kv(ok, "dirty");
 		for (const char *p = d; p && *p; ) { int id; unsigned long long b; if (sscanf(p, "%d:%llu", &id, &b) == 2) dirty += b; p = strchr(p, ','); if (p) p++; }
 		lost = strtoull(kv(ok, "lost") ? kv(ok, "lost") : "0", NULL, 10);
@@ -1244,7 +1596,7 @@ round:
 			 * buffer overrun): the only safe answer is to read everything again */
 			pinfo("the tracker lost %llu event(s) since the last epoch: a full pass again", (unsigned long long)lost);
 			P_pass = pass; P_pass_bytes = 0; t0 = now_s();
-			for (i = 0; i < P_n; i++) { snprintf(cmd, sizeof cmd, "full %d", P_t[i].id); if (!(ok = P_expect(cmd))) goto fail; }
+			for (i = 0; i < P_n; i++) { P_t[i].have = 0; snprintf(cmd, sizeof cmd, "full %d", P_t[i].id); if (!(ok = P_step(cmd, P_t[i].id))) goto fail; }
 			{ double secs = now_s() - t0; if (secs > 0.05) rate = P_pass_bytes / secs; total_sent += P_pass_bytes;
 			  pinfo("pass %d full again: %s in %.1f s", pass, mib(P_pass_bytes, b1, sizeof b1), secs); }
 			prev_dirty = 0; stalled = 0;
@@ -1283,14 +1635,14 @@ round:
 			break;
 		}
 		P_pass = pass; P_pass_bytes = 0; P_wire_bytes = 0; P_pass_csecs = 0; t0 = now_s();
-		for (i = 0; i < P_n; i++) { snprintf(cmd, sizeof cmd, "send %d", P_t[i].id); if (!(ok = P_expect(cmd))) goto fail; }
+		for (i = 0; i < P_n; i++) { snprintf(cmd, sizeof cmd, "send %d", P_t[i].id); if (!(ok = P_step(cmd, P_t[i].id))) goto fail; }
 		{
 			double secs = now_s() - t0; char b2[32];
 			if (P_pass_bytes > 4 * 1048576 && secs > 0.05) rate = P_pass_bytes / secs;
 			total_sent += P_pass_bytes;
 			if (P_wire_bytes && P_wire_bytes < P_pass_bytes) pinfo("pass %d sent: %s in %.1f s (%s on the wire)", pass, mib(P_pass_bytes, b1, sizeof b1), secs, mib(P_wire_bytes, b2, sizeof b2));
 			else pinfo("pass %d sent: %s in %.1f s", pass, mib(P_pass_bytes, b1, sizeof b1), secs);
-			if (auto_comp && P_tune_comp(secs, P_pass_bytes, P_wire_bytes, P_pass_csecs, cmd, sizeof cmd) && !(ok = P_expect(cmd))) goto fail;
+			if (auto_comp && P_tune_comp(secs, P_pass_bytes, P_wire_bytes, P_pass_csecs, cmd, sizeof cmd) && !(ok = P_step(cmd, -1))) goto fail;
 		}
 		prev_dirty = dirty;
 	}
@@ -1299,7 +1651,7 @@ round:
 freeze:
 	{
 		double tf = now_s(), tfreeze, tsent; char b1[32]; uint64_t dirty = 0; const char *d;
-		if (!(ok = P_expect("freeze"))) goto fail;
+		if (!(ok = P_step("freeze", -1))) goto fail;
 		tfreeze = now_s() - tf;
 		{
 			/* a filesystem without freeze (an ESP) keeps the right to change: its volume gets
@@ -1316,16 +1668,16 @@ freeze:
 		}
 		if (P_n) {
 			snprintf(cmd, sizeof cmd, "epoch 100 2000");
-			if (!(ok = P_expect(cmd))) goto fail;
+			if (!(ok = P_step(cmd, -1))) goto fail;
 			d = kv(ok, "dirty");
 			for (const char *p = d; p && *p; ) { int id; unsigned long long b; if (sscanf(p, "%d:%llu", &id, &b) == 2) dirty += b; p = strchr(p, ','); if (p) p++; }
 			P_pass = pass; P_pass_bytes = 0;
-			for (i = 0; i < P_n; i++) { snprintf(cmd, sizeof cmd, "send %d final", P_t[i].id); if (!(ok = P_expect(cmd))) goto fail; }
+			for (i = 0; i < P_n; i++) { snprintf(cmd, sizeof cmd, "send %d final", P_t[i].id); if (!(ok = P_step(cmd, P_t[i].id))) goto fail; }
 			/* the unfrozen ones once more: everything written while the others were sent */
 			for (i = 0; i < P_n; i++) if (P_t[i].unfrozen) {
-				if (!(ok = P_expect("epoch 200 3000"))) goto fail;
+				if (!(ok = P_step("epoch 200 3000", -1))) goto fail;
 				snprintf(cmd, sizeof cmd, "send %d final", P_t[i].id);
-				if (!(ok = P_expect(cmd))) goto fail;
+				if (!(ok = P_step(cmd, P_t[i].id))) goto fail;
 			}
 			for (i = 0; i < P_n; i++) { fsync(P_t[i].fd_buf); }
 		}
@@ -1339,7 +1691,7 @@ freeze:
 		if (precheck && round == 1) {
 			/* the copy is consistent now: thaw the donor (the tracker goes on), precheck
 			 * on this side, then catch up with what was written meanwhile and freeze again */
-			if (!(ok = P_expect("thaw"))) goto fail;
+			if (!(ok = P_step("thaw", -1))) goto fail;
 			pinfo("thawed for the pre-check: %s", precheck);
 			if (system(precheck) != 0) { pinfo("the pre-check failed: the donor runs on, nothing is frozen"); goto fail; }
 			pinfo("pre-check ok: catching up and freezing again");
@@ -1353,7 +1705,7 @@ freeze:
 			for (i = 0; i < P_n; i++) {
 				char hex[65];
 				snprintf(cmd, sizeof cmd, "hash %d", P_t[i].id);
-				if (!(ok = P_expect(cmd))) goto fail;
+				if (!(ok = P_step(cmd, P_t[i].id))) goto fail;
 				if (target_hash(&P_t[i], hex) < 0) { pinfo("cannot hash %s: %s", P_t[i].dst, strerror(errno)); goto fail; }
 				if (!strcmp(hex, P_t[i].donor_hash)) pinfo("vol %d: sha256 %s equal", P_t[i].id, hex);
 				else if (P_t[i].unfrozen) pinfo("vol %d (%s): sha256 differs (donor %.16s..., here %.16s...), as expected on a filesystem that cannot be frozen and is still being written: the copy holds every block the tracker saw", P_t[i].id, P_t[i].mnt, P_t[i].donor_hash, hex);
@@ -1372,8 +1724,8 @@ freeze:
 			if (!(ok = P_expect(cmd))) goto fail;
 			printf("CUTOVER host=%s port=%s token=%s\n", host, colon + 1, token);
 		} else if (!(ok = P_expect(thaw ? "quit thaw" : "quit"))) goto fail;
-		printf("RESULT ok passes=%d full_data=%llu total_sent=%llu final_bytes=%llu frozen_s=%.2f secs=%.1f donor=%s\n", pass, (unsigned long long)full_data,
-			(unsigned long long)(total_sent + P_pass_bytes), (unsigned long long)P_pass_bytes, tsent, now_s() - t_start, thaw ? "thawed" : "frozen");
+		printf("RESULT ok passes=%d full_data=%llu total_sent=%llu final_bytes=%llu frozen_s=%.2f secs=%.1f resumed=%d donor=%s\n", pass, (unsigned long long)full_data,
+			(unsigned long long)(total_sent + P_pass_bytes), (unsigned long long)P_pass_bytes, tsent, now_s() - t_start, P_resumes, thaw ? "thawed" : "frozen");
 		fflush(stdout);
 	}
 	close(P_cmd_fd); waitpid(P_child, NULL, 0);
@@ -1424,9 +1776,10 @@ static int cmd_hash(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	if (argc < 2) { fprintf(stderr, "usage: migrator-agent serve | pull ... | probe [PATH...] | hash DEV [BYTES] | cutover --port P --token T ACTION | version\n"); return 2; }
+	if (argc < 2) { fprintf(stderr, "usage: migrator-agent serve [--listen PATH [--detach]] | attach [PATH] | pull ... | probe [PATH...] | hash DEV [BYTES] | cutover --port P --token T ACTION | version\n"); return 2; }
 	if (!strcmp(argv[1], "version")) { printf("%s\n", AGENT_VERSION); return 0; }
 	if (!strcmp(argv[1], "serve")) return cmd_serve(argc - 1, argv + 1);
+	if (!strcmp(argv[1], "attach")) return cmd_attach(argc - 1, argv + 1);
 	if (!strcmp(argv[1], "pull")) return cmd_pull(argc - 1, argv + 1);
 	if (!strcmp(argv[1], "probe")) return cmd_probe(argc - 1, argv + 1);
 	if (!strcmp(argv[1], "hash")) return cmd_hash(argc - 1, argv + 1);

@@ -1000,7 +1000,12 @@ EOF
 	[ -n "$cut_host" ] || die "$EX_ENV" "cannot tell which address of this box the donor sees (SSH_CONNECTION empty): -o cutover-port= and a reachable address are needed for the cutover poller"
 	if [ -n "$YES" ] || ! is_tty; then fmode=auto; else fmode=ask; fi
 	local remote sshcmd
-	remote="$DONOR_RUN/agent serve"
+	# D41: not `serve` but `attach`. The donor's session (the tracker's bitmap, the
+	# freeze) must outlive this ssh channel: a flapping link used to end the run and
+	# the next one re-copied from zero. serve --listen detaches from the session and
+	# holds the state; attach is one client of it, so the pull can come back after a
+	# dropped connection and resume the pass where the copy stopped.
+	remote="$DONOR_RUN/agent attach $DONOR_RUN/agent.sock"
 	sshcmd="$(ssh_data_cmd) -- $(printf '%q' "bash -o pipefail -c $(printf '%q' "$remote")")"
 	local -a args=(pull --ssh "$sshcmd" "${vols[@]}" "${also[@]}" --chunk "$(opt chunk 64K)" --passes "$(opt passes 8)" --converge "$(opt converge 10)" --max-est "$(opt max-est 100)"
 		--tracker "$(opt tracker auto)" --settle "$(opt settle 1000)" --stall "$(opt stall 300)" --compress "$acomp"

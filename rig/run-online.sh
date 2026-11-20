@@ -98,13 +98,38 @@ echo "[rig] starting a write load on the donor (so the passes have something to 
 ssh $SSH_OPTS -p 2233 root@127.0.0.1 \
 	"mkdir -p /var/tmp/load; setsid nohup sh -c 'while :; do dd if=/dev/urandom of=/var/tmp/load/blob bs=1M count=8 conv=fsync 2>/dev/null; sleep 2; done' >/dev/null 2>&1 </dev/null & echo load started"
 
+# RIG_PUSH=<tree>: put this tree's driver, libs and agent into the Live before the
+# run. The Live is a squashfs of whatever HEAD was when it was built; without this
+# every change to lib/ or agent/ would need a 30-minute ISO rebuild to be tested.
+# RIG_DROP_AT="20 45": seconds after the migration starts at which to kill the
+# transfer's ssh channel inside the recipient. That is the failure D41 is about:
+# the link dies, the pull process does not, and the pass has to carry on instead
+# of starting over. The log says so (`resumed=`) and verify-hash proves the copy.
 echo "[rig] pushing the rig key into the recipient VM and starting the migration detached..."
 scp $SSH_OPTS -P 2255 "$KEY" root@127.0.0.1:/root/rig-key >/dev/null
+if [ -n "${RIG_PUSH:-}" ]; then
+	echo "[rig] pushing $RIG_PUSH into the recipient (driver, libs, agent)"
+	tar -C "$RIG_PUSH" -czf - bin/migrator lib agent/migrator-agent | \
+		ssh $SSH_OPTS -p 2255 root@127.0.0.1 "rm -rf /tmp/rigpush; mkdir -p /tmp/rigpush && tar -xzf - -C /tmp/rigpush && \
+			install -m 0755 /tmp/rigpush/bin/migrator /usr/local/sbin/migrator && \
+			install -m 0755 /tmp/rigpush/agent/migrator-agent /usr/local/sbin/migrator-agent && \
+			cp -f /tmp/rigpush/lib/*.sh /usr/local/lib/migrator/ && \
+			migrator -V" || { echo "FAIL: could not push the tree into the recipient" >&2; exit 1; }
+fi
 ssh $SSH_OPTS -p 2255 root@127.0.0.1 "
 	rm -f /root/migrator.rc /root/migrator-run.log
 	setsid nohup sh -c 'migrator -y ${MIGRATOR_EXTRA_OPTS:-} -o mode=online -o cutover=none -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/migrator-run.log 2>&1; echo \$? > /root/migrator.rc' >/dev/null 2>&1 &
 	sleep 2
 	echo migration started"
+for t in ${RIG_DROP_AT:-}; do
+	( sleep "$t"
+	  # only the transfer's own ssh child: it is the one that starts with the
+	  # data port. The pull's argv also carries the remote command (in --ssh),
+	  # so a pattern on the socket path would kill the pull as well -- which is
+	  # the "the run died" case, not the "the link died" one this tests.
+	  ssh $SSH_OPTS -p 2255 root@127.0.0.1 "pkill -f '^ssh -p 2233' && echo '[rig] killed the transfer channel after ${t}s'" \
+		2>/dev/null || echo "[rig] nothing to kill after ${t}s" ) &
+done
 
 RC=
 for i in $(seq 1 160); do
