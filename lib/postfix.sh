@@ -593,6 +593,15 @@ _pf_apt_install() {
 	if [ -n "$DRY" ]; then say "(dry) chroot apt-get update && apt-get install -y --no-install-recommends $pkg"; return 0; fi
 	_pf_resolv_begin
 	[ -e "$prc" ] || { printf '#!/bin/sh\nexit 101\n' > "$prc" && chmod 755 "$prc" && cleanup_add "rm -f $(printf '%q' "$prc")"; }
+	# A donor frozen in the middle of a dpkg run — an unattended-upgrade is the
+	# usual way to be in one — leaves the copy half-configured, and then every
+	# apt call refuses with "dpkg was interrupted" instead of installing (D34).
+	# Finish that first: dpkg --audit names the packages, --configure -a fixes them.
+	local audit; audit=$(target_chroot_q dpkg --audit 2>/dev/null)
+	if [ -n "$audit" ]; then
+		warn "the copy's dpkg is half-configured (the donor was frozen mid-upgrade?): dpkg --configure -a before installing $pkg"
+		target_chroot dpkg --configure -a || warn "dpkg --configure -a returned $? in the target (continuing)"
+	fi
 	target_chroot apt-get -o Acquire::Retries=2 update || warn "apt-get update in the target returned $? (continuing: the lists may be good enough)"
 	target_chroot apt-get -o Dpkg::Options::=--force-confold install -y --no-install-recommends "$pkg" || rc=$?
 	rm -f "$prc"
