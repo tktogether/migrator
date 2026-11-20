@@ -1,4 +1,4 @@
-stand-debian-md-ext4-bios — the REAL donor inventory captured by tools/migrator-test.sh
+stand-debian-md-ext4-bios — the REAL donor inventory captured by tools/reloca-test.sh
 (phase capture) from the debian-md-ext4-bios fixture VM booted into the Live: Debian 11,
 dos, 2x8 GiB virtio (vda, vdb), /boot ext4 on md0 (foreign homehost -> md126 in the Live,
 metadata 1.2, data_offset 4096), swap on vda2 AND vdb2, / ext4 on md1 (md127, data_offset
@@ -11,4 +11,4 @@ extra swap slot (from-other-disk, renumbered 2->3); root elastic renumbered 3->4
 both /boot and / block with grow; mkswap lines carry the fixture's swap UUIDs and labels;
 identity keeps all four UUID= specs; modalias-not-checked WARN (no pci_drivers in the
 capture). Checked by hand against tests/fixtures/stand-debian-md-ext4-bios/donor.inv.
-Re-capture with: bash tools/migrator-test.sh -p capture (writes donor.inv + raw/).
+Re-capture with: bash tools/reloca-test.sh -p capture (writes donor.inv + raw/).

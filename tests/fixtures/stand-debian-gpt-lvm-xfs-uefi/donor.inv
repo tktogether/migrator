@@ -1,5 +1,5 @@
-# captured by tools/migrator-test.sh: fixture debian-gpt-lvm-xfs-uefi (d2ab59850cbe), live 20260922c, 2026-09-30
-# migrator inventory role=donor date=2026-09-30T13:21:00Z host=XS-Live-OS
+# captured by tools/reloca-test.sh: fixture debian-gpt-lvm-xfs-uefi (d2ab59850cbe), live 20260922c, 2026-09-30
+# reloca.to inventory role=donor date=2026-09-30T13:21:00Z host=XS-Live-OS
 host	role=donor	hostname=XS-Live-OS	live=20260922c	fw=uefi	secureboot=0	bootnic=eth0	bootmac=52:54:00:ab:cd:01	bootip=10.0.2.15/24	gw=10.0.2.2	dmi_vendor=QEMU	dmi_product=Standard PC (i440FX + PIIX, 1996)	dmi_serial=XS-STAND-DONOR	dmi_uuid=	ncpu=2	ram=3116974080	awk=mawk
 disk	dev=/dev/vda	size=10737418240	lsec=512	psec=512	model=	serial=XSDONOR0	wwn=	byid=virtio-XSDONOR0	tran=virtio	rm=0	ro=0	pttype=gpt	ptuuid=7a1e2d3c-4b5a-4968-8776-655443322110	drivers=virtio_blk,virtio-pci	modalias=virtio:d00000002v00001AF4,pci:v00001AF4d00001001sv00001AF4sd00000002bc01sc00i00	usage=old-os:fixture-uefi Debian GNU/Linux 12 (bookworm) mtime=2026-09-30
 part	dev=/dev/vda1	disk=/dev/vda	num=1	start=2048	size=1048576	type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B	bootable=0	partuuid=7a1e2d3c-0001-4000-8000-000000000001	name=EFI System Partition	fstype=vfat	ptype=primary

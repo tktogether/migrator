@@ -1,4 +1,4 @@
-stand-rocky9-lvm-xfs-bios — the donor inventory CAPTURED by tools/migrator-test.sh (phase capture)
+stand-rocky9-lvm-xfs-bios — the donor inventory CAPTURED by tools/reloca-test.sh (phase capture)
 from the rocky9-lvm-xfs-bios fixture (the BIOS/MBR twin of rocky9-lvm-xfs-uefi: Rocky Linux 9.8
 by anaconda/kickstart, see tools/fixtures/README.md): dos label, vda1 /boot xfs (bootable), vda2
 PV -> VG rl (swap LV, root LV xfs), no ESP, grub2-pc in the MBR, BLS entries, dracut,

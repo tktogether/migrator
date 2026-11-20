@@ -1,5 +1,5 @@
-# migrator plan  donor=10.0.0.37/24/app7 (Supermicro%20SYS-5019S-M%20SN=S987654, Ubuntu%2022.04.4%20LTS)  recipient=to-XS-901 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-901, boot=eth0/52:54:00:cc:dd:01)
-# inv_sha256=1017fb7e8a35f91659b92469bd922c06128b5c32f78663634c867717d7d335c2:c51d2ea0462dfe79d411249547100b3a8f9109aa20e8b17533bdaad345ac56e8  migrator=-  live=-  date=-
+# reloca.to plan  donor=10.0.0.37/24/app7 (Supermicro%20SYS-5019S-M%20SN=S987654, Ubuntu%2022.04.4%20LTS)  recipient=to-XS-901 (QEMU%20Standard%20PC%20(Q35%20+%20ICH9,%202009)%20SN=XS-901, boot=eth0/52:54:00:cc:dd:01)
+# inv_sha256=1017fb7e8a35f91659b92469bd922c06128b5c32f78663634c867717d7d335c2:c51d2ea0462dfe79d411249547100b3a8f9109aa20e8b17533bdaad345ac56e8  reloca=-  live=-  date=-
 # WARN: firmware change uefi -> bios: grub for bios is installed from the Live (grub_from_live=1); afterwards on the donor OS: apt install grub-pc and purge the other
 # WARN: donor ESP /dev/nvme0n1p1 is kept as a slot on the bios recipient (harmless, /boot/efi stays in fstab)
 # WARN: recipient modalias not checked against the donor kernels (no pci_drivers in the kernel records): drivers virtio_blk,virtio_pci,virtio_net are assumed present

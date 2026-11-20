@@ -1,5 +1,5 @@
-# migrator plan  donor=10.0.0.53/24/erp3 (Dell%20Inc.%20PowerEdge%20R650%20SN=DL65001, Rocky%20Linux%209.4%20(Blue%20Onyx))  recipient=to-XS-777 (Dell%20Inc.%20PowerEdge%20R660%20SN=JK9RL44, boot=eno1/b4:96:91:00:00:01)
-# inv_sha256=a70e654bb7db02006877c80d849fae2035fca27ec32b5765c4719b7af1271a1b:f4b3a40c087f2719f2c160072c7dd22781ab58700437d9f33228331ebc2dbb3f  migrator=-  live=-  date=-
+# reloca.to plan  donor=10.0.0.53/24/erp3 (Dell%20Inc.%20PowerEdge%20R650%20SN=DL65001, Rocky%20Linux%209.4%20(Blue%20Onyx))  recipient=to-XS-777 (Dell%20Inc.%20PowerEdge%20R660%20SN=JK9RL44, boot=eno1/b4:96:91:00:00:01)
+# inv_sha256=a70e654bb7db02006877c80d849fae2035fca27ec32b5765c4719b7af1271a1b:f4b3a40c087f2719f2c160072c7dd22781ab58700437d9f33228331ebc2dbb3f  reloca=-  live=-  date=-
 # WARN: recipient has Secure Boot enabled: \EFI\*\shimx64.efi on the donor ESP is assumed (not visible in the inventory)
 # WARN: recipient has 2 NICs: eth0 assignment depends on probe order; the udev pin (pins=) is best-effort
 [target]

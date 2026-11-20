@@ -1,5 +1,5 @@
-# migrator plan  donor=10.0.0.21/24/db1 (Dell%20Inc.%20PowerEdge%20R640%20SN=CN12345, CentOS%20Linux%207%20(Core))  recipient=to-XS-456 (Dell%20Inc.%20PowerEdge%20R740%20SN=GH7TX22, boot=eno1/b0:83:fe:00:00:01)
-# inv_sha256=cd3dbacad7ada27cc9d4bfba22fbe5b3b3fbb7b4eff8a799056728b966b4c7f3:be437e97173e7c2b485d313d7c2706d634f603722fa3f735b7ce90033136600c  migrator=-  live=-  date=-
+# reloca.to plan  donor=10.0.0.21/24/db1 (Dell%20Inc.%20PowerEdge%20R640%20SN=CN12345, CentOS%20Linux%207%20(Core))  recipient=to-XS-456 (Dell%20Inc.%20PowerEdge%20R740%20SN=GH7TX22, boot=eno1/b0:83:fe:00:00:01)
+# inv_sha256=cd3dbacad7ada27cc9d4bfba22fbe5b3b3fbb7b4eff8a799056728b966b4c7f3:be437e97173e7c2b485d313d7c2706d634f603722fa3f735b7ce90033136600c  reloca=-  live=-  date=-
 # WARN: firmware change bios -> uefi: grub2 for uefi (grub2-efi-x64 shim-x64 efibootmgr) is installed into the migrated OS by dnf in postfix, from its own repositories: they must be reachable from the recipient (grub_pkgs=)
 # WARN: partitions of other donor disks are appended to /dev/sda as extra slots: /dev/sdb2(swap)
 # WARN: partition table dos -> gpt: new label-id and partition GUIDs, PARTUUID= references are rewritten to UUID=

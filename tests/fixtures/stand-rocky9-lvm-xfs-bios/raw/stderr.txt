@@ -1,2 +1,2 @@
-inventory: donor root /dev/mapper/rl-root (xfs) mounted at /mnt/migrator/inv/root
+inventory: donor root /dev/mapper/rl-root (xfs) mounted at /mnt/reloca.to/inv/root
 inventory: mounted /dev/vda1 at /boot (xfs, read-only)

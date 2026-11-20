@@ -1,4 +1,4 @@
-# /etc/fstab: static file system information (migrator fixture debian-md-ext4-bios)
+# /etc/fstab: static file system information (reloca.to fixture debian-md-ext4-bios)
 # <file system> <mount point> <type> <options> <dump> <pass>
 UUID=32431f84-84c8-46b5-bcc0-3e1e93c22618 /     ext4 errors=remount-ro 0 1
 UUID=766ce09c-da55-4d91-90c5-8b5541a7b3be /boot ext4 defaults          0 2

@@ -1,4 +1,4 @@
-stand-rocky9-lvm-xfs-uefi — the donor inventory CAPTURED by tools/migrator-test.sh (phase capture)
+stand-rocky9-lvm-xfs-uefi — the donor inventory CAPTURED by tools/reloca-test.sh (phase capture)
 from the rocky9-lvm-xfs-uefi fixture (Rocky Linux 9.8 by anaconda/kickstart, see
 tools/fixtures/README.md): gpt, ESP vfat C0DE-0E5E, /boot xfs, PV -> VG rl (swap LV, root LV
 xfs), BLS entries, dracut, NetworkManager keyfile on ens3 (no MAC pinned), SELinux enforcing,
