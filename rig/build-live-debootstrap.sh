@@ -124,10 +124,17 @@ spec=
 for w in $(cat /proc/cmdline); do case $w in reloca.ip=*) spec=${w#reloca.ip=} ;; esac; done
 [ -n "$spec" ] || exit 0
 addr=${spec%%,*}; rest=${spec#*,}; gw=${rest%%,*}; dns=${rest#*,}
-ip link set eth0 up 2>/dev/null || exit 0
-ip addr flush dev eth0 2>/dev/null
-ip addr add "$addr" dev eth0 || exit 0
-[ -n "$gw" ] && ip route replace default via "$gw" dev eth0
+# eth0 only when net.ifnames=0 is on the boot line; a kernel that did not get it
+# calls the same NIC ens3/enp0s3, and then this unit silently did nothing while
+# live-cycle.sh waited for an address that never came (D34)
+dev=eth0
+[ -e "/sys/class/net/$dev" ] || for d in /sys/class/net/*; do d=${d##*/}
+	case $d in lo) continue;; *) dev=$d; break;; esac
+done
+ip link set "$dev" up 2>/dev/null || exit 0
+ip addr flush dev "$dev" 2>/dev/null
+ip addr add "$addr" dev "$dev" || exit 0
+[ -n "$gw" ] && ip route replace default via "$gw" dev "$dev"
 : > /etc/resolv.conf
 [ -z "$dns" ] || for d in $(echo "$dns" | tr ',' ' '); do echo "nameserver $d" >> /etc/resolv.conf; done
 exit 0
