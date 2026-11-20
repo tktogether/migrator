@@ -560,10 +560,19 @@ static int cmd_poll(int argc, char **argv)
 		}
 		fd = connect_numeric(host, port);
 		if (fd < 0) { sleep(3); continue; }
+		snprintf(line, sizeof line, "RELOCA-POLL %s\n", token);
+		if (write_all(fd, line, strlen(line)) < 0 || (n = read_line_fd(fd, line, sizeof line, 30)) < 0) {
+			/* A TCP connect can succeed with nothing behind it: a relay whose
+			 * forwarded port has no listener passes the SYN and drops it
+			 * (D35: the cutover tunnel pointed at the wrong port).  Counting
+			 * that as "the recipient is there" kept last_ok fresh for ever, so
+			 * the thaw below never fired and the donor stayed frozen until
+			 * someone reset the machine (D36).  Only an answer counts. */
+			{ static int silent; if (!silent) { fprintf(stderr, "poll: %s:%d accepts but never answers: still waiting\n", host, port); silent = 1; } }
+			close(fd); sleep(3); continue;
+		}
 		{ static int logged; if (!logged) { fprintf(stderr, "poll: connected to %s:%d\n", host, port); logged = 1; } }
 		last_ok = time(NULL);
-		snprintf(line, sizeof line, "RELOCA-POLL %s\n", token);
-		if (write_all(fd, line, strlen(line)) < 0 || (n = read_line_fd(fd, line, sizeof line, 30)) < 0) { close(fd); sleep(3); continue; }
 		if (!strcmp(line, "ping")) { write_all(fd, "ok ping\n", 8); close(fd); sleep(3); continue; }
 		if (!strcmp(line, "exit")) { write_all(fd, "ok exit\n", 8); close(fd); return 0; }
 		if (!strcmp(line, "thaw")) {
