@@ -8,7 +8,7 @@ Fork 自 [reloca.to](https://github.com/Vitalium/reloca.to) 1.2（MIT，XServer 
 |---|---|---|---|
 | **E1 去 XServer 化** | 自有 Live 标记 `/etc/reloca-live-release`（兼容接受上游标记）；bootstrap 默认镜像 deb.debian.org/bookworm；自建 Debian bookworm Live（手搓：mmdebstrap + live-boot + squashfs + xorriso），烘焙全部运行时依赖与工具本体 | `lib/common.sh` `live_release_file()`、`lib/bootstrap.sh`、`lib/ssh.sh`、`lib/inventory.sh`、`bin/reloca.to`（8 处触点）+ `rig/build-live.sh` | ✅ 已实现；ISO 316M 实测可引导 |
 | **E4 试启动验证** | `-o boottest=1`：verify 全绿后用 qcow2 overlay 把目标盘在 qemu 里试启动（direct kernel boot + 串口断言 multi-user），目标盘零写入；qemu 缺失/小内存优雅降级 | `lib/verify.sh`（verify_boottest_*、vf_boottest_* seams）、`lib/bootstrap.sh`（boottest 工具组） | ✅ 实现并在真机跑通（D20）；slim Live 按内存门控自动跳过（D23） |
-| **E2 中继模式** | `-o relay=USER@HOST[:SSHPORT]`：donor 侧 `tools/relay-tunnel.sh` 反向隧道（中继:2222/2223 ← donor:22/2222），recipient 以 `root@RELAY:2222 -o sshd-port=2223` 迁移；recipient 的 cutover 反向隧道走中继（在线 poller 可达）。传输层零改动 | `lib/ssh.sh`（relay_spec/ssh_relay_start）、`lib/transfer.sh`（poller 覆盖）、`tools/relay-tunnel.sh` | ✅ 已实现，解析与接线 17 断言全绿；rig 中继拓扑 E2E 待跑 |
+| **E2 中继模式** | `-o relay=USER@HOST[:SSHPORT]`：donor 侧 `tools/relay-tunnel.sh` 反向隧道（中继:2222/2223 ← donor:22/2222），recipient 以 `root@RELAY:2222` 迁移；recipient 的 cutover 反向隧道走中继（中继:2224 → recipient:2224）。传输层零改动 | `lib/ssh.sh`（relay_spec/ssh_relay_start）、`lib/transfer.sh`（poller 覆盖）、`tools/relay-tunnel.sh` | 🟡 真机 E2E 已跑（D35）：双端 blackhole 造 NAT，apply/transfer/verify 全过、收端独立引导成功；cutover 因端口映射差一（已修）失败，待复跑 |
 | **E3 状态持久化** | 跨 run 多轮增量 + 字节级续传：agent 位图落盘 + 目标端检查点令牌 + 失效降级全量（migratekit 不变量） | `agent/tracker.c` `agent/main.c` `lib/transfer.sh` | 📐 设计定稿（D16），实现排 M3 |
 
 测试基线：`tests/run.sh` 2302 断言，2 失败与上游纯净树完全一致（环境性 mawk 差异），**零回归**；新增 relay.sh 17 断言全绿。
@@ -49,7 +49,7 @@ bash rig/clean.sh                # 清理全部 rig 进程
 - ✅ **四机任意互传矩阵（主要方向）**：.115→.117（1G 收端）、.115→.116（2G/UEFI）、.116→.117（40G/40G UEFI→UEFI）、.116→.111（40G→30G 缩容 + UEFI→BIOS + 1G，D27）、**.117 LVM→.116（D28：verify 21 ok、冻结 1.63s、独立引导）**。file 方法、缩容、LVM 源、**多盘→单盘（D29：两源盘 5 卷合并到 30G 单盘，/data 数据 md5 一致）**均已闭环
 - ✅ **单盘→双盘 RAID1（R16）闭环（D34）**：收端 `.115`（40G+20G，两块真盘，按小盘布局 19.5G），donor `.117`（20.04/BIOS）。`-o raid=1 -o root=files -o donor-nic=ens2`：transfer `passes=3`、条目 197779/197778、冻结 24.62s；verify **24 ok / 0 fail**；postfix 填第二块 ESP 并建两条 UEFI 项。四项验收全自动：`efibootmgr -n 0006`/`0007` 各自可引导、摘掉 sda2 后**降级 `[2/1] [_U]` 仍起**、降级下 `-n 0007` 让**整机只靠 sdb 引导**、`mdadm --add` 回填恢复 `[UU]`。收端进 Live 全程无人介入（`tools/live-cycle.sh`）
 - ✅ cutover poller 闭环（D27）：systemd-run 瞬态服务（d4b638b）在 .116→.111 上首次实测存活并连回，rollback thaw 成功；同轮修掉四个交付级缺陷（条目计数口径、mawk 科学计数、FITHAW EINVAL、postfix 重建被剪挂载点，015cb8f/68d4da2/796f341/d8d6b66）。⚠ 宿主 TK-Nas 内存不足会 OOM 杀 qemu（D26），开跑前先降 VM 内存/少开 VM；现存机器：.111/.117 已是迁移系统，.116 原系统，.115 原系统在线（重建最终 Live 中）
-- ⏳ E2 中继拓扑 E2E（需第三台可达机） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
+- 🟡 E2 中继拓扑 E2E（数据与独立引导已过；cutover 端口修复后待复跑，见 D35） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - ⏳ 工件与真机收口（D31/D32）：Live iso 改为**从 HEAD 重建**（现存工件停在 `d8d6b66`，缺 dm-uuid 修复）；自包含引导已收编为 `tools/live-entry.sh`（D25/D28/D29/D30 四条约束）；虚拟机用随机 MAC，**IP 每开机漂移**，按硬件角色认机（D32，见 HANDOFF §1）；`.116` 仍停在 emergency 待控制台修复
 - 📐 M3=E3：按 D16 实现（agent 位图持久化 + 检查点令牌 + 降级全量）
 - 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）
