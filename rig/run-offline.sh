@@ -75,26 +75,75 @@ wait_ssh 2255 recipient || exit 1
 echo "[rig] pushing the rig key into the recipient VM and starting the migration detached..."
 scp $SSH_OPTS -P 2255 "$KEY" root@127.0.0.1:/root/rig-key >/dev/null
 # MIGRATOR_EXTRA_OPTS: extra -o flags (e.g. "-o boottest=1" once the Live bakes qemu)
+#
+# cutover=none on purpose. The real cutover proves "the donor is gone" by pinging
+# the donor's address, and the donor's address inside a user-mode-networked guest
+# is 10.0.2.2 -- qemu's slirp gateway, which answers as long as the *host* is up.
+# No amount of donor-downing can make that probe fail, so the rig takes the
+# cutover over: it kills both guest VMs (stronger than 'ip link set down') and
+# boots the target disk on its own, which is the thing worth asserting anyway.
 ssh $SSH_OPTS -p 2255 root@127.0.0.1 "
 	rm -f /root/migrator.rc /root/migrator-run.log
-	setsid nohup sh -c 'migrator -y ${MIGRATOR_EXTRA_OPTS:-} -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/migrator-run.log 2>&1; echo \$? > /root/migrator.rc' >/dev/null 2>&1 &
+	setsid nohup sh -c 'migrator -y ${MIGRATOR_EXTRA_OPTS:-} -o cutover=none -i /root/rig-key -d /dev/vda 10.0.2.2:2233 >>/root/migrator-run.log 2>&1; echo \$? > /root/migrator.rc' >/dev/null 2>&1 &
 	sleep 2
 	echo migration started"
 
 # poll: the rc file is the only completion signal; an unreachable VM is NOT one
+RC=
 for i in $(seq 1 120); do
 	RC=$(ssh $SSH_OPTS -p 2255 root@127.0.0.1 "cat /root/migrator.rc 2>/dev/null" 2>/dev/null)
-	if [ -n "$RC" ]; then
-		echo "[rig] migrator finished with rc=$RC"
-		# the recipient's /root dies with the VM (systemd --collect kills the
-		# cgroup), so the full log has to come back before this script exits
-		scp $SSH_OPTS -P 2255 root@127.0.0.1:/root/migrator-run.log "$LOGS/recipient-migrator.log" >/dev/null 2>&1 \
-			&& echo "[rig] full log: $LOGS/recipient-migrator.log" || true
-		ssh $SSH_OPTS -p 2255 root@127.0.0.1 "tail -25 /root/migrator-run.log" || true
-		exit "$([ "$RC" = 0 ] && echo 0 || echo 1)"
-	fi
+	[ -z "$RC" ] || break
 	sleep 15
 done
-echo "FAIL: migration timed out; logs in $LOGS and recipient /root/migrator-run.log" >&2
-scp $SSH_OPTS -P 2255 root@127.0.0.1:/root/migrator-run.log "$LOGS/recipient-migrator.log" >/dev/null 2>&1 || true
-exit 1
+if [ -z "$RC" ]; then
+	echo "FAIL: migration timed out; logs in $LOGS" >&2
+	scp $SSH_OPTS -P 2255 root@127.0.0.1:/root/migrator-run.log "$LOGS/recipient-migrator.log" >/dev/null 2>&1 || true
+	exit 1
+fi
+echo "[rig] migrator finished with rc=$RC"
+# the recipient's /root dies with the VM (systemd --collect kills the cgroup),
+# so the full log has to come back before the VMs go away
+scp $SSH_OPTS -P 2255 root@127.0.0.1:/root/migrator-run.log "$LOGS/recipient-migrator.log" >/dev/null 2>&1 \
+	&& echo "[rig] full log: $LOGS/recipient-migrator.log" || true
+ssh $SSH_OPTS -p 2255 root@127.0.0.1 "tail -25 /root/migrator-run.log" || true
+[ "$RC" = 0 ] || exit 1
+
+# --- the rig's own cutover: donor gone, target boots unaided ---
+echo "[rig] stopping both Live VMs (the donor must not exist while the target boots)"
+for pidf in "$OUT"/donor.pid "$OUT"/recipient.pid; do
+	[ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null; rm -f "$pidf"
+done
+sleep 3
+
+echo "[rig] booting the migrated disk on its own..."
+rm -f "$LOGS/target-serial.log" "$OUT/target.pid"
+qemu-system-x86_64 -accel "$ACCEL" -smp 2 -m "${TARGET_MEM:-768}" \
+	-display none -monitor none -serial file:"$LOGS/target-serial.log" \
+	-drive file="$TARGET_DISK",if=virtio,format=raw \
+	-netdev user,id=n0,hostfwd=tcp:127.0.0.1:2277-:22 \
+	-device virtio-net-pci,netdev=n0,mac=52:54:00:aa:00:33 \
+	-smbios type=1,serial=RIG-RECIP-0002 \
+	-daemonize -pidfile "$OUT/target.pid"
+
+booted=
+for i in $(seq 1 40); do
+	if ssh $SSH_OPTS -p 2277 root@127.0.0.1 true 2>/dev/null; then booted=$i; break; fi
+	sleep 5
+done
+if [ -z "$booted" ]; then
+	echo "FAIL: the migrated disk did not come up (see $LOGS/target-serial.log)" >&2
+	tail -25 "$LOGS/target-serial.log" >&2 || true
+	exit 1
+fi
+say_target() { ssh $SSH_OPTS -p 2277 root@127.0.0.1 "$@" 2>/dev/null; }
+echo "[rig] target booted, ssh up after ~$((booted * 5))s"
+echo "---- migrated system ----"
+say_target 'echo "hostname : $(hostname)"'
+say_target 'echo "os       : $(grep PRETTY /etc/os-release | cut -d= -f2- | tr -d \")"'
+say_target 'echo "kernel   : $(uname -r)"'
+say_target 'echo "systemd  : $(systemctl is-system-running 2>&1), failed units: $(systemctl --failed --no-legend --no-pager | wc -l)"'
+say_target 'echo "root     : $(findmnt -n -o SOURCE,FSTYPE,SIZE,USED /)"'
+say_target 'echo "firmware : $([ -d /sys/firmware/efi ] && echo UEFI || echo BIOS)"'
+say_target 'echo "migrated : $(head -1 /etc/migrator-migrated 2>/dev/null)"'
+echo "RIG_OK"
+exit 0
