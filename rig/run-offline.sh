@@ -17,6 +17,12 @@ KEY=$OUT/rig_ed25519
 LOGS=$OUT/logs; mkdir -p "$LOGS"
 exec 9>"$OUT/.run.lock"; flock -n 9 || { echo "another run-offline.sh is already active" >&2; exit 1; }
 SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10"
+# TCG is the lowest common denominator: it works inside a container with no
+# /dev/kvm, at the price of a slow run. A VM with nested virt has /dev/kvm and
+# ACCEL=kvm turns a 40-minute run into a few minutes (tb-size is TCG only).
+ACCEL=${ACCEL:-tcg}
+[ "$ACCEL" = tcg ] && ACCEL="tcg,thread=multi,tb-size=128"
+[ "$ACCEL" = kvm ] && ACCEL="kvm"
 
 # kill leftovers from a previous run
 for pidf in "$OUT"/donor.pid "$OUT"/recipient.pid; do
@@ -29,7 +35,7 @@ sleep 1
 : > "$TARGET_DISK"; truncate -s 20G "$TARGET_DISK"   # sparse; migrator's plan rule R1 wants >= 20 GiB
 
 echo "[rig] starting donor VM..."
-qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 512 \
+qemu-system-x86_64 -accel "$ACCEL" -smp 2 -m 512 \
 	-display none -monitor none -serial file:"$LOGS/donor-serial.log" \
 	-cdrom "$ISO" -boot order=d \
 	-drive file="$DONOR_DISK",if=virtio,format=raw \
@@ -39,7 +45,7 @@ qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 512 \
 	-daemonize -pidfile "$OUT/donor.pid"
 
 echo "[rig] starting recipient VM..."
-qemu-system-x86_64 -accel tcg,thread=multi,tb-size=128 -smp 2 -m 768 \
+qemu-system-x86_64 -accel "$ACCEL" -smp 2 -m 768 \
 	-display none -monitor none -serial file:"$LOGS/recipient-serial.log" \
 	-cdrom "$ISO" -boot order=d \
 	-drive file="$TARGET_DISK",if=virtio,format=raw \

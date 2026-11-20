@@ -2,14 +2,17 @@
 # rig/build-donor.sh — build the donor machine's disk: a minimal Debian bookworm
 # system (partition table + ext4 root with kernel/initramfs/services/payload).
 # D13: mmdebstrap (unprivileged containers cannot mknod, debootstrap fails).
+# Where mmdebstrap is missing but we have real root (a VM, not a container)
+# debootstrap does the same job; the two backends produce the same minbase tree.
 # Pure userspace: mkfs.ext4 -d populates the filesystem, the image is dd'd into
 # the partition; no loop mounts. GRUB is NOT installed here — migrator's
 # postfix installs it on the target from the migrated rootfs.
 # Output: $HOME/rig/donor-disk.raw (2 GiB, sparse)
 set -euo pipefail
 OUT=${RIG_OUT:-$HOME/rig}
-MIRROR=http://deb.debian.org/debian
-SUITE=bookworm
+MIRROR=${MIRROR:-http://deb.debian.org/debian}
+SUITE=${SUITE:-bookworm}
+INC="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny"
 DISKMIB=2048; PARTMIB=2046
 UUID=$(cat /proc/sys/kernel/random/uuid)
 ROOT=$OUT/donor-rootfs
@@ -18,10 +21,19 @@ IMG=$OUT/donor-disk.raw
 
 rm -rf "$ROOT" "$FSIMG" "$IMG"
 
-echo "[donor] mmdebstrap $SUITE (minbase + kernel/ssh/payload tools)..."
-mmdebstrap --variant=minbase \
-	--include="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny" \
-	"$SUITE" "$ROOT" "$MIRROR"
+echo "[donor] bootstrap $SUITE (minbase + kernel/ssh/payload tools)..."
+if command -v mmdebstrap >/dev/null 2>&1; then
+	mmdebstrap --variant=minbase --include="$INC" "$SUITE" "$ROOT" "$MIRROR"
+else
+	# no mmdebstrap: fine with real root and mknod rights, which a container
+	# does not have (D13). Older debootstrap releases ship no bookworm script;
+	# sid's is the same suite logic — rig/build-live-debootstrap.sh does the
+	# same dance for the Live.
+	[ "$(id -u)" = 0 ] || { echo "no mmdebstrap and not root: bootstrap the donor on a VM, not in a container" >&2; exit 2; }
+	command -v debootstrap >/dev/null 2>&1 || { echo "neither mmdebstrap nor debootstrap installed" >&2; exit 2; }
+	[ -e "/usr/share/debootstrap/scripts/$SUITE" ] || ln -sfn sid "/usr/share/debootstrap/scripts/$SUITE"
+	debootstrap --variant=minbase --no-check-gpg --include="$INC" "$SUITE" "$ROOT" "$MIRROR"
+fi
 
 # configure the guest system (plain file ops + systemctl enable; no /dev needed)
 printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > "$ROOT/etc/network/interfaces"
