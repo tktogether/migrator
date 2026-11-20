@@ -242,6 +242,20 @@ ssh_relay_start() {   # idempotent; needs -i KEYFILE — the relay must carry it
 	key=${SSH_KEYFILE:-}
 	[ -n "$key" ] || die "$EX_ENV" "-o relay needs -i KEYFILE: the relay must carry the same public key (this box forwards its cutover port through it)"
 	{ read -r r_user; read -r r_host; read -r r_port; } < <(relay_spec "$spec")
+	# Two sshd settings decide whether a reverse tunnel can exist at all, and
+	# both fail silently from here: GatewayPorts no turns the -R into a
+	# 127.0.0.1 listener nobody can reach, AllowTcpForwarding no refuses the
+	# forward outright (Alpine ships that). Check them on the relay first.
+	cfg=$(ssh -i "$key" -p "$r_port" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+		-o ConnectTimeout=10 "$r_user@$r_host" \
+		'sshd -T 2>/dev/null | grep -E "^(gatewayports|allowtcpforwarding) "' 2>/dev/null)
+	case $(printf '%s\n' "$cfg" | awk '$1=="gatewayports"{print $2}') in
+	clientspecified|yes) ;;
+	*)	die "$EX_ENV" "relay $r_host would not publish the cutover port (GatewayPorts=$(printf '%s\n' "$cfg" | awk '$1=="gatewayports"{print $2}')): set 'GatewayPorts clientspecified' on the relay" ;;
+	esac
+	if [ "$(printf '%s\n' "$cfg" | awk '$1=="allowtcpforwarding"{print $2}')" = no ]; then
+		die "$EX_ENV" "relay $r_host refuses port forwarding (AllowTcpForwarding no): set 'AllowTcpForwarding yes' on the relay"
+	fi
 	# The port must match what the cutover agent will listen on.  Under -o relay
 	# transfer_online_run overrides cut_port with relay.cut_port (2224, below) and
 	# hands that to the agent as --cutover RELAY:2224, so this box listens on 2224

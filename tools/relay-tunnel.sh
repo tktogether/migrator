@@ -35,8 +35,10 @@ case $SPEC in *@*) ;; *) usage ;; esac
 # the stock "no", ssh -R *succeeds* and listens on 127.0.0.1, which looks fine on
 # the relay and is invisible from the recipient: the migration then hangs on the
 # first ssh instead of failing.  Check it up front rather than debug that later.
-GP=$(ssh ${KEY:+-i "$KEY"} -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-	-o ConnectTimeout=10 "$SPEC" 'sshd -T 2>/dev/null | sed -n "s/^gatewayports //p"' 2>/dev/null)
+RELAY_CFG=$(ssh ${KEY:+-i "$KEY"} -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+	-o ConnectTimeout=10 "$SPEC" 'sshd -T 2>/dev/null | grep -E "^(gatewayports|allowtcpforwarding) "' 2>/dev/null)
+GP=$(printf '%s\n' "$RELAY_CFG" | awk '$1=="gatewayports"{print $2}')
+ATF=$(printf '%s\n' "$RELAY_CFG" | awk '$1=="allowtcpforwarding"{print $2}')
 case $GP in
 	''|no)
 		echo "relay $SPEC has GatewayPorts '${GP:-unknown}': -R would bind 127.0.0.1 and the recipient could never reach it." >&2
@@ -48,6 +50,17 @@ case $GP in
 	clientspecified|yes) ;;
 	*)	echo "relay $SPEC: unexpected GatewayPorts '$GP' (want clientspecified or yes)" >&2; exit 3 ;;
 esac
+# Some distributions ship sshd with forwarding switched off outright (Alpine's
+# stock config does), and then -R is refused with "Server has disabled port
+# forwarding" - the listener never appears and there is nothing to see on the
+# relay. Same class of trap as GatewayPorts: check it before the run, not after.
+if [ "$ATF" = no ]; then
+	echo "relay $SPEC has AllowTcpForwarding no: sshd refuses every -R (no listener appears at all)." >&2
+	echo "on the relay, once:" >&2
+	echo "  sed -i 's/^AllowTcpForwarding.*/AllowTcpForwarding yes/' /etc/ssh/sshd_config && sshd -t && systemctl reload ssh" >&2
+	echo "  (Alpine: rc-service sshd restart)" >&2
+	exit 3
+fi
 
 LOG=/run/migrator-relay.log; PID=/run/migrator-relay.pid
 if [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; then
