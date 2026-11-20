@@ -16,6 +16,10 @@
 #   PROFILE    slim (default: no qemu, xz squashfs) | full (qemu, zstd)
 #   MIRROR     Debian mirror (default Tsinghua; the bookworm d-i needs one
 #              reachable from the build host)
+#   MK_OPTS    extra mksquashfs flags (default empty). On a build host that
+#              shares RAM with other guests, `-processors 1 -mem 700M` keeps
+#              xz from ballooning: the compressor is the one step whose RSS
+#              the host OOM killer notices, and a dead guest leaves no log.
 #   KEY        ssh key pair baked into the Live as /root/rig-key (default
 #              $BUILD_DIR/rig_ed25519; its .pub goes to authorized_keys)
 #
@@ -38,6 +42,7 @@ TARBALL=${TARBALL:-$BUILD_DIR/migrator2.tar.gz}
 REPO=${REPO:-$BUILD_DIR/migrator}
 MIRROR=${MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian}
 KEY=${KEY:-$BUILD_DIR/rig_ed25519}
+MK_OPTS=${MK_OPTS:-}
 CH=$BUILD_DIR/live-rootfs
 OUT=$BUILD_DIR/live
 
@@ -183,7 +188,7 @@ mkdir -p "$OUT/live" "$OUT/isolinux"
 cp "$K" "$OUT/live/vmlinuz"
 cp "$I" "$OUT/live/initrd.img"
 case $PROFILE in slim) SQ="-comp xz" ;; *) SQ="-comp zstd -Xcompression-level 9" ;; esac
-mksquashfs "$CH" "$OUT/live/filesystem.squashfs" -noappend -no-progress $SQ
+mksquashfs "$CH" "$OUT/live/filesystem.squashfs" -noappend -no-progress $SQ $MK_OPTS
 
 cp /usr/lib/ISOLINUX/isolinux.bin "$OUT/isolinux/" 2>/dev/null || \
 	cp /usr/lib/syslinux/isolinux.bin "$OUT/isolinux/"
