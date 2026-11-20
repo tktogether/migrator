@@ -86,10 +86,15 @@ for i in $(seq 1 120); do
 	RC=$(ssh $SSH_OPTS -p 2255 root@127.0.0.1 "cat /root/migrator.rc 2>/dev/null" 2>/dev/null)
 	if [ -n "$RC" ]; then
 		echo "[rig] migrator finished with rc=$RC"
+		# the recipient's /root dies with the VM (systemd --collect kills the
+		# cgroup), so the full log has to come back before this script exits
+		scp $SSH_OPTS -P 2255 root@127.0.0.1:/root/migrator-run.log "$LOGS/recipient-migrator.log" >/dev/null 2>&1 \
+			&& echo "[rig] full log: $LOGS/recipient-migrator.log" || true
 		ssh $SSH_OPTS -p 2255 root@127.0.0.1 "tail -25 /root/migrator-run.log" || true
 		exit "$([ "$RC" = 0 ] && echo 0 || echo 1)"
 	fi
 	sleep 15
 done
 echo "FAIL: migration timed out; logs in $LOGS and recipient /root/migrator-run.log" >&2
+scp $SSH_OPTS -P 2255 root@127.0.0.1:/root/migrator-run.log "$LOGS/recipient-migrator.log" >/dev/null 2>&1 || true
 exit 1

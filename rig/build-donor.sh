@@ -5,14 +5,18 @@
 # Where mmdebstrap is missing but we have real root (a VM, not a container)
 # debootstrap does the same job; the two backends produce the same minbase tree.
 # Pure userspace: mkfs.ext4 -d populates the filesystem, the image is dd'd into
-# the partition; no loop mounts. GRUB is NOT installed here — migrator's
-# postfix installs it on the target from the migrated rootfs.
+# the partition; no loop mounts. GRUB is NOT *installed to a disk* here — that
+# is postfix's job on the recipient — but the donor must still SHIP the
+# bootloader: postfix runs grub-install from inside the migrated tree, so a
+# donor without grub-pc-bin fails at the very last step with "grub-install: No
+# such file or directory". grub-pc (the metapackage) is deliberately absent: its
+# postinst wants a target device and hangs/aborts in a chroot.
 # Output: $HOME/rig/donor-disk.raw (2 GiB, sparse)
 set -euo pipefail
 OUT=${RIG_OUT:-$HOME/rig}
 MIRROR=${MIRROR:-http://deb.debian.org/debian}
 SUITE=${SUITE:-bookworm}
-INC="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny"
+INC="systemd-sysv,linux-image-amd64,initramfs-tools,openssh-server,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,rsync,vim-tiny,grub-pc-bin"
 DISKMIB=2048; PARTMIB=2046
 UUID=$(cat /proc/sys/kernel/random/uuid)
 ROOT=$OUT/donor-rootfs
@@ -34,6 +38,12 @@ else
 	[ -e "/usr/share/debootstrap/scripts/$SUITE" ] || ln -sfn sid "/usr/share/debootstrap/scripts/$SUITE"
 	debootstrap --variant=minbase --no-check-gpg --include="$INC" "$SUITE" "$ROOT" "$MIRROR"
 fi
+
+# a donor without grub looks fine for 30 minutes and fails at postfix's last
+# step; assert it here where the fix is one word in INC
+for g in usr/sbin/grub-install usr/lib/grub/i386-pc; do
+	[ -e "$ROOT/$g" ] || { echo "[donor] FATAL: $g missing from the bootstrap (grub-pc-bin in INC?)" >&2; exit 3; }
+done
 
 # configure the guest system (plain file ops + systemctl enable; no /dev needed)
 printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > "$ROOT/etc/network/interfaces"
