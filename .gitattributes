@@ -1,0 +1,12 @@
+# core.autocrlf=true on the Windows workstation would otherwise check the
+# shell scripts out with CRLF, which bash on the target rejects at the
+# shebang (the reason every upload needed sed 's/\r$//').  Pin them to LF.
+*.sh            text eol=lf
+bin/reloca.to   text eol=lf
+VERSION         text eol=lf
+lib/VERSION     text eol=lf
+*.md            text eol=lf
+*.c             text eol=lf
+*.h             text eol=lf
+Makefile        text eol=lf
+agent/Makefile  text eol=lf
