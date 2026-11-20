@@ -478,6 +478,7 @@ vf_check_fstab() {
 				[ "$type" = swap ] || continue
 				f=$root$spec
 				if [ -f "$f" ] && [ "$(stat -c %a "$f" 2>/dev/null)" = 600 ]; then vf_ok "swapfile $spec is there (mode 600)"
+				elif [ "${VF_PRECHECK:-0}" = 1 ]; then vf_info "swapfile $spec: left to the post-freeze pass (in the pre-check the target is a snapshot whose COW is a tmpfs, D38)"
 				else vf_warn "swapfile $spec is missing or not mode 600: swapon fails at boot, the system still comes up" \
 					"in the target: dd if=/dev/zero of=$spec bs=1M count=<MiB> conv=fsync && chmod 600 $spec && mkswap $spec"; fi;;
 		esac

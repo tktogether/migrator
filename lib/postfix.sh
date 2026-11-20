@@ -1004,6 +1004,23 @@ pf_step_swapfiles() {
 	say "--- swapfiles"
 	local rec path size method f mib avail n=0
 	[ -r "$PF_DIR/donor.inv" ] || return 0
+	# In the pre-check the target is a dm-snapshot and every write goes to its COW,
+	# which on the Live lives on a tmpfs of half the RAM (982 MiB on a 2 GiB box):
+	# dd'ing a 2 GiB swapfile into it fills the COW and the next write returns
+	# EIO - in the E2 run that was a "cannot create the directory of
+	# /mnt/migrator/precheck/etc/sysctl.d: Input/output error" far from the cause
+	# (D38).  The swapfile is the one step that has to wait for the real
+	# filesystem; the post-freeze pass creates it there, on disk.
+	if [ "${PF_PRECHECK:-0}" = 1 ]; then
+		while IFS= read -r rec; do
+			path=$(pl_field "$rec" path); size=$(pl_field "$rec" size)
+			case $path in /*) ;; *) continue;; esac
+			n=$((n + 1))
+			say "swapfile $path ($(human "${size:-0}")): left to the post-freeze pass, it would fill the snapshot's COW"
+		done < <(pl_records "$PF_DIR/donor.inv" swapfile)
+		[ "$n" -gt 0 ] || say "no swapfiles on the donor"
+		return 0
+	fi
 	while IFS= read -r rec; do
 		path=$(pl_field "$rec" path); size=$(pl_field "$rec" size)
 		case $path in /*) ;; *) continue;; esac

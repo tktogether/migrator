@@ -848,8 +848,8 @@ transfer_precheck() {
 	[ "$TX_PC_N" -gt 0 ] || die "$EX_FAIL" "pre-check: no mounted volume in the plan"
 	TARGET_MNT=/mnt/migrator/precheck
 	target_mount rw binds
-	postfix_run "$TARGET_MNT"
-	verify_run "$TARGET_MNT"
+	PF_PRECHECK=1 postfix_run "$TARGET_MNT"
+	VF_PRECHECK=1 verify_run "$TARGET_MNT"
 	trap - EXIT
 	transfer_precheck_cleanup
 	say "pre-check passed in $(( $(date +%s) - t0 )) s: postfix and verify are green on the copy as of the first freeze; catching up and freezing again"
