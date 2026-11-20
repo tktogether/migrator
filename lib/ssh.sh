@@ -242,9 +242,15 @@ ssh_relay_start() {   # idempotent; needs -i KEYFILE — the relay must carry it
 	key=${SSH_KEYFILE:-}
 	[ -n "$key" ] || die "$EX_ENV" "-o relay needs -i KEYFILE: the relay must carry the same public key (this box forwards its cutover port through it)"
 	{ read -r r_user; read -r r_host; read -r r_port; } < <(relay_spec "$spec")
+	# The port must match what the cutover agent will listen on.  Under -o relay
+	# transfer_online_run overrides cut_port with relay.cut_port (2224, below) and
+	# hands that to the agent as --cutover RELAY:2224, so this box listens on 2224
+	# too: forward the relay's 2224 onto 2224, NOT onto the direct-mode 2223.
+	# Mapping it to 2223 leaves the poller dialling a port nothing listens on, and
+	# the only symptom is a 180 s timeout after the donor is already frozen.
 	nohup ssh -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
 		-o StrictHostKeyChecking=accept-new -o BatchMode=yes -i "$key" -p "$r_port" \
-		-R 0.0.0.0:2224:localhost:2223 "$r_user@$r_host" >"$RUN/relay.log" 2>&1 &
+		-R 0.0.0.0:2224:localhost:2224 "$r_user@$r_host" >"$RUN/relay.log" 2>&1 &
 	echo $! > "$RUN/relay.pid"
 	state_set relay.pid "$(cat "$RUN/relay.pid")"; state_set relay.host "$r_host"; state_set relay.cut_port 2224
 	say "relay: cutover reverse tunnel up ($r_host :2224 -> this box :2223, pid $(cat "$RUN/relay.pid"))"
