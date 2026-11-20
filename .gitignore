@@ -3,3 +3,4 @@ lib/VERSION
 bin/reloca-agent
 research
 *.o
+.workbuddy/
