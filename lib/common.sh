@@ -183,8 +183,8 @@ live_release_file() {   # marker file of a full Live: ours first, upstream's kep
 }
 require_full_live() {
 	local rf; rf=$(live_release_file)
-	[ -n "$rf" ] || die "$EX_ENV" "not a Live OS (no /etc/migrator-live-release)"
-	if ! { have systemctl && have bash && have apt-get; }; then die "$EX_ENV" "this needs the full Live OS, not boot=base"; fi
+	[ -n "$rf" ] || die "$EX_ENV" "当前系统不是迁移 Live：找不到 /etc/migrator-live-release。各阶段都在迁移 Live 中执行，请先把本机启动到迁移 Live。只判断本机能否迁移，可在任意系统上运行 tools/preflight.sh"
+	if ! { have systemctl && have bash && have apt-get; }; then die "$EX_ENV" "当前系统是精简 Live，缺少 systemctl、bash 或 apt-get。请改用完整的迁移 Live"; fi
 }
 live_build_id() { local rf; rf=$(live_release_file); [ -n "$rf" ] && sed -n 's/^BUILD_ID=//p' "$rf" 2>/dev/null; return 0; }
 migrator_version() {

@@ -192,11 +192,11 @@ ssh_disconnect() {
 ssh_require_full_live_donor() {
 	local rc id
 	rsh sh -c 'test -r /etc/migrator-live-release || test -r /etc/xserver-live-release'; rc=$?
-	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
-	[ $rc -eq 0 ] || die "$EX_ENV" "donor $DONOR_HOST is not a full Live OS (no /etc/migrator-live-release)"
+	[ $rc -ne 255 ] || die "$EX_ENV" "无法在源端 $DONOR_HOST 上执行命令：连接已断开"
+	[ $rc -eq 0 ] || die "$EX_ENV" "源端 $DONOR_HOST 不是迁移 Live：找不到 /etc/migrator-live-release。离线迁移需要两端都启动到迁移 Live"
 	# the base Live is busybox only: no bash for rsh_fn, no apt-get for bootstrap
 	rsh sh -c 'command -v bash >/dev/null && command -v apt-get >/dev/null' \
-		|| die "$EX_ENV" "donor $DONOR_HOST runs the base Live (busybox only); boot it into the full Live"
+		|| die "$EX_ENV" "源端 $DONOR_HOST 是精简 Live，只有 busybox。请改用完整的迁移 Live"
 	id=$(rsh sh -c 'sed -n "s/^BUILD_ID=//p" /etc/migrator-live-release 2>/dev/null; sed -n "s/^BUILD_ID=//p" /etc/xserver-live-release 2>/dev/null' | head -1)
 	state_set donor.live "$id"
 	say "donor Live build ${id:-?}, this box $(live_build_id)"
@@ -206,7 +206,7 @@ ssh_require_full_live_donor() {
 ssh_donor_mode() {
 	local rc
 	rsh sh -c 'test -r /etc/migrator-live-release || test -r /etc/xserver-live-release'; rc=$?
-	[ $rc -ne 255 ] || die "$EX_ENV" "ssh command on $DONOR_HOST failed (master gone?)"
+	[ $rc -ne 255 ] || die "$EX_ENV" "无法在源端 $DONOR_HOST 上执行命令：连接已断开"
 	if [ $rc -eq 0 ]; then echo offline; else echo online; fi
 }
 

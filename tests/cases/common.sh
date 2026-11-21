@@ -151,7 +151,7 @@ if [ -r /etc/migrator-live-release ] || [ -r /etc/xserver-live-release ]; then
 else
 	( require_full_live ) >"$RUN/rfl.out" 2>/dev/null; rc=$?
 	assert_eq  "require_full_live off-Live exits 2" 2 "$rc"
-	assert_has "require_full_live off-Live says why" "not a Live OS" "$(cat "$RUN/rfl.out")"
+	assert_has "require_full_live off-Live says why" "不是迁移 Live" "$(cat "$RUN/rfl.out")"
 fi
 mkdir -p "$RUN/lib"; echo 1.2.3 > "$RUN/lib/VERSION"
 assert_eq "migrator_version without lib/VERSION" dev   "$(MIGRATOR_LIB=$RUN/nolib migrator_version)"

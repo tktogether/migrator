@@ -34,6 +34,28 @@ flowchart TD
 | 3 | 验证失败，目标盘已写入，禁止重启 |
 | 4 | 计划不可行或被拒绝，未写入磁盘 |
 
+## 不是迁移 Live
+
+现象：任意阶段报「当前系统不是迁移 Live：找不到 /etc/migrator-live-release」，退出码 2。
+
+各阶段都在迁移 Live 中执行，`plan` 与 `-n` 空运行也不例外：计划需要读取目标盘的信息，而普通系统上那块盘正被自身占用。
+
+处理步骤：
+
+1. 把目标设备启动到迁移 Live，确认标记文件存在：
+
+   ```sh
+   cat /etc/migrator-live-release
+   ```
+
+2. 只想知道本机能否完成迁移，不必进入 Live。运行体检脚本，它在任意系统上只读检查：
+
+   ```sh
+   sh -c "$(curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/preflight.sh)"
+   ```
+
+标记文件存在却仍报错时，说明启动的是精简 Live（`boot=base`），缺少 `bash`、`systemctl` 或 `apt-get`。改用完整镜像。
+
 ## 连接与身份
 
 | 现象 | 原因 | 处理 |
