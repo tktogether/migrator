@@ -10,13 +10,19 @@ set -u
 INSTALL=$REPO/tools/install.sh
 
 command -v python3 >/dev/null 2>&1 || { skip "install.sh" "no python3 to serve the fake current/"; t_end; }
-command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || { skip "install.sh" "neither curl nor wget"; t_end; }
+# install.sh sets PATH itself, so a tool that only exists on the caller's PATH
+# (Git Bash keeps curl in /mingw64/bin) is not there for it. Test what it sees.
+for t in curl tar sha256sum; do
+	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin command -v "$t" >/dev/null 2>&1 \
+		|| { skip "install.sh" "$t is not in the PATH install.sh sets"; t_end; }
+done
 
 # --- a fake dist/: the real bin/ and lib/ under a made-up version --------------
 VER=0.0-test
 DIST=$RUN/dist; SRC=$DIST/migrator-$VER
 mkdir -p "$SRC/tools" "$DIST/prefix"
 cp -a "$REPO/bin" "$REPO/lib" "$SRC/"
+cp "$REPO/tools/relay-tunnel.sh" "$SRC/tools/"
 cp "$REPO/LICENSE" "$REPO/LICENSE-UPSTREAM" "$REPO/NOTICE" "$REPO/TRADEMARK.md" "$SRC/"
 echo "$VER" > "$SRC/lib/VERSION"
 tar -C "$DIST" -czf "$DIST/migrator-$VER.tar.gz" "migrator-$VER"
@@ -48,6 +54,7 @@ PREFIX=$RUN/prefix
 out=$(MIGRATOR_URL=$URL MIGRATOR_PREFIX=$PREFIX sh "$INSTALL" 2>&1); rc=$?
 assert_eq  "install.sh exits 0"                    0 "$rc"
 assert_ok  "bin/migrator installed and executable" test -x "$PREFIX/sbin/migrator"
+assert_ok  "relay-tunnel.sh installed"             test -x "$PREFIX/sbin/relay-tunnel.sh"
 assert_ok  "lib/common.sh installed"               test -r "$PREFIX/lib/migrator/common.sh"
 assert_eq  "lib/VERSION installed"                 "$VER" "$(cat "$PREFIX/lib/migrator/VERSION" 2>/dev/null)"
 assert_ok  "licence and attribution installed"     test -r "$PREFIX/share/doc/migrator/LICENSE-UPSTREAM"

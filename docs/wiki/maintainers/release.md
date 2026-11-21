@@ -22,21 +22,27 @@ git describe --always --dirty
 
 ![安装布局](../assets/release-layout.svg)
 
-两种安装方式的目标路径不同：
+三种安装方式的落点：
 
-| 方式 | 主程序 | agent | 库 | 许可与来源 |
-|---|---|---|---|---|
-| `make install` | `$(PREFIX)/bin/migrator` | `$(PREFIX)/bin/migrator-agent` | `$(PREFIX)/lib/migrator/` | `$(PREFIX)/share/doc/migrator/` |
-| `tools/install.sh` | `$PREFIX/sbin/migrator` | `$PREFIX/sbin/migrator-agent` | `$PREFIX/lib/migrator/` | `$PREFIX/share/doc/migrator/` |
+| 方式 | 主程序 | agent | 中继脚本 | 库 | 许可与来源 |
+|---|---|---|---|---|---|
+| `make install` | `$(PREFIX)/sbin/migrator` | `$(PREFIX)/sbin/migrator-agent` | `$(PREFIX)/sbin/relay-tunnel.sh` | `$(PREFIX)/lib/migrator/` | `$(PREFIX)/share/doc/migrator/` |
+| `tools/install.sh` | `$PREFIX/sbin/migrator` | `$PREFIX/sbin/migrator-agent` | `$PREFIX/sbin/relay-tunnel.sh` | `$PREFIX/lib/migrator/` | `$PREFIX/share/doc/migrator/` |
+| deb 包 | `/usr/sbin/migrator` | `/usr/lib/migrator/migrator-agent` | `/usr/lib/migrator/relay-tunnel.sh` | `/usr/share/migrator/` | `/usr/share/doc/migrator/` |
 
 `PREFIX` 默认 `/usr/local`。
 
-主程序的库查找逻辑为：
+主程序按以下顺序查找库目录，使用第一个包含 `common.sh` 的目录：
 
-1. 主程序所在目录的上一级 `lib/common.sh`（适用于源码树的 `bin/` 布局）；
-2. 否则使用 `/usr/local/lib/migrator`。
+1. 环境变量 `MIGRATOR_LIB`；
+2. 主程序所在目录的 `../lib`；
+3. 主程序所在目录的 `../lib/migrator`；
+4. 主程序所在目录的 `../share/migrator`；
+5. `/usr/local/lib/migrator`；
+6. `/usr/lib/migrator`；
+7. `/usr/share/migrator`。
 
-因此只有 `/usr/local` 前缀可以开箱即用。非默认 `PREFIX` 的安装需要额外处理库路径；发布说明中不应把非默认前缀描述为可直接使用。
+`$PREFIX/sbin/migrator` 因此能找到 `$PREFIX/lib/migrator`。非默认前缀不需要额外设置库路径。以上目录都不存在时，程序报错退出并提示设置 `MIGRATOR_LIB`。
 
 `tools/install.sh` 采用原子替换：
 
@@ -68,6 +74,7 @@ migrator-<ver>/bin/migrator-agent   （可选）
 migrator-<ver>/lib/common.sh
 migrator-<ver>/lib/VERSION
 migrator-<ver>/lib/*.sh
+migrator-<ver>/tools/relay-tunnel.sh   （可选）
 migrator-<ver>/LICENSE
 migrator-<ver>/LICENSE-UPSTREAM
 migrator-<ver>/NOTICE
@@ -87,7 +94,7 @@ flowchart LR
     E --> F["tools/install.sh 校验并安装"]
 ```
 
-当前仓库没有内置的打包目标。发布方可以：
+当前仓库的 `make dist` 生成源码归档，不包含 agent 二进制。二进制发布包由发布方组装：
 
 1. 从干净的 Git 工作区导出源码；
 2. 编译静态 agent；
@@ -101,11 +108,12 @@ flowchart LR
 ```sh
 VER=1.2
 make agent
-mkdir -p dist/migrator-$VER/bin dist/migrator-$VER/lib
+mkdir -p dist/migrator-$VER/bin dist/migrator-$VER/lib dist/migrator-$VER/tools
 cp bin/migrator dist/migrator-$VER/bin/
 cp agent/migrator-agent dist/migrator-$VER/bin/
 cp lib/*.sh dist/migrator-$VER/lib/
 cp VERSION dist/migrator-$VER/lib/VERSION
+cp tools/relay-tunnel.sh dist/migrator-$VER/tools/
 cp LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md dist/migrator-$VER/
 tar -czf dist/migrator-$VER.tar.gz -C dist migrator-$VER
 cd dist

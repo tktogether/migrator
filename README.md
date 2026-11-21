@@ -84,8 +84,16 @@ migrator -o compress=none -o converge=5 root@10.0.0.12
 
 ## 安装
 
+在已有系统上从仓库安装：
+
 ```sh
-make install                                   # 装到 /usr/local，PREFIX= 可改
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
+```
+
+从源码树安装或从发布包安装：
+
+```sh
+make install                                   # 装到 /usr/local/sbin，PREFIX= 可改
 sh tools/install.sh                            # 从 MIGRATOR_URL 指向的目录取 tarball
 MIGRATOR_URL=file://$PWD/dist sh tools/install.sh
 ```

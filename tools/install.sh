@@ -15,6 +15,7 @@
 # the tarball's sha256, unpacks it in a scratch dir and installs
 #   $PREFIX/sbin/migrator        the driver
 #   $PREFIX/sbin/migrator-agent     the on-line migration agent (static binary, when the tarball has it)
+#   $PREFIX/sbin/relay-tunnel.sh    the relay tunnel helper (when the tarball has it)
 #   $PREFIX/lib/migrator/       the libs + VERSION (the previous dir is replaced)
 #   $PREFIX/share/doc/migrator/ licence and attribution files, when the tarball carries them
 # with PREFIX = MIGRATOR_PREFIX or /usr/local. Everything is staged and moved
@@ -79,10 +80,16 @@ if [ -s "$SRC/bin/migrator-agent" ]; then
 	cp "$SRC/bin/migrator-agent" "$BIN/.migrator-agent.new" || die "cannot stage $BIN/migrator-agent"
 	chmod 0755 "$BIN/.migrator-agent.new" || die "cannot set modes on $BIN/migrator-agent"
 fi
+# the relay tunnel helper, run by the operator on the donor (E2)
+if [ -s "$SRC/tools/relay-tunnel.sh" ]; then
+	cp "$SRC/tools/relay-tunnel.sh" "$BIN/.relay-tunnel.new" || die "cannot stage $BIN/relay-tunnel.sh"
+	chmod 0755 "$BIN/.relay-tunnel.new" || die "cannot set modes on $BIN/relay-tunnel.sh"
+fi
 rm -rf "$LIB" || die "cannot remove the previous $LIB"
 mv "$STAGE" "$LIB" || die "cannot move the libs into place at $LIB"
 mv -f "$BIN/.migrator.new" "$BIN/migrator" || die "cannot replace $BIN/migrator"
 [ ! -s "$BIN/.migrator-agent.new" ] || mv -f "$BIN/.migrator-agent.new" "$BIN/migrator-agent" || die "cannot replace $BIN/migrator-agent"
+[ ! -s "$BIN/.relay-tunnel.new" ] || mv -f "$BIN/.relay-tunnel.new" "$BIN/relay-tunnel.sh" || die "cannot replace $BIN/relay-tunnel.sh"
 # licence and attribution travel with the installed copy when the tarball has them
 DOC=$PREFIX/share/doc/migrator
 mkdir -p "$DOC" || die "cannot create $DOC"

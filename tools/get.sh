@@ -4,7 +4,7 @@
 # git repository, and three services mirror that repository for free. This
 # script tries them in order and uses the first one that answers.
 #
-#   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/tools/get.sh | sh
+#   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
 #   curl -fsSL .../tools/get.sh | sh -s -- --check        # 只体检，不装任何东西
 #   curl -fsSL .../tools/get.sh | sh -s -- -s plan root@192.168.1.111    # install, then run
 #
@@ -13,9 +13,16 @@
 # That script is a single file: it also runs on its own, without this one.
 #
 # Sources, in the order tried (the first that serves VERSION wins):
-#   jsDelivr      cdn.jsdelivr.net/gh/tktogether/migrator@REF   auto-syncs a tag
-#   Gitee         gitee.com/<owner>/migrator/raw/REF            the fast one in China
-#   GitHub raw    raw.githubusercontent.com/tktogether/migrator/REF
+#   jsDelivr      cdn.jsdelivr.net/gh/tktogether/migrator@master    a global CDN
+#   Gitee         gitee.com/<owner>/migrator/raw/master             fast inside
+#                 mainland China, and only there: cross-border paths to it are
+#                 congested and routinely reset, so it is not the primary
+#                 source for an audience outside China
+#   GitHub raw    raw.githubusercontent.com/tktogether/migrator/master
+#
+# All three follow master, so a push is live on all of them: no tag to cut, no
+# release to publish. The cost is that an install is not reproducible; pass
+# MIGRATOR_REF=<tag> (or --ref) when it has to be.
 #
 # Overrides, one environment variable each, no code change needed:
 #   MIGRATOR_BASE=https://your.host/migrator   use exactly this, no fallback
@@ -25,9 +32,12 @@
 #   MIGRATOR_PREFIX=/opt/migrator              install here instead of /usr/local
 #
 # What it does: fetches the tree file by file from that mirror, packs it the
-# way tools/install.sh expects, and hands over. install.sh does the careful
-# part — staging, the last-step rename, the -V smoke test — so this script
-# stays small and there is only one installer to keep correct.
+# way tools/install.sh expects, and hands over — so a download and a tarball
+# you already hold run the same install code (staging, the last-step rename,
+# the -V smoke test). Where things land is a separate question, and there are
+# two answers, not one: this and 'make install' both use $PREFIX/sbin +
+# $PREFIX/lib/migrator, while the Debian packages follow policy — /usr/sbin,
+# /usr/share/migrator, /usr/lib/migrator.
 #
 # Integrity: every file comes over TLS from the mirror. That trusts the
 # mirror, as every "curl | sh" does. MIGRATOR_SHA256=<hash> pins the driver
@@ -53,7 +63,8 @@ usage() {
 
   --check            只体检，不安装：取 tools/preflight.sh 来跑，参数原样传给它
   --prefix DIR       装到这里（默认 /usr/local）
-  --ref REF          取哪个 ref（默认 master；发版后建议钉 1.2）
+  --ref REF          取哪个 ref（默认 master：三个源都跟分支，推送即生效；
+                     要可复现的安装就钉一个 tag，例如 --ref 1.2）
   --proxy URL        所有请求前面加这个前缀（ghproxy 类服务）
   --base URL         只用这一个源，不走三镜像回落
   -h, --help         这一段
@@ -78,10 +89,19 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# Timeouts are the point of a fallback list: a mirror that hangs must cost
+# seconds, not the kernel's TCP timeout, or the second source is never reached.
+# Every file here is a script of a few KB, so 30 s is generous.
 if command -v curl >/dev/null 2>&1; then
-	fetch() { if [ -n "$PROXY" ]; then curl -fsSL -o "$2" "$PROXY$1"; else curl -fsSL -o "$2" "$1"; fi; }
+	fetch() {
+		if [ -n "$PROXY" ]; then set -- "$PROXY$1" "$2"; fi
+		curl -fsSL --connect-timeout 5 --max-time 30 -o "$2" "$1"
+	}
 elif command -v wget >/dev/null 2>&1; then
-	fetch() { if [ -n "$PROXY" ]; then wget -q -O "$2" "$PROXY$1"; else wget -q -O "$2" "$1"; fi; }
+	fetch() {
+		if [ -n "$PROXY" ]; then set -- "$PROXY$1" "$2"; fi
+		wget -q -T 30 -t 1 -O "$2" "$1"
+	}
 else
 	CODE=2 die "neither curl nor wget is here: install one, or copy the tree over and run 'make install'"
 fi
@@ -137,9 +157,10 @@ VER=$(tr -d ' \t\r\n' < "$TMP/VERSION")
 say "installing $VER from $BASE"
 
 # --- fetch the tree ----------------------------------------------------------
-# The list is the tree, not the tarball: mirrors serve files from a repository,
-# not release assets, so a tarball nobody publishes would be one more thing to
-# host. tests/cases/install.sh keeps this list equal to lib/*.sh.
+# The list is the tree, not the tarball: the mirrors serve files out of a
+# repository and do not list directories, so the file names are written here.
+# tests/cases/get.sh fails when this list and lib/*.sh disagree, and when a
+# file the Debian package installs is missing from it.
 FILES="bin/migrator
 lib/VERSION
 lib/apply.sh
@@ -155,6 +176,7 @@ lib/target.sh
 lib/transfer.sh
 lib/verify.sh
 lib/wizard.sh
+tools/relay-tunnel.sh
 LICENSE
 LICENSE-UPSTREAM
 NOTICE

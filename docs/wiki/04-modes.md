@@ -171,7 +171,8 @@ agent 以固定大小的块为单位维护位图，默认块大小为 64 KiB。�
 
 ### 操作
 
-在源端启动 `tools/relay-tunnel.sh`，由它建立两条反向隧道。装入发行版包时该脚本位于
+在源端启动 `tools/relay-tunnel.sh`。该脚本建立两条反向隧道。`make install` 与
+`tools/install.sh` 将该脚本装入 `$PREFIX/sbin/relay-tunnel.sh`；发行版包装入
 `/usr/lib/migrator/relay-tunnel.sh`。
 
 - 控制通道：`relay:2222` → `donor:22`；

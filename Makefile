@@ -39,9 +39,10 @@ agent-test: agent
 	@bash tools/agent-test.sh
 
 install: agent
-	@install -d $(PREFIX)/bin $(PREFIX)/lib/migrator
-	install -m 0755 bin/migrator $(PREFIX)/bin/migrator
-	install -m 0755 agent/migrator-agent $(PREFIX)/bin/migrator-agent
+	@install -d $(PREFIX)/sbin $(PREFIX)/lib/migrator
+	install -m 0755 bin/migrator $(PREFIX)/sbin/migrator
+	install -m 0755 agent/migrator-agent $(PREFIX)/sbin/migrator-agent
+	install -m 0755 tools/relay-tunnel.sh $(PREFIX)/sbin/relay-tunnel.sh
 	install -m 0644 lib/*.sh $(PREFIX)/lib/migrator/
 	install -d $(PREFIX)/share/doc/migrator
 	install -m 0644 LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md $(PREFIX)/share/doc/migrator/
