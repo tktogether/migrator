@@ -20,9 +20,12 @@
 #                 source for an audience outside China
 #   GitHub raw    raw.githubusercontent.com/tktogether/migrator/master
 #
-# All three follow master, so a push is live on all of them: no tag to cut, no
-# release to publish. The cost is that an install is not reproducible; pass
-# MIGRATOR_REF=<tag> (or --ref) when it has to be.
+# All three follow master, so there is no tag to cut and no release to
+# publish. They do not refresh at the same moment: GitHub raw serves a new
+# commit at once, the Gitee mirror follows its workflow, and jsDelivr caches a
+# branch for up to 12 h. Pass MIGRATOR_REF=<sha|tag> (or --ref) for a
+# reproducible install, or when a change has to be in place now; a commit URL
+# is never a cache hit.
 #
 # Overrides, one environment variable each, no code change needed:
 #   MIGRATOR_BASE=https://your.host/migrator   use exactly this, no fallback
@@ -63,8 +66,8 @@ usage() {
 
   --check            只体检，不安装：取 tools/preflight.sh 来跑，参数原样传给它
   --prefix DIR       装到这里（默认 /usr/local）
-  --ref REF          取哪个 ref（默认 master：三个源都跟分支，推送即生效；
-                     要可复现的安装就钉一个 tag，例如 --ref 1.2）
+  --ref REF          取哪个 ref（默认 master。jsDelivr 对分支内容有缓存，
+                     需要立即生效或可复现时，钉提交号或 tag，例如 --ref 1.2）
   --proxy URL        所有请求前面加这个前缀（ghproxy 类服务）
   --base URL         只用这一个源，不走三镜像回落
   -h, --help         这一段

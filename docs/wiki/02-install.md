@@ -36,7 +36,9 @@ curl -fsSL .../tools/get.sh | MIGRATOR_PROXY=https://your.proxy/ sh
 curl -fsSL .../tools/get.sh | sh -s -- --prefix /opt/migrator --ref 1.2
 ```
 
-`--ref` 指定抓取的分支或标签。三个源默认都跟随 `master`，仓库推送后立即生效。`--ref 1.2` 固定到该标签，用于可复现的安装。
+`--ref` 指定抓取的分支、标签或提交号。三个源默认都跟随 `master`，刷新时间不同。GitHub raw 立即返回新提交。Gitee 等待镜像工作流完成。jsDelivr 对分支内容有 CDN 缓存，最长 12 小时。
+
+需要立即取得某个提交，或需要可复现的安装时，用 `--ref` 指定提交号或标签。例如 `--ref 1.2`。提交号形式的地址不会命中缓存。
 
 安装完成后可立即运行 `migrator`，其余参数原样传递：
 
