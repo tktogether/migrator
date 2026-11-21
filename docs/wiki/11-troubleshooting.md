@@ -154,7 +154,7 @@ migrator -s transfer -o redo=all
 | 源端 SSH 认证通过但命令不执行 | 根文件系统冻结，PAM 写入日志时阻塞 | 不要通过 SSH 操作；使用 `cutover` 或 `cutover=rollback` |
 | 目标端 cutover 等待轮询超时 | 源端 agent 未运行或无法访问目标端 | 检查 agent 进程与网络；在源端控制台执行 `fsfreeze -u /` 解冻 |
 | 源端长时间未解冻 | 目标端未轮询，或轮询失败 | 1800 秒后自动解冻；也可在控制台手工解冻 |
-| 源端关机或断电 | `cutover=poweroff` 的预期结果 | 这是切换的正常行为，不是故障 |
+| 源端关机或断电 | `cutover=poweroff` 的预期结果 | 无需处理，属正常行为 |
 
 手工解冻适用于以下场景：
 

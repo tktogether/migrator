@@ -75,7 +75,7 @@ flowchart LR
 
 ### 清单
 
-`inventory.sh` 可以独立流式执行。目标端通过 `rsh bash -s` 把脚本送到源端，源端只需要 bash、mawk 和基础工具，不需要 `common.sh`。
+`inventory.sh` 可以独立流式执行。目标端通过 `rsh bash -s` 把脚本送到源端。源端只需要 bash、mawk 和基础工具，不需要 `common.sh`。
 
 清单输出为制表符分隔的记录，格式见 [清单记录格式](inventory-format.md)。
 
@@ -312,7 +312,7 @@ err TEXT
 
 设计目标：agent 位图落盘、目标端检查点令牌、跨运行续传、失效时降级全量。
 
-当前状态：未实现。现有能力限于同一 Live 运行内的阶段重试与卷级跳过。
+当前状态：部分实现。`serve --listen` 让会话（tracker 位图与冻结状态）活过链路中断，`attach` 作为重连客户端；通道断开后 `resume ID OFF` 从已覆盖位置续走全量，并补发断开窗口内的 pending 集。目标端落 journal（session、卷、size、have）后，pull 进程中断可由下一个 run 接手，前提是源端仍持有该 session；源端返回新 session 时 journal 被拒绝，降级为全量。尚未实现：任一端整机重启（记录位于内存），以及源端自身重启（停机期间的写入无人跟踪）。
 
 ### E4：试启动验证
 

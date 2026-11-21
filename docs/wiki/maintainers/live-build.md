@@ -1,6 +1,6 @@
 # 迁移 Live 构建
 
-迁移 Live 是带 `/etc/migrator-live-release` 标记的完整 Debian bookworm 环境，包含 migrator、静态 agent、全部运行时工具、zram swap 与静态网络支持。
+迁移 Live 是带 `/etc/migrator-live-release` 标记的完整 Debian bookworm 环境。环境中包含 migrator、静态 agent、全部运行时工具、zram swap 与静态网络支持。
 
 ![迁移 Live 的两种引导介质](../assets/live-media.svg)
 
@@ -144,7 +144,7 @@ migrator.ip=IP/PREFIX,GATEWAY,DNS1[,DNS2]
 
 ## 自包含引导
 
-`tools/live-entry.sh` 把 squashfs、内核与 initrd 复制到目标机自身的一个非 LVM 文件系统，并写入 GRUB 条目，无需 ISO 或控制台。
+`tools/live-entry.sh` 把 squashfs、内核与 initrd 复制到目标机自身的一个非 LVM 文件系统，并写入 GRUB 条目。该流程不需要 ISO 或控制台。
 
 ```sh
 tools/live-entry.sh -i 192.0.2.10/24,192.0.2.1,192.0.2.1 -s

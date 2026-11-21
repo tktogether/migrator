@@ -54,7 +54,7 @@ migrator -h
 - `SHA256SUMS`；
 - 一个 `migrator-<ver>.tar.gz`，且 `SHA256SUMS` 只列出这一个 tarball。
 
-压缩包内应包含 `migrator-<ver>/bin/migrator`、`migrator-<ver>/bin/migrator-agent`（可选）、`migrator-<ver>/lib/`，以及许可与来源文件 `LICENSE`、`LICENSE-UPSTREAM`、`NOTICE`、`TRADEMARK.md`。
+压缩包内应包含 `migrator-<ver>/bin/migrator`、`migrator-<ver>/bin/migrator-agent`（可选）与 `migrator-<ver>/lib/`，另附许可与来源文件 `LICENSE`、`LICENSE-UPSTREAM`、`NOTICE`、`TRADEMARK.md`。
 
 示例：
 
@@ -99,7 +99,7 @@ make agent
 make agent-test
 ```
 
-该测试需要 root、loop 设备和 `losetup`、`mkfs.ext4`、`sfdisk`，覆盖 ext4 整盘与分区、eBPF 与 ftrace 两种跟踪方式、块设备目标、cutover 轮询和不可冻结的 vfat 场景。该测试不修改真实磁盘，但会创建和销毁 loop 设备。
+该测试需要 root、loop 设备和 `losetup`、`mkfs.ext4`、`sfdisk`。测试覆盖 ext4 整盘与分区、eBPF 与 ftrace 两种跟踪方式、块设备目标、cutover 轮询和不可冻结的 vfat 场景。该测试不修改真实磁盘，但会创建和销毁 loop 设备。
 
 ## 4. 构建迁移 Live
 

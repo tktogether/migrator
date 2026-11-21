@@ -1,70 +1,82 @@
 # migrator
 
-把一台已经装好的 Linux 服务器，通过网络搬到另一台机器上，一条命令。
-它不是磁盘镜像工具，也不是备份工具：先读清两端，写出一份你可以读、可以改的计划，
-按源盘的 UUID 和特性把新盘摆好，逐个文件系统搬过去，在新系统的 chroot 里补齐
-fstab / mdadm / initramfs / grub / 网络，验证它真的能启动，最后才切。**旧服务器全程只读。**
+migrator 用于将一台已安装的 Linux 服务器迁移到另一台机器。数据通过网络直接传输，
+不需要中间存储。
+
+迁移在新机器上执行，参数为旧机器的地址：
 
 ```sh
-make install                    # 或 sh tools/install.sh（见下文"安装"）
-migrator root@10.0.0.12         # 新机器上执行，参数是旧机器的地址
+make install                    # 见「安装」
+migrator root@10.0.0.12         # 在新机器上执行，参数是旧机器的地址
 ```
+
+传输以文件系统为单位，因此新磁盘可以小于旧磁盘，两端的扇区布局也不需要一致。
+
+迁移按阶段执行。plan 阶段读取两端的磁盘与文件系统信息，生成迁移计划并保存到
+`/run/migrator/plan`。计划是纯文本文件，内容包括磁盘布局、各文件系统的创建参数，
+以及每个卷采用块级复制还是文件级复制。计划可以手动修改，修改后用 `-s check`
+校验。
+
+确认后，migrator 按计划创建分区与文件系统、传输数据，随后在新系统的 chroot
+环境中重建 fstab、mdadm、initramfs、grub 与网络配置。verify 阶段全部通过后，
+才允许重启新机器。
 
 ## 两种模式
 
-**离线迁移（off-line）**：两端都跑在 Live 里，每个卷只搬一次，能跑多快就多快。
-机器从离开自己的系统到新系统起来这段时间不提供服务。
+**离线模式**：两台机器都引导进入 Live 环境，旧机器不运行自身系统。每个卷只传输
+一次，速度仅受网络与磁盘限制。
 
-**在线迁移（on-line）**：旧服务器继续跑自己的系统、继续服务用户。`migrator-agent`
-一边复制一边盯着写入，逐轮只追变化的块，直到剩余量只剩几秒；然后文件系统被冻结
-几秒，跑完最后一轮增量，新机器起来。冻结窗口是这个工具唯一"停机"的地方，所以它
-宁可多跑几轮也不肯把窗口拉长——测出来本轮增量收不敛，它会直接说不冻。
+**在线模式**：旧机器继续运行并提供服务。`migrator-agent` 跟踪旧机器上的磁盘写入，
+逐轮只传输发生变化的块；当剩余数据量可以在数秒内传完时，冻结文件系统，完成最后
+一轮传输。文件系统冻结是整个过程中唯一的中断点，通常持续数秒。如果某一轮的增量
+无法收敛，migrator 不执行冻结，继续下一轮。
 
-## 它绝不做什么
+## 操作边界
 
-- 绝不写旧服务器。不做 fsck、不做 resize，它是你的回滚点。
-- 没让你看清楚盘上现在是什么、没让你照着屏幕把盘名和容量敲一遍，绝不清盘。
-- 绝不用默认参数格式化：每个文件系统按源盘的 features 建，建完立刻校验。
-- verify 不全绿，绝不重启新机器。
-- 绝不动新机器上的其它盘。
+- 不写入旧机器的任何块设备；不运行 fsck，不执行 resize，不删除临时文件。
+- 文件系统按源盘的 features 创建，不使用 mkfs 默认值；创建完成后立即回读校验。
+- verify 未全部通过时，不重启新机器。
+- 只操作 `-d` 指定的磁盘，新机器上的其他磁盘不受影响。
+- 清除磁盘前，先列出其现有分区、文件系统与容量，并要求用户手动输入磁盘名称确认。
 
 ## 支持范围
 
-| | |
+| 项 | 范围 |
 |---|---|
 | 源系统 | Debian 10–13、Ubuntu 18.04–26.04、CentOS 7–10、Rocky / Alma / RHEL 8–10 |
 | 布局 | 任意级别的 md RAID、LVM、LVM on md、普通 MBR/GPT 分区 |
 | 文件系统 | ext2/3/4、XFS；swap 分区、逻辑卷与 swap 文件；ESP |
-| 固件 | BIOS→BIOS、UEFI→UEFI，以及 UEFI↔BIOS 双向 |
+| 固件 | BIOS→BIOS、UEFI→UEFI、UEFI↔BIOS 双向 |
 | 磁盘 | 新盘可以比旧盘大，也可以比旧盘小 |
 | 网络 | ifupdown、netplan、systemd-networkd、ifcfg、NetworkManager |
 
-不支持：btrfs、ZFS、LUKS、NTFS、CentOS 6 及更老的 grub-legacy 系统、SUSE、Windows。
+不支持 btrfs、ZFS、LUKS、NTFS、CentOS 6 及更早的 grub-legacy 系统、SUSE、
+Windows。
 
-在线模式还要求旧机器上有 root，且内核能跟踪写入：有 eBPF 用 eBPF，最老到
-CentOS 7 的 3.10 用 ftrace。
+在线模式有两个额外前提：旧机器上具有 root 权限；内核能够跟踪块写入——有 eBPF
+时使用 eBPF，CentOS 7 的 3.10 使用 ftrace。
 
 ## 阶段
 
-每个阶段都能用 `-s` 单独跑；已经完成的会被跳过，所以失败后可以原样重试。
+各阶段均可用 `-s` 单独执行。已完成的阶段会被跳过，因此某阶段失败后可以直接重试。
 
 ```sh
-migrator -s plan root@10.0.0.12   # 只读：两端盘点，写出计划
-$EDITOR /run/migrator/plan        # 想改就改
-migrator -s check                 # 校验改动
-migrator -s apply                 # 分区、LVM、swap、mkfs（先问再做）
-migrator -s transfer              # 搬数据
+migrator -s plan root@10.0.0.12   # 只读：读取两端信息，生成计划
+$EDITOR /run/migrator/plan        # 按需修改
+migrator -s check                 # 校验计划
+migrator -s apply                 # 分区、LVM、swap、mkfs（先确认再执行）
+migrator -s transfer              # 传输数据
 migrator -s postfix               # chroot 内：fstab、mdadm、initramfs、grub、网络
-migrator -s verify                # 几十项检查；退出码 3 = 不要重启
-migrator -s cutover               # 旧机器离网，新机器起来
+migrator -s verify                # 数十项检查，退出码 3 表示不要重启
+migrator -s cutover               # 旧机器下线，新机器启动
 ```
 
-`migrator -n` 是干跑：只打印计划和每条命令，两端都不改。
+`migrator -n` 为演练模式：只打印计划与将要执行的命令，不修改两端。
 
 ## 选项
 
-每个开关、阶段和 `-o` 键都用 `migrator -h` 列全；不认识的键会被拒绝，所以打错字
-不会静默失效。选项一次一个 `-o`，因为逗号属于值本身：
+`migrator -h` 列出全部开关、阶段与 `-o` 键。不支持的键会直接报错，不会静默忽略。
+`-o` 每次只能指定一个键值对，因为逗号属于值的一部分：
 
 ```sh
 migrator -o compress=none -o converge=5 root@10.0.0.12
@@ -72,46 +84,44 @@ migrator -o compress=none -o converge=5 root@10.0.0.12
 
 ## 安装
 
-仓库就是唯一的来源，没有厂商下载：
-
 ```sh
-make install                                   # 装进 /usr/local，PREFIX= 可改
-sh tools/install.sh                            # 从 MIGRATOR_URL 指的目录取 tarball
+make install                                   # 装到 /usr/local，PREFIX= 可改
+sh tools/install.sh                            # 从 MIGRATOR_URL 指向的目录取 tarball
 MIGRATOR_URL=file://$PWD/dist sh tools/install.sh
 ```
 
-`tools/install.sh` 只认 `MIGRATOR_URL` 指向的目录（里面有 `SHA256SUMS` 和
-`migrator-<ver>.tar.gz`），没有内置地址——发行物放在哪由部署方决定。
+`tools/install.sh` 只使用 `MIGRATOR_URL`，没有内置下载地址；该目录中需要有
+`SHA256SUMS` 和 `migrator-<ver>.tar.gz`。发行物的存放位置由部署方决定。
 
 ## 构建
 
 ```sh
-make test         # shellcheck + 表测试：几秒钟，不需要 root
-make agent        # 静态 agent（要 C 编译器和 libzstd 静态库）
-make agent-test   # 用本机 loop 设备跑 agent（需要 root）
+make test         # shellcheck + 表测试，几秒，不需要 root
+make agent        # 静态 agent，需要 C 编译器和 libzstd 静态库
+make agent-test   # 在本机 loop 设备上运行 agent，需要 root
 ```
 
-工具主体是 bash + 被 source 的库；agent（`agent/`）是一个运行时零依赖的 C 程序。
-真机实验台在 `rig/`，可自包含引导 Live 的脚本在 `tools/live-entry.sh` / `tools/live-cycle.sh`。
+主体由 bash 脚本与若干被 source 的库组成。`agent/` 是一个 C 程序，运行时无外部
+依赖，静态链接后可直接放入 Live 环境。`rig/` 是物理机测试环境；
+`tools/live-entry.sh` 与 `tools/live-cycle.sh` 用于将一台机器引导至 Live 环境。
 
 ## 文档
 
-- [docs/wiki/README.md](docs/wiki/README.md) — 中文用户文档与维护者文档，含 SVG 与 Mermaid 图示
-- `docs/DECISIONS.md` — 决策簿：每个决定的日期、内容、被否的备选、理由、状态
-- `docs/DESIGN.md` — 设计与各阶段的边界
-- `docs/HANDOFF.md` — 真机矩阵台账（含凭据，不随仓库分发）
-- [docs/release/](docs/release/README.md) — 发布文案、发布说明与公告草案
+- [docs/wiki/](docs/wiki/README.md)：用户文档与维护者文档，14 章，含 13 张 SVG 图示
+- `docs/DECISIONS.md`：决策簿，每个决定的日期、内容、被否的备选、理由与状态
+- `docs/DESIGN.md`：设计与各阶段的边界
+- [docs/release/](docs/release/README.md)：公告、发布说明、首屏文案
 
 ## 来源与许可
 
-本项目是 [reloca.to](https://reloca.to/) 1.2 的派生作品。上游材料依据 MIT 许可提供，
+本项目是 [reloca.to](https://reloca.to/) 1.2 的派生作品。上游材料依 MIT 许可提供，
 版权声明与许可全文完整保留在 [LICENSE-UPSTREAM](LICENSE-UPSTREAM) 中
 （`Copyright (c) 2026 XServer`）。
 
-本项目新增部分为专有材料，见 [LICENSE](LICENSE)。组合作品的对外分发、商业性再分发、
-修改后发布与内部二次开发，均须取得版权方书面许可。名称与标识使用见
-[TRADEMARK.md](TRADEMARK.md)，来源与许可范围说明见 [NOTICE](NOTICE)。
-完整政策见 [docs/wiki/14-license.md](docs/wiki/14-license.md)。
+本项目新增的部分为专有材料，见 [LICENSE](LICENSE)。组合作品的对外分发、商业性
+再分发、修改后发布与内部二次开发，需要版权方的书面许可。名称与标识的使用见
+[TRADEMARK.md](TRADEMARK.md)，来源与许可范围的说明见 [NOTICE](NOTICE)，完整政策
+见 [docs/wiki/14-license.md](docs/wiki/14-license.md)。
 
-上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。上游的历史变更记录见
-`docs/CHANGELOG-upstream.md`。
+上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。上游的历史变更
+记录在 `docs/CHANGELOG-upstream.md`。

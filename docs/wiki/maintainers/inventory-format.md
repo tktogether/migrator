@@ -270,7 +270,7 @@ swap 设备。
 
 ### `--raw DIR`
 
-将每条解析命令的标准输出保存为 `DIR/<command>.txt`，标准错误保存为 `DIR/<command>.err`；同时保留源端配置文件树到 `DIR/tree/`。该模式用于诊断与制作测试夹具。
+每条解析命令的标准输出保存为 `DIR/<command>.txt`，标准错误保存为 `DIR/<command>.err`。源端配置文件树保留到 `DIR/tree/`。该模式用于诊断与制作测试夹具。
 
 ### `--root DIR`
 

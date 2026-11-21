@@ -4,7 +4,7 @@
 
 ![验证门禁](assets/verify-gate.svg)
 
-`verify` 在目标系统首次启动前回答一个问题：该磁盘能否在本机完成引导、找到根文件系统并启动主要服务？
+`verify` 在目标系统首次启动前检查：该磁盘能否在本机完成引导、找到根文件系统并启动主要服务。
 
 验证以只读方式挂载目标系统：
 
@@ -147,7 +147,7 @@ migrator -o cutover=rollback -s cutover
 
 `-o cutover=kexec` 要求迁移 Live 安装 `kexec`：
 
-- 从目标树中取出已验证的内核与 initrd到 `/run/migrator/kexec/`；
+- 从目标树中取出已验证的内核与 initrd 到 `/run/migrator/kexec/`；
 - 停止目标端的卷组与 md 阵列，使新内核可以干净地重新装配；
 - 加载并执行 kexec。
 

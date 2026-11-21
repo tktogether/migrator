@@ -6,9 +6,9 @@ migrator 发布：在任意两台 Linux 主机之间迁移完整系统
 
 ## 正文
 
-migrator 是一个面向 Linux 服务器的整机迁移工具。它可以把一台已经安装好的 Linux 主机迁移到另一台机器，保留磁盘布局、文件系统、文件、服务配置和引导设置，使目标主机可以直接启动迁移后的系统。
+migrator 是一个面向 Linux 服务器的整机迁移工具。它把一台已经安装好的 Linux 主机迁移到另一台机器，保留磁盘布局、文件系统与其中的数据、服务配置和引导设置，使目标主机可以直接启动迁移后的系统。
 
-与磁盘镜像工具或备份工具不同，migrator 先读取源端与目标端的状态，生成一份可以阅读和编辑的迁移计划。计划记录目标分区表、LVM 命令、格式化参数、每个卷的复制方式、fstab 标识改写、网络与固件决策。操作人员可以在写入磁盘前完整审核计划。
+migrator 在写入磁盘前读取源端与目标端的状态，生成一份可以阅读和编辑的迁移计划。计划记录目标分区表、LVM 命令、格式化参数、每个卷的复制方式、fstab 标识改写，以及网络与固件决策，操作人员可以在写入磁盘前完整审核。
 
 迁移过程分为清单、计划、检查、写入、传输、修补、验证和切换八个阶段。目标盘写入前会重新校验计划与磁盘状态，并记录目标盘指纹。目标系统启动前会以只读方式检查引导项、initramfs、fstab、内核命令行、文件系统特性、引导器、网络和 RAID。任一致命检查失败时，工具拒绝切换，并提示目标盘已写入、不得重启。
 
@@ -20,9 +20,9 @@ migrator 提供三种使用方式：
 
 源端磁盘全程只读。离线模式中源端原磁盘不被挂载；在线模式中 agent 以只读方式读取源端块设备。在线模式会向源端 root 的 `authorized_keys` 追加一次性会话公钥，并在 `/run` 放置临时 agent，这两项不涉及源端磁盘数据。
 
-支持的源系统包括 Debian、Ubuntu、CentOS、Rocky Linux、AlmaLinux 与 RHEL。支持 ext2、ext3、ext4、XFS，MBR 与 GPT，md RAID，LVM，LVM on md，swap 分区、逻辑卷与 swap 文件，以及 BIOS 与 UEFI 双向切换。目标端可使用单块磁盘，或使用两块磁盘组成 md RAID1（仅 deb 系）。目标磁盘可以大于或小于源磁盘；缩容需要文件级复制。
+支持的源系统包括 Debian、Ubuntu、CentOS、Rocky Linux、AlmaLinux 与 RHEL。存储与引导方面覆盖 ext2、ext3、ext4、XFS，MBR 与 GPT，md RAID，LVM，LVM on md，swap 分区、逻辑卷与 swap 文件，以及 BIOS 与 UEFI 双向切换。目标端可使用单块磁盘，或使用两块磁盘组成 md RAID1（仅 deb 系）。目标磁盘可以大于或小于源磁盘；缩容需要文件级复制。
 
-当前版本不支持 btrfs、ZFS、LUKS、NTFS、F2FS、reiserfs、Windows、SUSE、Arch Linux，以及 CentOS 6 及更老的 grub-legacy 系统。一个 LVM 卷组只能位于一个物理卷。目标端 Secure Boot 仅在源端为 UEFI 且 ESP 上存在 shim 时可用。网络配置保留源端 IP、网关与 DNS，跨网段迁移后需要人工调整。跨迁移 Live 重启的增量续传尚未实现。
+当前版本不支持 btrfs、ZFS、LUKS、NTFS、F2FS、reiserfs、Windows、SUSE、Arch Linux，以及 CentOS 6 及更老的 grub-legacy 系统。一个 LVM 卷组只能位于一个物理卷。目标端 Secure Boot 仅在源端为 UEFI 且 ESP 上存在 shim 时可用。网络配置保留源端 IP、网关与 DNS，跨网段迁移后需要人工调整。增量传输可以跨越传输进程的中断，但两端任一侧整机重启后，内存中的计划与续传记录会丢失，需要重新开始。
 
 migrator 采用双许可结构：派生自 reloca.to 1.2 的上游材料依据 MIT 许可提供，许可全文见 `LICENSE-UPSTREAM`；本项目新增部分依据 `LICENSE` 中的专有条款提供。组合作品的对外分发、商业性再分发、修改后发布与内部二次开发，均须取得版权方书面许可。名称与标识使用见 `TRADEMARK.md`。上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。
 
@@ -75,4 +75,4 @@ LIVE_PROFILE=slim bash rig/build-live.sh
 
 ## 结语
 
-migrator 的目标是让整机迁移成为一项可审核、可验证、可回滚的运维操作，而不是一次不可逆的尝试。欢迎在符合支持范围的环境中试用，并针对实际硬件与网络条件补充验证。
+migrator 的目标是让整机迁移成为一项可以审核、可以验证、也可以回滚的运维操作。欢迎在符合支持范围的环境中试用，并就实际硬件与网络条件补充验证。
