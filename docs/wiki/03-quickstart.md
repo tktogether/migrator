@@ -79,6 +79,26 @@ sudo dd if=$HOME/rig/migrator-live.iso of=/dev/sdX bs=4M status=progress conv=fs
 migrator.ip=192.168.1.50/24,192.168.1.1,114.114.114.114
 ```
 
+### 没有 U 盘或没有控制台时
+
+云主机与托管机通常无法插入 U 盘，也没有可接显示器的控制台。此时用 `tools/live-entry.sh` 把 Live 装进目标机自身的磁盘：squashfs、内核与 initrd 复制到其中一个非 LVM 文件系统，并写入一条 GRUB 引导项。不需要 ISO，也不需要控制台。
+
+需要 `debootstrap` 脚本产出的三件文件（`vmlinuz-live`、`initrd-live.img`、`live/live/filesystem.squashfs`）放在目标机的 `/root` 下：
+
+```sh
+tools/live-entry.sh -i 192.168.1.50/24,192.168.1.1,114.114.114.114 -s
+```
+
+`-s` 把该引导项设为持久的默认项。目标盘随后会被擦除，引导失败时仍要回到 Live，所以这一步不要省略。只做一次性切换、之后还要回到原系统时去掉 `-s`。
+
+从构建机远程完成全部步骤时用 `tools/live-cycle.sh`，它负责复制文件、写入引导项、重启并等待 SSH 回来：
+
+```sh
+tools/live-cycle.sh -H root@192.168.1.50 -S root@192.168.1.10:/root
+```
+
+squashfs 必须位于非 LVM 文件系统，内核与 initrd 必须与 GRUB 实际搜索的分区一致。这些约束及其原因见[迁移 Live 构建](maintainers/live-build.md)。
+
 ### 确认环境
 
 在目标主机登录。镜像没有设置可在控制台键入的密码，登录通过 SSH 完成，使用构建时生成的私钥：
