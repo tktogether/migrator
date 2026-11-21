@@ -123,7 +123,7 @@ case $out in
 	*)        _pass "preflight --plain emits no escape sequences" ;;
 esac
 case $out in
-	*"m i g r a t o r"*) _fail "preflight --plain omits the logo" "printed the logo block" ;;
+	*"M I G R A T O R"*) _fail "preflight --plain omits the logo" "printed the logo block" ;;
 	*)                   _pass "preflight --plain omits the logo" ;;
 esac
 
@@ -134,7 +134,7 @@ case $out in
 	*)        _fail "preflight --color emits escape sequences" "no ESC in output" ;;
 esac
 case $out in
-	*"m i g r a t o r"*) _fail "preflight --color keeps the logo off a pipe" "printed the logo block" ;;
+	*"M I G R A T O R"*) _fail "preflight --color keeps the logo off a pipe" "printed the logo block" ;;
 	*)                   _pass "preflight --color keeps the logo off a pipe" ;;
 esac
 

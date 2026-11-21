@@ -51,8 +51,9 @@ ui_anim=; ui_logo=
 spin_pid=
 ESC=$(printf '\033_'); ESC=${ESC%_}
 C_RESET=; C_DIM=; C_PASS=; C_WARN=; C_FAIL=; C_HEAD=; C_KEY=
-RULE_CH=-; BAR_CH='#'; VT='|'; TL='+'; TR='+'; BL='+'; BR='+'
+RULE_CH=-; FRAME_H='='; BAR_CH='#'; VT='|'; SEP='|'; TL='+'; TR='+'; BL='+'; BR='+'
 SPIN_FRAMES='- \ | /'
+ui_w=72
 
 ui_init() {
 	# 显式指定的 --color / --no-color 优先于环境变量；NO_COLOR 只在 auto 下生效
@@ -79,7 +80,8 @@ ui_init() {
 	# 制表字符只在交互终端上使用。写入日志或交给其他程序处理时保持 ASCII，
 	# 以免按字节比较的工具把边框当成数据
 	if [ -n "$ui_tty" ] && [ -n "$ui_utf8" ]; then
-		RULE_CH='─'; BAR_CH='█'; VT='│'; TL='╭'; TR='╮'; BL='╰'; BR='╯'
+		RULE_CH='─'; FRAME_H='═'; BAR_CH='█'; VT='║'; SEP='│'
+		TL='╔'; TR='╗'; BL='╚'; BR='╝'
 		SPIN_FRAMES='⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏'
 	fi
 	if [ "$ui_mode" = always ]; then
@@ -97,16 +99,19 @@ ui_str() {   # ui_str 次数 字符：把字符重复若干次写到标准输出
 	while [ "$i" -lt "$1" ]; do printf '%s' "$2"; i=$((i + 1)); done
 }
 
+# 内容宽度：写入日志时固定，便于比对；交互终端上随窗口变化，两侧各留两列
+ui_width() {
+	[ -n "$ui_tty" ] || return 0
+	n=${COLUMNS:-80}
+	case $n in ''|*[!0-9]*) n=80 ;; esac
+	n=$((n - 4))
+	[ "$n" -gt 76 ] && n=76
+	[ "$n" -lt 56 ] && n=56
+	ui_w=$n
+}
+
 ui_rule() {
-	# 写入日志时宽度固定，便于比对；交互终端上随窗口宽度变化，上限 78 列
-	n=78
-	if [ -n "$ui_tty" ]; then
-		n=${COLUMNS:-78}
-		case $n in ''|*[!0-9]*) n=78 ;; esac
-		[ "$n" -gt 78 ] && n=78
-		[ "$n" -lt 56 ] && n=56
-	fi
-	printf '  %s%s%s\n' "$C_DIM" "$(ui_str $((n - 2)) "$RULE_CH")" "$C_RESET"
+	printf '  %s%s%s\n' "$C_DIM" "$(ui_str "$ui_w" "$RULE_CH")" "$C_RESET"
 }
 
 ui_clear() {
@@ -136,21 +141,41 @@ spin_stop() {
 	ui_clear
 }
 
+# 框内只放 ASCII：中文字符的显示宽度因字体而异，按字节补空格必然错位。字标
+# 与副题均为 ASCII，宽度可以直接用 ${#} 计算。
+ui_frame_gap() {
+	printf '  %s%s%s%s%s\n' "$C_DIM" "$VT" "$C_RESET" \
+		"$(ui_str $((ui_w - 2)) ' ')" "$C_DIM$VT$C_RESET"
+}
+
+ui_frame_line() {   # ui_frame_line 文本 颜色
+	w=$((ui_w - 2 - ${#1}))
+	[ "$w" -lt 0 ] && w=0
+	l=$((w / 2))
+	printf '  %s%s%s%s%s%s%s%s%s%s%s\n' \
+		"$C_DIM" "$VT" "$C_RESET" "$(ui_str "$l" ' ')" \
+		"$2" "$1" "$C_RESET" "$(ui_str $((w - l)) ' ')" "$C_DIM" "$VT" "$C_RESET"
+}
+
 ui_banner() {
 	host=$(hostname 2>/dev/null || echo '?')
+	ui_width
 	if [ -n "$ui_logo" ]; then
-		# 边框内只放 ASCII，宽度用 %-22s 计算，不涉及中文字符的列宽
 		printf '\n'
-		printf '  %s%s%s%s%s\n' "$C_DIM" "$TL" "$(ui_str 26 "$RULE_CH")" "$TR" "$C_RESET"
-		printf '  %s%s%s  %s%-22s%s  %s%s%s\n' \
-			"$C_DIM" "$VT" "$C_RESET" "$C_HEAD" "m i g r a t o r" "$C_RESET" "$C_DIM" "$VT" "$C_RESET"
-		printf '  %s%s%s%s%s\n' "$C_DIM" "$BL" "$(ui_str 26 "$RULE_CH")" "$BR" "$C_RESET"
-		printf '  %s整机迁移 · 预检%s\n' "$C_DIM" "$C_RESET"
-		printf '  目标端 %s\n\n' "$host"
+		printf '  %s%s%s%s%s\n' "$C_DIM" "$TL" "$(ui_str $((ui_w - 2)) "$FRAME_H")" "$TR" "$C_RESET"
+		ui_frame_gap
+		ui_frame_line "M I G R A T O R" "$C_HEAD"
+		ui_frame_line "PREFLIGHT" "$C_DIM"
+		ui_frame_gap
+		printf '  %s%s%s%s%s\n' "$C_DIM" "$BL" "$(ui_str $((ui_w - 2)) "$FRAME_H")" "$BR" "$C_RESET"
+		printf '\n'
+		printf '  整机迁移 · 预检  %s%s%s  目标端 %s\n' "$C_DIM" "$SEP" "$C_RESET" "$host"
+		printf '\n'
 	else
 		printf '[migrator-preflight] 目标端 %s\n' "$host"
 	fi
 	ui_rule
+	printf '\n'
 }
 
 ui_table_head() {
@@ -452,10 +477,12 @@ else
 fi
 
 # --- 结论 --------------------------------------------------------------------
+printf '\n'
 ui_rule
 printf '[migrator-preflight] 共 %d 项检查：%d 项通过，%d 项提醒，%d 项未通过\n' \
 	$((n_pass + n_warn + n_fail)) "$n_pass" "$n_warn" "$n_fail"
 ui_bar
+printf '\n'
 
 # 缺少软件包时只输出一条可直接执行的命令；--fix 才会实际安装，安装后由操作者
 # 重新运行本脚本，脚本不隐藏该过程。
