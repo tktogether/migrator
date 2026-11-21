@@ -38,10 +38,12 @@ jobs:
           GITEE_REPO: ${{ vars.GITEE_REPO }}
         run: |
           set -eu
-          # GITEE_USER is optional: the token's owner is used when it is absent
-          user=${GITEE_USER:-git}
           : "${GITEE_REPO:?set the GITEE_REPO variable (owner/repo)}"
           : "${GITEE_TOKEN:?set the GITEE_TOKEN secret}"
+          # The user part of the URL has to be the account the token belongs to.
+          # Gitee rejects anything else with "token username invalid", so when
+          # GITEE_USER is not set, take the repository owner.
+          user=${GITEE_USER:-${GITEE_REPO%%/*}}
           git remote add gitee "https://${user}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
           # --force is deliberate: this is a mirror, so the source of truth wins
           git push --force --prune gitee \

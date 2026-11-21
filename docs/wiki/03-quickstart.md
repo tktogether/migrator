@@ -27,7 +27,7 @@ sh -c "$(curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/prefl
 sh -c "$(curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh)"
 ```
 
-两个地址是同一份文件，哪个能通就用哪个。源机地址可以不给：脚本先看 `/run/migrator/state` 里上次连过的那台，再到网段里找免密能登录的 root，认到一台就直接用。
+两个地址是同一份文件，哪个能通就用哪个。源机地址可以不给：脚本先看 `/run/migrator/state` 里上次连过的那台，没有就只查本机。它不扫描网段——第一次运行时收端还没有源机的密钥，扫也扫不出来，而地址本来就在操作者手上。
 
 每项一行，结果分 `PASS`、`WARN`、`FAIL` 三档，末尾汇总，并给出下一步那一行。`WARN` 不挡路但会让某一步变慢或不可用，`FAIL` 会让这次迁移直接失败，此时退出码为 1，并打印补齐缺包的 `apt-get install` 命令。
 

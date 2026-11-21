@@ -16,9 +16,10 @@
 # 注意管道：<url> | sh 时 stdin 是脚本本身，向导读不到你的键盘。要 --go 就用
 # 上面 sh -c "$(curl ...)" 那种写法，或者先落盘再跑。
 #
-# 源机不用手输，按这个顺序认：
-#   MIGRATOR_DONOR 环境变量 → 参数 → /run/migrator/state 里上次那台 →
-#   网段里免密能登录的 root（认到一台就用，多于一台让你选）
+# 源机地址按这个顺序取，取到就用，取不到就只查本机：
+#   MIGRATOR_DONOR 环境变量 → 参数 → /run/migrator/state 里上次连过的那台
+# 不猜：源机地址是操作者唯一确定的信息，扫描网段既不靠谱（第一次跑时收端
+# 还没有源机的密钥）又会在别人的机房里发出噪声。
 #
 # 结果三档：
 #   PASS  已满足
@@ -42,7 +43,7 @@ usage() {
   --donor HOST  指定源机，跳过自动查找
   -h, --help    这一段
 
-不给源机也行：先查 /run/migrator/state 里上次那台，再在网段里找免密可登录的 root。
+不给源机也行：先看 /run/migrator/state 里上次连过的那台；没有就只查本机。
 PATH 里没有 migrator 时，会打印装它的那一行。
 EOF
 }
@@ -191,44 +192,16 @@ else
 	warn "下载源" "没有 curl 也没有 wget：无法在线取工具包"
 fi
 
-# --- 源机：先找，再问 --------------------------------------------------------
-# 一台机器可能同时满足三条：参数给了、状态里记着、网段里能认出来。顺序就是
-# 可信度顺序——人说的最可信，其次是自己上次连过的，最后才是猜出来的。
+# --- 源机：有地址才查 --------------------------------------------------------
+# 地址只从这三处来：环境变量、参数、这台机器上次连过的那台。不做网段扫描——
+# 第一次跑的时候收端还没有源机的密钥，扫也扫不出来；而源机地址是操作者手上
+# 本来就有的东西，猜它只会让人怀疑工具到底连上了谁。
 if [ -z "$DONOR" ]; then
 	for f in /run/migrator/state /run/migrator/dry/state; do
 		[ -r "$f" ] || continue
 		d=$(sed -n 's/^donor\.target=//p' "$f" 2>/dev/null | tail -1)
-		[ -n "$d" ] && { DONOR=$d; say "源机：用上次连过的 $DONOR（/run/migrator/state 记着）"; break; }
+		[ -n "$d" ] && { DONOR=$d; say "源机：用上次连过的 $DONOR（$f 记着）"; break; }
 	done
-fi
-
-if [ -z "$DONOR" ] && have ip && have ssh; then
-	neigh=$(ip neigh show 2>/dev/null \
-		| awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $NF ~ /REACHABLE|STALE|DELAY/ { print $1 }' | head -16)
-	if [ -n "$neigh" ]; then
-		say "源机：没给地址，在网段里问一遍（最多 16 台，免密才认）"
-		found=
-		for h in $neigh; do
-			ssh -n -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new \
-				"root@$h" true 2>/dev/null && found="$found $h"
-		done
-		n=$(echo "$found" | wc -w)
-		if [ "$n" = 1 ]; then
-			DONOR=${found# }
-			say "源机：认到 $DONOR（不对就用 --donor 指定）"
-		elif [ "$n" -gt 1 ]; then
-			say "源机：网段里有 $n 台免密可登录：$found"
-			if can_ask; then
-				tty_stdin
-				printf '[migrator-preflight] 选哪台（直接回车=第一台，或写地址）：'
-				read -r pick || pick=
-				[ -n "$pick" ] || pick=${found# }
-				DONOR=$pick
-			else
-				warn "源机" "网段里认到多台（$found），没终端可问：用 --donor 指定"
-			fi
-		fi
-	fi
 fi
 
 if [ -n "$DONOR" ]; then
