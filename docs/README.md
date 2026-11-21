@@ -52,4 +52,5 @@ bash rig/clean.sh                # 清理全部 rig 进程
 - 🟡 E2 中继拓扑 E2E（数据与独立引导已过；cutover 端口修复后待复跑，见 D35） · ⏳ 离线模式真机轮（需 donor 引导进 Live）
 - ⏳ 工件与真机收口（D31/D32）：Live iso 改为**从 HEAD 重建**（现存工件停在 `d8d6b66`，缺 dm-uuid 修复）；自包含引导已收编为 `tools/live-entry.sh`（D25/D28/D29/D30 四条约束）；虚拟机用随机 MAC，**IP 每开机漂移**，按硬件角色认机（D32，见 HANDOFF §1）；`.116` 仍停在 emergency 待控制台修复
 - 🟡 M3=E3：趟内续传（D41）与跨 run 续传（D42）已实测；真机在线跨 run 已闭环（D43：`kill -9` 于 512 MiB，重跑续上、`sha256 equal`；donor 换会话后旧 journal 被拒并从零）。donor 自身重启不可续（它停机期间自己的写没人看见）；真机离线续传待做
+- ✅ **真机完整在线闭环（D44，11-21）**：donor `18.04.4 / UEFI / 40G / LVM` → 收端 `30G / BIOS` 单盘，`-o root=files` 四卷（PV 弹性、ESP 与 `/boot` 块级、根文件级装进 28.5G）；transfer `passes=3`、冻结 11.09 s、47.8 s；postfix 从 Live 写 BIOS grub；verify 21 ok / 1 warn / 0 fail；重启后 BIOS 独立引导成功（`running`、0 失败单元、`eth0` DHCP、swap 与 `lxcfs` 在位）。同轮记下三条操作经验：`-s check` 不能带 DONOR 参数、Live 内驱动须先换成 HEAD、transfer 之后应先 cutover 再 postfix/verify（否则 donor 冻十几分钟）
 - 📐 上游边界项：btrfs/ZFS/LUKS/Arch/SUSE（上游明确不支持，按需另立项）
