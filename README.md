@@ -10,10 +10,16 @@ migrator 把一台已安装的 Linux 服务器迁移到另一台机器。磁盘�
 
 ### 第 1 步 进入迁移 Live
 
-迁移命令只在迁移 Live 中执行。`apply` 会清空目标盘，在运行中的系统上执行会破坏该系统。以 root 执行一条命令，它在本机构建迁移 Live、写入引导项并重启：
+迁移命令只在迁移 Live 中执行。`apply` 会清空目标盘，在运行中的系统上执行会破坏该系统。以 root 执行一条命令，它先预检、再构建、最后写入引导项并重启：
 
 ```sh
 curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash
+```
+
+预检只读，逐项打印本机能否承担这次构建。有未通过项时脚本就此停止，本机没有任何改动。预检通过后询问一次是否开始，构建完成后再询问一次是否写入引导项并重启。只看预检结果而什么都不做：
+
+```sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash -s -- -n
 ```
 
 脚本在重启之前打印登录用的私钥，请先复制到其他设备。重启后确认已进入迁移 Live：
@@ -22,7 +28,7 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 cat /etc/migrator-live-release
 ```
 
-该命令要求根文件系统或独立的 `/boot` 位于非 LVM 分区，内存不少于 1536 MiB，可用空间不少于 3 GiB。条件不满足时，脚本在下载任何内容之前说明原因。已经有镜像、已有构建产物或没有控制台时，见[快速开始](docs/wiki/03-quickstart.md)第 0 步。
+预检覆盖根文件系统所在分区是否为非 LVM、内存与可用空间是否足够、构建依赖与源码树能否取得、本机是否已有迁移 Live 的引导项。已经有镜像、已有构建产物或没有控制台时，见[快速开始](docs/wiki/03-quickstart.md)第 0 步。
 
 ### 第 2 步 准备源端访问
 
