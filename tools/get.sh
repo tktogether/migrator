@@ -4,9 +4,9 @@
 # git repository, and three services mirror that repository for free. This
 # script tries them in order and uses the first one that answers.
 #
-#   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/get.sh | sh
-#   curl -fsSL .../get.sh | sh -s -- --check        # 只体检，不装任何东西
-#   curl -fsSL .../get.sh | sh -s -- -s plan root@192.168.1.111    # install, then run
+#   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/tools/get.sh | sh
+#   curl -fsSL .../tools/get.sh | sh -s -- --check        # 只体检，不装任何东西
+#   curl -fsSL .../tools/get.sh | sh -s -- -s plan root@192.168.1.111    # install, then run
 #
 # --check fetches tools/preflight.sh from the same mirror and runs it, so the
 # question "can this machine do it" costs one command and installs nothing.

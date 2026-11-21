@@ -44,7 +44,7 @@ sh -c "$(curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools
 希望由脚本自己选源、并且从多个镜像回落时，用安装脚本的检查模式，效果相同：
 
 ```sh
-curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/get.sh | sh -s -- --check
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh -s -- --check
 ```
 
 ## 一条命令安装
@@ -52,7 +52,7 @@ curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/get.sh | sh -s
 工具本身也可以一条命令安装。源码在 GitHub，三个镜像按顺序自动回落，国内网络通常走 Gitee：
 
 ```sh
-curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/get.sh | sh
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/tools/get.sh | sh
 ```
 
 ## 交互式运行

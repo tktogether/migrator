@@ -1,20 +1,20 @@
 #!/bin/sh
 # preflight.sh — 一条命令回答「现在能不能开始」，然后给出（或直接执行）下一步。
 #
-# 一个文件，不装任何东西，也不需要仓库：直接取来就职。
+# 一个文件，不装任何东西，也不需要仓库：取来即跑。
 #
-#   sh -c "$(curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh)"
-#   sh preflight.sh --go            没有 FAIL 就直接进迁移向导
-#   sh preflight.sh --fix           顺手把缺的包装上（apt-get install）
-#   sh preflight.sh --check         同默认，但明确不装任何东西（给 get.sh --check 用）
+#   curl -fsSL <地址> | sh -s --              只查（默认）
+#   curl -fsSL <地址> | sh -s -- --fix        缺什么装上，然后重跑
+#   curl -fsSL <地址> | sh -s -- --go         没有 FAIL 就直接进迁移向导
+#   或者先落盘：curl -fsSL -o /tmp/pf.sh <地址> && sh /tmp/pf.sh --go
 #
 # 三种取法，哪个通用哪个（国内常用 Gitee）：
-#   curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/preflight.sh | sh
-#   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh | sh
+#   https://gitee.com/tktogether/migrator/raw/master/tools/preflight.sh
+#   https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh
 #   或者 sh tools/preflight.sh（仓库已在手边）
 #
-# 注意管道：<url> | sh 时 stdin 是脚本本身，向导读不到你的键盘。要 --go 就用
-# 上面 sh -c "$(curl ...)" 那种写法，或者先落盘再跑。
+# 参数要写在 `sh -s --` 后面。写成 sh -c "$(curl …)" 时第一个参数会被当成 $0，
+# 传不进去——这是 sh 的规矩，不是这里的。
 #
 # 源机地址按这个顺序取，取到就用，取不到就只查本机：
 #   MIGRATOR_DONOR 环境变量 → 参数 → /run/migrator/state 里上次连过的那台
@@ -37,6 +37,7 @@ usage() {
 用法：preflight.sh [--go] [--fix] [--donor HOST] [root@]HOST[:PORT]
 
   默认只查，什么都不装、不写、不动网络；一个文件就能跑，不需要安装工具。
+  远端用法：curl -fsSL <地址> | sh -s -- [选项]
   --go          检查通过后直接进迁移向导（源机已填好，其余照问）
   --fix         把缺的包装上（apt-get install -y），然后重跑本脚本
   --check       明确「只检查」：装了 migrator 也不进向导（默认行为，给脚本用）
@@ -44,6 +45,7 @@ usage() {
   -h, --help    这一段
 
 不给源机也行：先看 /run/migrator/state 里上次连过的那台；没有就只查本机。
+用 --go 又要问话时，ssh 那边得分配终端（ssh -t）；脚本会把 stdin 接回 /dev/tty。
 PATH 里没有 migrator 时，会打印装它的那一行。
 EOF
 }
@@ -236,23 +238,56 @@ echo "--------------------------------------------------------------------------
 printf '[migrator-preflight] %d 项：%d PASS · %d WARN · %d FAIL\n' \
 	$((n_pass + n_warn + n_fail)) "$n_pass" "$n_warn" "$n_fail"
 
-# 缺包时只打印一条能直接粘的命令；--fix 才真装，装完让人重跑，不藏在脚本里
+# 缺包时只打印一条能直接粘的命令；--fix 才真装，装完让人重跑，不藏在脚本里。
+# 想要的名字不一定等于能装的名字：bionic 没有 lz4（叫 liblz4-tool），老发行版的
+# qemu 叫 qemu。所以装之前先问 apt 有没有候选，并把 apt 的原话带出来——上次
+# 把输出丢进 /dev/null，结果只说了句「多半是网络问题」，实际是包名不存在。
+apt_cand() {   # 给定几个等价包名，输出这台机器上真能装的那个
+	for p in "$@"; do
+		apt-cache policy "$p" 2>/dev/null | grep -q 'Candidate: [^(]' && { printf '%s' "$p"; return 0; }
+	done
+	return 1
+}
+
 pkgs=$(echo "$fix_pkgs" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ')
-if [ -n "$pkgs" ] && [ "$n_fail" -gt 0 ]; then
+pkgs=${pkgs% }
+# --fix 连 WARN 级的也装（例如只有 qemu 没装），否则只报 FAIL 那几项
+if [ -n "$pkgs" ] && { [ "$n_fail" -gt 0 ] || [ -n "$FIX" ]; }; then
+	resolved=; missing=; cand=
+	if have apt-cache; then
+		for p in $pkgs; do
+			case $p in
+				lz4)             cand=$(apt_cand lz4 liblz4-tool) ;;
+				qemu-system-x86) cand=$(apt_cand qemu-system-x86 qemu) ;;
+				*)               cand=$(apt_cand "$p") ;;
+			esac
+			if [ -n "$cand" ]; then resolved="$resolved $cand"; else missing="$missing $p"; fi
+		done
+		resolved=${resolved# }; missing=${missing# }
+	else
+		resolved=$pkgs
+	fi
+
 	if [ -n "$FIX" ]; then
-		if have apt-get; then
-			say "--fix：apt-get install -y ${pkgs}"
-			if apt-get install -y $pkgs >/dev/null 2>&1; then
-				say "装好了，重跑一次本脚本确认"
-			else
-				say "apt 没装成：多半是网络或源的问题，手工装：apt-get install -y ${pkgs}"
-			fi
+		[ -n "$missing" ] && say "这台机器的源里没有这几个包，跳过：$missing"
+		if ! have apt-get; then
+			say "--fix 只会用 apt-get，这台机器没有；请手工装：${resolved:-（无可自动安装的包）}"
+			exit 1
+		fi
+		[ -n "$resolved" ] || { say "没有可自动安装的包，剩下的请手工处理"; exit 1; }
+		say "--fix：apt-get install -y $resolved"
+		if log=$(apt-get install -y $resolved 2>&1); then
+			say "装好了，重跑一次本脚本确认"
 		else
-			say "--fix 只会用 apt-get，这台机器没有：请手工装 ${pkgs}"
+			say "apt 没装成，它最后说的是："
+			printf '%s\n' "$log" | tail -3 | sed 's/^/    /'
+			say "手工重试：apt-get install -y $resolved"
 		fi
 		exit 1
 	fi
-	say "缺的包一条命令装：apt-get install -y ${pkgs}（或重跑本脚本加 --fix）"
+
+	say "缺的包一条命令装：apt-get install -y ${resolved:-$pkgs}（或重跑本脚本加 --fix）"
+	[ -n "$missing" ] && say "其中 $missing 在这台机器的源里没有同名包，需要另找"
 fi
 
 if [ "$n_fail" -gt 0 ]; then
@@ -263,7 +298,7 @@ fi
 # --- 下一步：一个命令 --------------------------------------------------------
 if ! have migrator && [ ! -x "$(dirname "$0")/../bin/migrator" ]; then
 	echo "[migrator-preflight] 工具还没装，一条命令装好（三个镜像自动回落）："
-	echo "    curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/get.sh | sh"
+	echo "    curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh"
 fi
 
 if [ -n "$GO" ]; then
