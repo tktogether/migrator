@@ -1,22 +1,102 @@
-MIT License
+migrator 项目许可（专有）
 
-Copyright (c) 2026 XServer
-Copyright (c) 2026 橙先生
+版权所有 (c) 2026 橙先生
+保留所有权利。
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本仓库及由其构建的产物（以下称“组合作品”）包含两类材料：上游材料与本项目新增部分。两类材料适用不同的许可条件。任何使用、复制、修改、分发或提供组合作品的行为，均应同时遵守本文件与 LICENSE-UPSTREAM。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+一、定义
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1.1 上游材料
+指本仓库中派生自 reloca.to 1.2 的源代码、脚本、文档及其修改，包括其版权声明与许可文本。上游材料依据 MIT 许可提供，完整文本见 LICENSE-UPSTREAM。凡无法明确归属于本项目新增部分的内容，均按上游材料处理。
+
+1.2 本项目新增部分
+指除上游材料外，由本项目版权方创作或修改的代码、脚本、文档、构建系统、测试、设计、文案及其它材料，包括对上游材料所作修改中新增的表达部分。本项目新增部分为专有材料。
+
+1.3 组合作品
+指本仓库、由本仓库构建的软件、迁移 Live、发布包及其它包含上游材料或本项目新增部分的产物。
+
+二、上游材料的许可
+
+2.1 上游材料依据 LICENSE-UPSTREAM 中的 MIT 许可提供。本文件不限制、不改变、不撤销任何人依据该 MIT 许可对上游材料享有的权利。
+
+2.2 若本文件与 LICENSE-UPSTREAM 存在冲突，就上游材料而言，以 LICENSE-UPSTREAM 为准。
+
+2.3 任何人均可依据 MIT 许可使用、复制、修改、发布、分发、再许可和销售上游材料，但应保留 LICENSE-UPSTREAM 中的版权声明与许可文本。
+
+三、本项目新增部分的许可
+
+3.1 有限许可
+在遵守本文件全部条件的前提下，版权方授予合法获得组合作品副本的自然人或组织一项非独占、不可转让、不可再许可的有限许可，仅允许其：
+
+（1）为自身或所在组织的内部迁移运维目的运行本软件；
+（2）为评估、测试或兼容性验证目的运行本软件；
+（3）制作必要的内部备份，且备份不得对外提供；
+（4）通过命令行选项、配置文件与外部脚本进行自动化编排，但不得修改本软件本身或创建衍生版本。
+
+上述许可包括组织内部的商业性使用，但不包括任何形式的对外分发或商业性再分发。
+
+3.2 禁止的行为
+未经版权方事先书面许可，任何人不得：
+
+（1）复制、发布、传播、提供、出租、出售、转让、再许可或以其它方式对外分发组合作品或本项目新增部分；
+（2）将组合作品或本项目新增部分用于商业性再分发，包括但不限于作为收费产品、托管服务、代维服务、云服务或其它对外服务的组成部分；
+（3）修改、翻译、改编、拆解、反向工程、反编译本项目新增部分，或基于其创建衍生作品；
+（4）进行内部二次开发、外包开发、二次封装、集成到其它产品或服务，或基于本项目新增部分开发替代产品；
+（5）移除、遮蔽、修改或伪造版权声明、许可文本、来源说明、版本标识或作者标识；
+（6）使用“migrator”名称、标识、域名、发布物命名或近似标识，造成他人误认为该版本由版权方发布、授权或背书；
+（7）将本项目新增部分提供给第三方用于上述任一行为。
+
+3.3 自动化与配置
+通过文档中提供的命令行选项、配置文件、环境变量或外部编排脚本使用本软件，不属于修改或二次开发，但不得借此规避本文件的限制。
+
+3.4 内部二次开发的限制
+“内部二次开发”包括为自身业务或第三方业务修改、扩展、封装、集成本软件，或基于本软件开发衍生版本，无论是否对外发布。此类行为须取得版权方书面许可。
+
+四、组合作品的分发
+
+4.1 组合作品的对外分发须取得版权方事先书面许可。
+
+4.2 经许可分发时，必须同时提供 LICENSE-UPSTREAM、本文件、NOTICE 与 TRADEMARK.md，不得删除或修改其中的版权、许可与来源说明。
+
+4.3 经许可分发时，不得对上游材料施加与 MIT 许可冲突的限制，不得向接收方收取上游材料在 MIT 许可下本可免费获得的权利对价。
+
+4.4 任何未经许可的分发均构成对本文件的违反，并使本文件授予的许可自动终止。
+
+五、名称与标识
+
+5.1 本文件不授予任何商标、服务标记、商号、域名、标识或其它品牌权利。
+
+5.2 未经版权方书面许可，不得使用“migrator”名称或近似名称作为修改版本、衍生版本、商业产品或服务的名称，不得暗示其与版权方存在官方关系、授权关系或背书关系。
+
+5.3 对项目名称的叙述性引用，例如说明“本产品基于 migrator 构建”，在不会造成混淆的前提下可以保留。
+
+六、终止
+
+6.1 违反本文件任一条件，本文件授予的许可自动终止。
+
+6.2 许可终止后，使用者应立即停止使用本项目新增部分，并销毁其持有的本项目新增部分副本及其衍生物。
+
+6.3 许可终止不影响上游材料依据 MIT 许可享有的权利，也不影响 MIT 许可对已分发上游材料副本的效力。
+
+七、无担保与责任限制
+
+7.1 组合作品按“现状”提供，不提供任何明示或默示的担保，包括但不限于适销性、特定用途适用性、所有权或不侵权的担保。
+
+7.2 在适用法律允许的最大范围内，版权方不对因使用或无法使用组合作品而产生的任何直接、间接、偶然、特殊、惩罚性或后果性损害承担责任，包括但不限于数据丢失、业务中断、利润损失或替代服务费用。
+
+7.3 使用者应自行确认迁移环境、目标磁盘、网络条件与数据备份符合其业务要求。
+
+八、适用法律与争议解决
+
+8.1 本文件的解释与适用，以及因本文件产生的争议，由版权方与使用方另行书面约定适用的法律与争议解决方式。
+
+8.2 本文件不构成法律意见。对外发布或商业授权前，应由具备资质的法律顾问审核。
+
+九、商业授权与联系方式
+
+商业性再分发、对外分发、二次开发、名称使用或其它超出本文件许可范围的行为，应向版权方书面申请。版权方可根据具体场景另行签订许可协议或企业授权协议。
+
+---
+
+本文件仅适用于本项目新增部分。上游材料适用 LICENSE-UPSTREAM 中的 MIT 许可。

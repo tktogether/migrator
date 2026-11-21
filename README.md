@@ -96,15 +96,22 @@ make agent-test   # 用本机 loop 设备跑 agent（需要 root）
 
 ## 文档
 
+- [docs/wiki/README.md](docs/wiki/README.md) — 中文用户文档与维护者文档，含 SVG 与 Mermaid 图示
 - `docs/DECISIONS.md` — 决策簿：每个决定的日期、内容、被否的备选、理由、状态
 - `docs/DESIGN.md` — 设计与各阶段的边界
 - `docs/HANDOFF.md` — 真机矩阵台账（含凭据，不随仓库分发）
+- [docs/release/](docs/release/README.md) — 发布文案、发布说明与公告草案
 
 ## 来源与许可
 
-本项目是 [reloca.to](https://reloca.to/) 1.2 的派生作品，上游以 MIT 许可发布。
-上游的版权声明与许可全文完整保留在 [LICENSE](LICENSE) 里（`Copyright (c) 2026 XServer`），
-本项目在此基础上追加自己的版权行；上游的商标、域名、商店与联系方式不属于许可范围，
-本项目不使用。上游的历史变更记录见 `docs/CHANGELOG-upstream.md`。
+本项目是 [reloca.to](https://reloca.to/) 1.2 的派生作品。上游材料依据 MIT 许可提供，
+版权声明与许可全文完整保留在 [LICENSE-UPSTREAM](LICENSE-UPSTREAM) 中
+（`Copyright (c) 2026 XServer`）。
 
-代码以 MIT 发布，见 [LICENSE](LICENSE)。
+本项目新增部分为专有材料，见 [LICENSE](LICENSE)。组合作品的对外分发、商业性再分发、
+修改后发布与内部二次开发，均须取得版权方书面许可。名称与标识使用见
+[TRADEMARK.md](TRADEMARK.md)，来源与许可范围说明见 [NOTICE](NOTICE)。
+完整政策见 [docs/wiki/14-license.md](docs/wiki/14-license.md)。
+
+上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。上游的历史变更记录见
+`docs/CHANGELOG-upstream.md`。

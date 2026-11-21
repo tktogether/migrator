@@ -40,6 +40,8 @@ install: agent
 	install -m 0755 bin/migrator $(PREFIX)/bin/migrator
 	install -m 0755 agent/migrator-agent $(PREFIX)/bin/migrator-agent
 	install -m 0644 lib/*.sh $(PREFIX)/lib/migrator/
+	install -d $(PREFIX)/share/doc/migrator
+	install -m 0644 LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md $(PREFIX)/share/doc/migrator/
 	echo "$(VER)" > $(PREFIX)/lib/migrator/VERSION
 	echo "installed migrator $(VER) into $(PREFIX)"
 

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">固件组合与处理方式</title>
+  <desc id="desc">源端与目标端的 BIOS/UEFI 四种组合及其 GRUB、ESP 与 NVRAM 处理方式。</desc>
+  <rect width="1200" height="700" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">固件组合与处理方式</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">源端固件取实际引导方式；目标端固件取迁移 Live 的实际引导方式。</text>
+
+  <rect x="420" y="120" width="360" height="60" rx="8" fill="#e5e7eb" stroke="#9ca3af"/>
+  <text x="600" y="156" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#1f2937">目标端：BIOS</text>
+  <rect x="800" y="120" width="360" height="60" rx="8" fill="#e5e7eb" stroke="#9ca3af"/>
+  <text x="980" y="156" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#1f2937">目标端：UEFI</text>
+
+  <rect x="50" y="200" width="350" height="180" rx="8" fill="#fff7ed" stroke="#b45309"/>
+  <text x="225" y="282" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#92400e">源端：BIOS</text>
+  <text x="225" y="308" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">无 ESP 或残留 ESP</text>
+
+  <rect x="420" y="200" width="360" height="180" rx="8" fill="#f0fdf4" stroke="#2e7d32"/>
+  <text x="440" y="230" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#166534">BIOS → BIOS</text>
+  <text x="440" y="256" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">i386-pc GRUB 写入 MBR。</text>
+  <text x="440" y="280" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">GPT 时创建 bios_grub 分区，并设置 pmbr_boot。</text>
+  <text x="440" y="304" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">无 ESP 也可完成。</text>
+  <text x="440" y="328" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">保留源端 ESP 作为普通槽位（若有）。</text>
+
+  <rect x="800" y="200" width="360" height="180" rx="8" fill="#fef3c7" stroke="#b45309"/>
+  <text x="820" y="230" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#92400e">BIOS → UEFI</text>
+  <text x="820" y="256" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">新建 512 MiB ESP，并追加 fstab 行。</text>
+  <text x="820" y="280" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">从迁移 Live 安装 x86_64-efi GRUB。</text>
+  <text x="820" y="304" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">Live 通过 UEFI 引导时写 NVRAM；否则写 removable path。</text>
+  <text x="820" y="328" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">迁移后安装 grub-efi-amd64，卸载 grub-pc。</text>
+
+  <rect x="50" y="410" width="350" height="180" rx="8" fill="#eef4fb" stroke="#1f4e79"/>
+  <text x="225" y="492" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#1f4e79">源端：UEFI</text>
+  <text x="225" y="518" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">ESP 与 NVRAM 启动项</text>
+
+  <rect x="420" y="410" width="360" height="180" rx="8" fill="#fef3c7" stroke="#b45309"/>
+  <text x="440" y="440" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#92400e">UEFI → BIOS</text>
+  <text x="440" y="466" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">保留源端 ESP 作为普通槽位。</text>
+  <text x="440" y="490" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">i386-pc GRUB 写入 MBR。</text>
+  <text x="440" y="514" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">GPT 时创建 bios_grub 分区。</text>
+  <text x="440" y="538" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">迁移后安装 grub-pc，卸载 grub-efi-amd64。</text>
+
+  <rect x="800" y="410" width="360" height="180" rx="8" fill="#f0fdf4" stroke="#2e7d32"/>
+  <text x="820" y="440" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#166534">UEFI → UEFI</text>
+  <text x="820" y="466" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">x86_64-efi GRUB；ESP 保留或复用。</text>
+  <text x="820" y="490" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">写入 NVRAM 启动项；removable path 作为回退。</text>
+  <text x="820" y="514" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">Secure Boot 需要源端 ESP 上的 shimx64.efi。</text>
+  <text x="820" y="538" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">BootOrder 由 bootorder=pxe|local 控制。</text>
+
+  <rect x="50" y="620" width="1110" height="62" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="70" y="646" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">deb 系跨固件：GRUB 从迁移 Live 安装，软件包在写入目标盘前获取。rhel 系跨固件：postfix 在 chroot 中通过 dnf 安装目标固件的 GRUB，目标系统仓库须可达。</text>
+  <text x="70" y="668" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">Secure Boot 已启用且源端为 BIOS 时，计划拒绝执行；源端为 UEFI 时按 ESP 上的 shim 假定，无法验证签名链。</text>
+</svg>

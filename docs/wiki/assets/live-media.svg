@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="title desc">
+  <title id="title">迁移 Live 的两种引导介质</title>
+  <desc id="desc">ISO 使用 toram 复制整张镜像并释放介质；分区介质使用 toram=filesystem.squashfs，并遵守非 LVM 与内核位置约束。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2e7d32"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="660" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">迁移 Live 的两种引导介质</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">无论使用哪种介质，目标磁盘都必须在 Live 运行期间保持未挂载。</text>
+
+  <rect x="40" y="110" width="540" height="220" rx="12" fill="#eef4fb" stroke="#1f4e79"/>
+  <text x="60" y="142" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#1f4e79">ISO 引导：整张镜像 toram</text>
+  <rect x="70" y="175" width="170" height="80" rx="8" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="155" y="202" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" font-weight="700" fill="#1f4e79">migrator-live.iso</text>
+  <text x="155" y="224" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">isolinux + live/</text>
+  <text x="155" y="242" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#5b6573">squashfs / kernel / initrd</text>
+  <line x1="240" y1="215" x2="312" y2="215" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+  <text x="276" y="202" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#166534">toram</text>
+  <rect x="320" y="175" width="230" height="80" rx="8" fill="#dcfce7" stroke="#2e7d32"/>
+  <text x="435" y="202" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" font-weight="700" fill="#166534">RAM</text>
+  <text x="435" y="224" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">整个镜像复制进内存</text>
+  <text x="435" y="242" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">光盘介质被释放</text>
+  <text x="70" y="292" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">结果：iso9660 与 loop 挂载被卸载，承载 ISO 的磁盘不再被占用。</text>
+  <text x="70" y="314" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">apply 可以安全擦除目标磁盘。适用于 CD/ISO 引导。</text>
+
+  <rect x="620" y="110" width="540" height="220" rx="12" fill="#f0fdf4" stroke="#2e7d32"/>
+  <text x="640" y="142" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#166534">分区介质：toram=filesystem.squashfs</text>
+  <rect x="650" y="175" width="170" height="80" rx="8" fill="#ffffff" stroke="#2e7d32"/>
+  <text x="735" y="202" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" font-weight="700" fill="#166534">非 LVM 文件系统</text>
+  <text x="735" y="224" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">/live/</text>
+  <text x="735" y="242" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#5b6573">squashfs + kernel + initrd</text>
+  <line x1="820" y1="215" x2="892" y2="215" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+  <rect x="900" y="175" width="230" height="80" rx="8" fill="#dcfce7" stroke="#2e7d32"/>
+  <text x="1015" y="202" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" font-weight="700" fill="#166534">RAM</text>
+  <text x="1015" y="224" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">只复制 squashfs</text>
+  <text x="1015" y="242" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">目标磁盘被释放</text>
+  <text x="650" y="292" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">live-boot 的介质扫描不进入 LVM：squashfs 必须放在非 LVM 文件系统。</text>
+  <text x="650" y="314" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">内核与 initrd 应与 squashfs 同放，并避开 /boot 顶层的 vmlinuz-*。</text>
+
+  <rect x="40" y="360" width="1120" height="120" rx="12" fill="#fef2f2" stroke="#b91c1c"/>
+  <text x="60" y="390" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#b91c1c">分区介质上不要使用裸 toram</text>
+  <text x="60" y="416" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#7f1d1d">裸 toram 会尝试把整个分区复制进 RAM；分区通常远大于 squashfs，复制会失败。</text>
+  <text x="60" y="438" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#7f1d1d">失败后介质可能仍处于挂载状态，目标磁盘没有被释放；随后 apply 会擦除 Live 自身。</text>
+  <text x="60" y="460" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#7f1d1d">正确做法：tools/live-entry.sh 使用 toram=filesystem.squashfs，并在启动后断言目标盘未挂载。</text>
+
+  <rect x="40" y="510" width="360" height="120" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="60" y="536" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">内核位置</text>
+  <text x="60" y="558" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">内核与 initrd 必须位于 GRUB 搜索的文件系统。</text>
+  <text x="60" y="576" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">独立 /boot 下放错位置会导致 grub rescue。</text>
+  <text x="60" y="594" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">/boot 顶层 vmlinuz-* 可能被当作默认内核。</text>
+
+  <rect x="420" y="510" width="360" height="120" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="440" y="536" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">默认启动项</text>
+  <text x="440" y="558" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">grub-set-default 持久化，而非一次性的 grub-reboot。</text>
+  <text x="440" y="576" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">失败引导不应回落到即将被擦除的系统。</text>
+  <text x="440" y="594" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">tools/live-cycle.sh 可无人值守进入 Live。</text>
+
+  <rect x="800" y="510" width="360" height="120" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="820" y="536" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">内存与释放</text>
+  <text x="820" y="558" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">toram 需要把 squashfs 放入内存。</text>
+  <text x="820" y="576" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">1 GiB 目标端应使用 slim Live。</text>
+  <text x="820" y="594" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" fill="#374151">进入 Live 后应确认 /dev/sda 未挂载。</text>
+</svg>

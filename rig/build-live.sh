@@ -109,6 +109,10 @@ else
 fi
 install -m0644 "$REPO"/lib/*.sh "$CH/usr/local/lib/migrator/"
 [ -f "$REPO/lib/VERSION" ] && install -m0644 "$REPO/lib/VERSION" "$CH/usr/local/lib/migrator/" || true
+install -d -m0755 "$CH/usr/local/share/doc/migrator"
+for f in LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md; do
+	install -m0644 "$REPO/$f" "$CH/usr/local/share/doc/migrator/$f"
+done
 
 echo "[live] squashfs ($PROFILE)..."
 mkdir -p "$ISODIR/live" "$ISODIR/isolinux"

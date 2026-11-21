@@ -97,6 +97,10 @@ install -m0644 lib/*.sh "$CH/usr/local/lib/migrator/"
 sed -i 's/\r$//' "$CH/usr/local/lib/migrator/"*.sh
 install -m0755 agent/migrator-agent "$CH/usr/local/sbin/migrator-agent"
 [ -f lib/VERSION ] && install -m0644 lib/VERSION "$CH/usr/local/lib/migrator/VERSION"
+install -d -m0755 "$CH/usr/local/share/doc/migrator"
+for f in LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md; do
+	install -m0644 "$f" "$CH/usr/local/share/doc/migrator/$f"
+done
 
 # zram: half the RAM as zstd swap, so a 1 GiB recipient can still run (D23)
 cat > "$CH/usr/local/sbin/migrator-zram" <<'ZRAM'

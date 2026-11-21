@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">在线迁移的时间线</title>
+  <desc id="desc">首轮全量、增量轮次、短暂冻结、预检、继续增量、最终冻结与切换。业务中断只发生在冻结窗口。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="640" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">在线迁移的时间线</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">冻结窗口是唯一主动造成的服务中断；时间比例仅为示意。</text>
+
+  <text x="70" y="120" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">时间 →</text>
+  <line x1="130" y1="126" x2="1150" y2="126" stroke="#9ca3af" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <text x="285" y="160" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#166534">源端运行，可服务</text>
+  <line x1="70" y1="172" x2="500" y2="172" stroke="#2e7d32" stroke-width="1.2"/>
+  <line x1="70" y1="166" x2="70" y2="178" stroke="#2e7d32" stroke-width="1.2"/>
+  <line x1="500" y1="166" x2="500" y2="178" stroke="#2e7d32" stroke-width="1.2"/>
+
+  <text x="695" y="160" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#166534">预检与继续增量：源端已解冻</text>
+  <line x1="550" y1="172" x2="840" y2="172" stroke="#2e7d32" stroke-width="1.2"/>
+  <line x1="550" y1="166" x2="550" y2="178" stroke="#2e7d32" stroke-width="1.2"/>
+  <line x1="840" y1="166" x2="840" y2="178" stroke="#2e7d32" stroke-width="1.2"/>
+
+  <text x="995" y="160" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" font-weight="700" fill="#b91c1c">服务中断（冻结窗口）</text>
+  <line x1="840" y1="172" x2="1150" y2="172" stroke="#b91c1c" stroke-width="1.6"/>
+  <line x1="840" y1="166" x2="840" y2="178" stroke="#b91c1c" stroke-width="1.6"/>
+  <line x1="1150" y1="166" x2="1150" y2="178" stroke="#b91c1c" stroke-width="1.6"/>
+
+  <rect x="70" y="190" width="200" height="80" rx="8" fill="#dbeafe" stroke="#1f4e79"/>
+  <text x="170" y="225" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">首轮全量</text>
+  <text x="170" y="247" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">复制每个块级卷</text>
+
+  <rect x="270" y="190" width="230" height="80" rx="8" fill="#dbeafe" stroke="#1f4e79"/>
+  <text x="385" y="225" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">增量轮次</text>
+  <text x="385" y="247" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">只发送本轮写入的块</text>
+
+  <rect x="500" y="190" width="50" height="80" rx="8" fill="#fef3c7" stroke="#b45309"/>
+  <text x="525" y="218" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" font-weight="700" fill="#92400e">冻结</text>
+  <text x="525" y="235" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="10.5" font-weight="700" fill="#92400e">①</text>
+  <text x="525" y="258" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="9.5" fill="#92400e">短暂</text>
+
+  <rect x="550" y="190" width="160" height="80" rx="8" fill="#dcfce7" stroke="#2e7d32"/>
+  <text x="630" y="225" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#166534">预检</text>
+  <text x="630" y="245" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#374151">在快照上运行</text>
+  <text x="630" y="263" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#374151">postfix + verify</text>
+
+  <rect x="710" y="190" width="130" height="80" rx="8" fill="#dbeafe" stroke="#1f4e79"/>
+  <text x="775" y="225" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">继续增量</text>
+  <text x="775" y="247" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">追平预检期间的变化</text>
+
+  <rect x="840" y="190" width="310" height="80" rx="8" fill="#fef3c7" stroke="#b45309"/>
+  <text x="995" y="216" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#92400e">最终冻结</text>
+  <text x="995" y="238" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#374151">末轮增量 → postfix → verify → cutover</text>
+  <text x="995" y="258" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#92400e">源端保持冻结，直到切换或回滚</text>
+
+  <line x1="270" y1="230" x2="270" y2="230" stroke="#ffffff" stroke-width="0"/>
+  <line x1="500" y1="230" x2="500" y2="230" stroke="#ffffff" stroke-width="0"/>
+  <line x1="550" y1="230" x2="550" y2="230" stroke="#ffffff" stroke-width="0"/>
+  <line x1="710" y1="230" x2="710" y2="230" stroke="#ffffff" stroke-width="0"/>
+
+  <rect x="70" y="330" width="320" height="120" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="90" y="356" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">冻结①的作用</text>
+  <text x="90" y="380" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">取得一致副本，启动预检。</text>
+  <text x="90" y="402" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">冻结时间通常很短；随后源端解冻。</text>
+  <text x="90" y="424" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">预检失败不会写入源端。</text>
+
+  <rect x="430" y="330" width="340" height="120" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="450" y="356" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">预检不延长业务中断</text>
+  <text x="450" y="380" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">在副本的 dm 快照上运行 postfix 与 verify。</text>
+  <text x="450" y="402" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">源端此时已解冻并继续服务。</text>
+  <text x="450" y="424" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">默认开启；低内存时自动关闭。</text>
+
+  <rect x="810" y="330" width="340" height="120" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="830" y="356" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#b91c1c">最终冻结的边界</text>
+  <text x="830" y="380" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">从末轮增量开始，到源端离线或回滚解冻。</text>
+  <text x="830" y="402" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">期间不能通过 SSH 登录源端。</text>
+  <text x="830" y="424" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">1800 秒未轮询时源端自动解冻。</text>
+
+  <text x="50" y="510" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">冻结按挂载层级从深到浅执行；vfat 等不可冻结的文件系统会跳过。</text>
+  <text x="50" y="534" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">若本轮增量无法收敛，工具不会为了缩短窗口而提前冻结；可调整 converge、passes、patience 与 max-est。</text>
+  <text x="50" y="558" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">预检需要 dmsetup、dm-snapshot，以及 precheck-dir 下至少 512 MiB 可用空间。</text>
+  <text x="50" y="582" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">回滚命令：migrator -o cutover=rollback -s cutover；源端解冻后继续运行原系统。</text>
+</svg>

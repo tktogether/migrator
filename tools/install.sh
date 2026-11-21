@@ -16,6 +16,7 @@
 #   $PREFIX/sbin/migrator        the driver
 #   $PREFIX/sbin/migrator-agent     the on-line migration agent (static binary, when the tarball has it)
 #   $PREFIX/lib/migrator/       the libs + VERSION (the previous dir is replaced)
+#   $PREFIX/share/doc/migrator/ licence and attribution files, when the tarball carries them
 # with PREFIX = MIGRATOR_PREFIX or /usr/local. Everything is staged and moved
 # into place last, so a failed download, a bad checksum or a broken tarball
 # never leaves a half-installed tree. Uses curl or wget, whichever exists
@@ -82,6 +83,12 @@ rm -rf "$LIB" || die "cannot remove the previous $LIB"
 mv "$STAGE" "$LIB" || die "cannot move the libs into place at $LIB"
 mv -f "$BIN/.migrator.new" "$BIN/migrator" || die "cannot replace $BIN/migrator"
 [ ! -s "$BIN/.migrator-agent.new" ] || mv -f "$BIN/.migrator-agent.new" "$BIN/migrator-agent" || die "cannot replace $BIN/migrator-agent"
+# licence and attribution travel with the installed copy when the tarball has them
+DOC=$PREFIX/share/doc/migrator
+mkdir -p "$DOC" || die "cannot create $DOC"
+for f in LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md; do
+	[ ! -f "$SRC/$f" ] || cp "$SRC/$f" "$DOC/$f" || die "cannot install $DOC/$f"
+done
 
 say "installed migrator $VER -> $BIN/migrator (libs in $LIB)"
 # the driver finds its libs at /usr/local/lib/migrator on its own; any other

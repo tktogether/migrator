@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">migrator 迁移流水线</title>
+  <desc id="desc">源主机只读，目标主机依次执行清单、计划、检查、写入、传输、修补、验证与切换八个阶段。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="640" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">migrator 迁移流水线</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">目标端执行；源端磁盘只读。计划可审核，写入前校验，验证后才切换。</text>
+
+  <rect x="40" y="108" width="1120" height="92" rx="12" fill="#f5f7fa" stroke="#c9d3df"/>
+  <text x="60" y="138" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#1f2937">源主机（donor）</text>
+  <text x="60" y="162" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">磁盘只读；离线为迁移 Live，在线为运行中的系统</text>
+  <rect x="420" y="124" width="380" height="60" rx="10" fill="#ffffff" stroke="#8aa4c8"/>
+  <text x="610" y="149" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">清单与数据读取</text>
+  <text x="610" y="170" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">在线模式仅在 /run 放置临时 agent，不安装软件</text>
+
+  <line x1="610" y1="184" x2="210" y2="430" stroke="#6b7280" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <line x1="610" y1="184" x2="730" y2="430" stroke="#6b7280" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <text x="365" y="330" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#4b5563">只读清单</text>
+  <text x="690" y="330" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#4b5563">只读数据 / 增量</text>
+
+  <rect x="40" y="370" width="1120" height="200" rx="12" fill="#eef4fb" stroke="#b9cbe3"/>
+  <text x="60" y="400" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#1f2937">目标主机（recipient）迁移 Live</text>
+
+  <rect x="150" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="210" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">1 清单</text>
+  <text x="210" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">两端只读</text>
+  <text x="210" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">状态采集</text>
+
+  <rect x="280" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="340" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">2 计划</text>
+  <text x="340" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">生成可编辑</text>
+  <text x="340" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">文本计划</text>
+
+  <rect x="410" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="470" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">3 检查</text>
+  <text x="470" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">容量与几何</text>
+  <text x="470" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">重新校验</text>
+
+  <rect x="540" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="600" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">4 写入</text>
+  <text x="600" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">分区 / 格式化</text>
+  <text x="600" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">md / LVM</text>
+
+  <rect x="670" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="730" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">5 传输</text>
+  <text x="730" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">块级 / 文件级</text>
+  <text x="730" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">多轮增量</text>
+
+  <rect x="800" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="860" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">6 修补</text>
+  <text x="860" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">chroot 修正</text>
+  <text x="860" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">引导 / 网络</text>
+
+  <rect x="930" y="430" width="120" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="990" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">7 验证</text>
+  <text x="990" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">只读检查</text>
+  <text x="990" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">可选试启动</text>
+
+  <rect x="1060" y="430" width="120" height="120" rx="10" fill="#f0fdf4" stroke="#2e7d32"/>
+  <text x="1120" y="458" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#166534">8 切换</text>
+  <text x="1120" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">源端离线</text>
+  <text x="1120" y="504" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">目标端启动</text>
+
+  <line x1="270" y1="490" x2="286" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="400" y1="490" x2="416" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="530" y1="490" x2="546" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="660" y1="490" x2="676" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="790" y1="490" x2="806" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="920" y1="490" x2="936" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="1050" y1="490" x2="1066" y2="490" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <text x="470" y="574" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#b91c1c">未通过 → exit 4（未写入磁盘）</text>
+  <text x="990" y="574" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#b91c1c">未通过 → exit 3（禁止重启）</text>
+  <text x="50" y="608" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">计划位于 /run/migrator/plan，重启前应复制到持久存储。验证通过后，计划、日志与状态会写入目标系统的 /root/migrator-&lt;日期&gt;/。</text>
+  <text x="50" y="630" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">退出码：0 成功 · 1 运行时失败 · 2 用法 / 环境 / 身份 · 3 验证失败 · 4 计划不可行。</text>
+</svg>

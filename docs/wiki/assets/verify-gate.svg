@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="740" viewBox="0 0 1200 740" role="img" aria-labelledby="title desc">
+  <title id="title">验证门禁</title>
+  <desc id="desc">九项只读检查汇总为一个门禁；全部通过才允许切换，任一致命失败则 exit 3 并禁止重启。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2e7d32"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b91c1c"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="740" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">验证门禁</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">只读检查目标系统；任一致命项失败时退出码 3，目标盘已写入，禁止重启。</text>
+
+  <rect x="40" y="120" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="60" y="148" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">boot</text>
+  <text x="60" y="172" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">默认启动项可解析；</text>
+  <text x="60" y="192" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">内核与 initrd 文件存在</text>
+
+  <rect x="40" y="230" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="60" y="258" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">initramfs</text>
+  <text x="60" y="282" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">包含目标驱动；</text>
+  <text x="60" y="302" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">不含源端 LVM devices 文件</text>
+
+  <rect x="40" y="340" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="60" y="368" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">fstab</text>
+  <text x="60" y="392" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">除 nofail 外均可解析；</text>
+  <text x="60" y="412" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">swap UUID 与 RESUME 有效</text>
+
+  <rect x="400" y="120" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="420" y="148" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">cmdline</text>
+  <text x="420" y="172" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">无 md 残留；root= 可解析；</text>
+  <text x="420" y="192" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">含网卡命名参数</text>
+
+  <rect x="400" y="230" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="420" y="258" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">filesystems</text>
+  <text x="420" y="282" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">目标文件系统特性掩码</text>
+  <text x="420" y="302" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">与源端一致</text>
+
+  <rect x="400" y="340" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="420" y="368" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">bootloader</text>
+  <text x="420" y="392" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">BIOS：MBR、bios_grub、模块；</text>
+  <text x="420" y="412" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">UEFI：ESP、removable path、NVRAM</text>
+
+  <rect x="760" y="120" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="780" y="148" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">network</text>
+  <text x="780" y="172" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">主配置指向目标网卡；</text>
+  <text x="780" y="192" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">源端 MAC 已移除</text>
+
+  <rect x="760" y="230" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="780" y="258" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">md（RAID1）</text>
+  <text x="780" y="282" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">阵列运行、成员齐全、UUID；</text>
+  <text x="780" y="302" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">mdadm.conf 与 initramfs</text>
+
+  <rect x="760" y="340" width="330" height="90" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="780" y="368" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">misc</text>
+  <text x="780" y="392" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">mdadm.conf、autorelabel、</text>
+  <text x="780" y="412" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">machine-id、根空间</text>
+
+  <line x1="205" y1="430" x2="470" y2="484" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="565" y1="430" x2="570" y2="484" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="925" y1="430" x2="730" y2="484" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="380" y="490" width="440" height="80" rx="12" fill="#eef4fb" stroke="#1f4e79" stroke-width="2"/>
+  <text x="600" y="525" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#1f4e79">全部检查通过？</text>
+  <text x="600" y="550" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#5b6573">WARN 不阻止切换；FAIL 阻止切换</text>
+
+  <line x1="820" y1="530" x2="892" y2="530" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <rect x="900" y="490" width="270" height="80" rx="10" fill="#f0fdf4" stroke="#2e7d32" stroke-width="2"/>
+  <text x="1035" y="520" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#166534">验证通过 → cutover</text>
+  <text x="1035" y="544" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#374151">boottest=1 时先做 QEMU 试启动</text>
+
+  <line x1="600" y1="570" x2="600" y2="612" stroke="#b91c1c" stroke-width="2" marker-end="url(#arrowRed)"/>
+  <rect x="380" y="620" width="440" height="80" rx="10" fill="#fef2f2" stroke="#b91c1c" stroke-width="2"/>
+  <text x="600" y="650" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700" fill="#b91c1c">exit 3</text>
+  <text x="600" y="676" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#7f1d1d">目标盘已写入，禁止重启；修复后重新执行 -s verify</text>
+
+  <text x="50" y="724" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">验证以只读方式挂载目标树：ext 使用 ro,noload，XFS 使用 ro,norecovery；不重放日志，不写入目标系统。</text>
+</svg>

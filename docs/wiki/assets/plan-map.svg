@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">计划文件的组成</title>
+  <desc id="desc">两份清单、选项与目标磁盘生成计划；计划分为磁盘布局、卷与标识、修补与验收三组，并由 plan_check 重新校验。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2e7d32"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="720" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">计划文件的组成</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">计划是文本文件；写入磁盘前必须通过 plan_check。</text>
+
+  <rect x="40" y="140" width="250" height="80" rx="10" fill="#f5f7fa" stroke="#8aa4c8"/>
+  <text x="165" y="166" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">源端清单</text>
+  <text x="165" y="188" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">donor.inv</text>
+  <text x="165" y="206" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#5b6573">磁盘 / 文件系统 / fstab / 内核</text>
+
+  <rect x="40" y="250" width="250" height="80" rx="10" fill="#f5f7fa" stroke="#8aa4c8"/>
+  <text x="165" y="276" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">目标端清单</text>
+  <text x="165" y="298" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">recipient.inv</text>
+  <text x="165" y="316" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11" fill="#5b6573">磁盘 / 网卡 / 固件 / 启动 MAC</text>
+
+  <rect x="40" y="360" width="250" height="80" rx="10" fill="#f5f7fa" stroke="#8aa4c8"/>
+  <text x="165" y="386" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f4e79">选项与目标磁盘</text>
+  <text x="165" y="408" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">-d、-o、目标磁盘几何</text>
+
+  <rect x="360" y="220" width="280" height="180" rx="12" fill="#eef4fb" stroke="#1f4e79"/>
+  <text x="500" y="252" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="18" font-weight="700" fill="#1f4e79">plan</text>
+  <text x="500" y="278" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">可阅读、可编辑的文本计划</text>
+  <text x="500" y="304" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">/run/migrator/plan</text>
+  <text x="500" y="330" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">记录清单哈希 inv_sha256</text>
+  <text x="500" y="356" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">记录目标盘首 MiB 指纹</text>
+  <text x="500" y="382" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">写入 WARN 与拒绝原因</text>
+
+  <line x1="290" y1="180" x2="352" y2="250" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="290" y1="290" x2="352" y2="290" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="290" y1="400" x2="352" y2="350" stroke="#44546a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="720" y="110" width="430" height="160" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="740" y="138" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">磁盘布局</text>
+  <text x="740" y="164" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[target]   目标盘、分区表、固件、ESP、驱动</text>
+  <text x="740" y="186" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[sfdisk] / [sfdisk2]   精确分区表</text>
+  <text x="740" y="208" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[md]   RAID1 阵列创建命令</text>
+  <text x="740" y="230" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[lvm]  pvcreate / vgcreate / lvcreate</text>
+  <text x="740" y="252" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[mkfs] 格式化与特性校验注释</text>
+
+  <rect x="720" y="300" width="430" height="120" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="740" y="328" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">卷与标识</text>
+  <text x="740" y="354" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[volumes]  源卷、方法、目标卷、容量、挂载点</text>
+  <text x="740" y="376" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[identity]  fstab / cmdline 标识改写</text>
+  <text x="740" y="398" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">keep | -&gt; 新标识 | remove | + 新增行</text>
+
+  <rect x="720" y="450" width="430" height="150" rx="10" fill="#ffffff" stroke="#1f4e79"/>
+  <text x="740" y="478" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#1f4e79">修补与验收</text>
+  <text x="740" y="504" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[postfix]  initramfs / GRUB / SELinux / cloud-init</text>
+  <text x="740" y="526" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[network]  源网卡 / 目标网卡 / MAC / udev 固定</text>
+  <text x="740" y="548" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">[verify]   驱动、特性掩码、swap、ESP、md</text>
+
+  <line x1="640" y1="290" x2="712" y2="190" stroke="#44546a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="640" y1="310" x2="712" y2="360" stroke="#44546a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="640" y1="330" x2="712" y2="525" stroke="#44546a" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <rect x="360" y="570" width="790" height="100" rx="10" fill="#f0fdf4" stroke="#2e7d32"/>
+  <text x="380" y="598" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="700" fill="#166534">plan_check：重新计算 apply 将信任的内容</text>
+  <text x="380" y="622" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">清单哈希 · 磁盘几何 · 分区对齐与重叠 · RAID1 两份表一致 · LVM 容量 · 卷容量 · mkfs 覆盖 · identity 覆盖</text>
+  <text x="380" y="646" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#b91c1c">失败：exit 4，未写入磁盘。计划生成后清单变化时，应重新执行 -s plan。</text>
+
+  <line x1="500" y1="400" x2="500" y2="562" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+  <text x="512" y="490" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#166534">-s check</text>
+
+  <text x="50" y="690" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">plan_check 不验证引导器是否真实可启动、网络是否连通或服务能否启动；这些由 postfix 与 verify 检查。</text>
+</svg>

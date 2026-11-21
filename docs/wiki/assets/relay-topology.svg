@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="600" viewBox="0 0 1100 600" role="img" aria-labelledby="title desc">
+  <title id="title">中继拓扑与端口</title>
+  <desc id="desc">源端通过 relay-tunnel.sh 把控制与数据端口发布到中继；目标端连接中继，并把切换监听端口反向发布到中继。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b45309"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="600" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">中继拓扑与端口</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">中继只转发 TCP 连接；SSH 与会话加密仍在源端与目标端之间端到端完成。</text>
+
+  <rect x="50" y="170" width="270" height="200" rx="12" fill="#fff7ed" stroke="#b45309"/>
+  <text x="185" y="200" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#92400e">源端（donor）</text>
+  <text x="185" y="228" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">sshd :22（控制通道）</text>
+  <text x="185" y="250" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">数据 sshd :2222</text>
+  <text x="185" y="272" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">migrator-agent serve</text>
+  <text x="185" y="300" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">磁盘只读</text>
+  <text x="185" y="322" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">/run 临时 agent</text>
+
+  <rect x="410" y="130" width="280" height="290" rx="12" fill="#f5f3ff" stroke="#6d28d9"/>
+  <text x="550" y="160" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#5b21b6">中继（relay）</text>
+  <text x="550" y="188" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">sshd :22（操作入口）</text>
+  <text x="550" y="224" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12.5" fill="#374151">2222 → donor:22</text>
+  <text x="550" y="252" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12.5" fill="#374151">2223 → donor:2222</text>
+  <text x="550" y="280" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12.5" fill="#374151">2224 → recipient:2224</text>
+  <text x="550" y="318" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">单租户；端口固定</text>
+  <text x="550" y="340" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">需要同一公钥</text>
+
+  <rect x="780" y="170" width="270" height="200" rx="12" fill="#eef4fb" stroke="#1f4e79"/>
+  <text x="915" y="200" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#1f4e79">目标端（recipient）</text>
+  <text x="915" y="228" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">控制客户端 → relay:2222</text>
+  <text x="915" y="250" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">数据客户端 → relay:2223</text>
+  <text x="915" y="272" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">切换监听 :2224</text>
+  <text x="915" y="300" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">migrator-agent cutover</text>
+  <text x="915" y="322" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">等待源端轮询</text>
+
+  <line x1="320" y1="220" x2="402" y2="220" stroke="#44546a" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="361" y="208" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">-R 2222</text>
+  <line x1="320" y1="270" x2="402" y2="270" stroke="#44546a" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="361" y="258" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">-R 2223</text>
+  <line x1="780" y1="220" x2="698" y2="220" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="739" y="208" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#166534">控制在 2222</text>
+  <line x1="780" y1="270" x2="698" y2="270" stroke="#2e7d32" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="739" y="258" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#166534">数据在 2223</text>
+  <line x1="698" y1="340" x2="780" y2="340" stroke="#b45309" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowAmber)"/>
+  <text x="739" y="328" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#92400e">切换 2224</text>
+
+  <text x="50" y="470" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">中继主机要求</text>
+  <text x="50" y="494" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">GatewayPorts clientspecified 或 yes；AllowTcpForwarding yes；端口 2222、2223、2224 可用。</text>
+  <text x="50" y="518" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">源端与目标端使用的公钥应加入中继的 authorized_keys；迁移结束后关闭隧道与授权。</text>
+  <text x="50" y="542" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">中继可以看到连接元数据，但不能解密 SSH 会话内容；仍需使用可信中继与防火墙限制来源。</text>
+  <text x="50" y="570" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">目标端命令示例：migrator -o relay=USER@RELAY -o sshd-port=2223 USER@RELAY:2222</text>
+</svg>

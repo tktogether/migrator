@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">网卡名称与 MAC 改写</title>
+  <desc id="desc">netfix 将源端主网卡名改为目标名称，把配置中的源端 MAC 改为目标启动 MAC，并保留 IP、网关与 DNS。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#44546a"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="560" fill="#ffffff"/>
+  <text x="50" y="52" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="28" font-weight="700" fill="#111827">网卡名称与 MAC 改写</text>
+  <text x="50" y="82" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="14" fill="#5b6573">只改写与硬件相关的标识；地址、网关与 DNS 保持不变。</text>
+
+  <rect x="50" y="110" width="420" height="260" rx="12" fill="#fff7ed" stroke="#b45309"/>
+  <text x="260" y="142" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#92400e">迁移前（源端）</text>
+  <text x="80" y="178" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">网卡名</text>
+  <text x="180" y="178" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#111827">ens3</text>
+  <text x="80" y="206" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">MAC</text>
+  <text x="180" y="206" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#111827">52:54:00:aa:00:22</text>
+  <text x="80" y="234" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">地址</text>
+  <text x="180" y="234" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#111827">10.0.0.12/24</text>
+  <text x="80" y="262" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">网关 / DNS</text>
+  <text x="180" y="262" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#111827">10.0.0.1 / 10.0.0.1</text>
+  <text x="80" y="300" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">配置类型：netplan / ifupdown / networkd / ifcfg / NetworkManager</text>
+  <text x="80" y="324" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">主机内核命令行可能与配置中的名称不一致</text>
+
+  <rect x="490" y="110" width="220" height="260" rx="12" fill="#eef4fb" stroke="#1f4e79"/>
+  <text x="600" y="142" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#1f4e79">netfix</text>
+  <text x="510" y="176" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">1. 重命名</text>
+  <text x="510" y="198" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">主网卡 ens3 → eth0</text>
+  <text x="510" y="220" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">含别名、VLAN、网桥、bond</text>
+  <text x="510" y="254" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">2. MAC 改写</text>
+  <text x="510" y="276" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">源端 MAC → 目标启动 MAC</text>
+  <text x="510" y="298" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">MACADDR / cloned-mac 不改</text>
+  <text x="510" y="332" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#374151">3. udev 固定</text>
+  <text x="510" y="354" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">70-persistent-net.rules</text>
+
+  <rect x="740" y="110" width="420" height="260" rx="12" fill="#eef4fb" stroke="#1f4e79"/>
+  <text x="950" y="142" text-anchor="middle" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700" fill="#1f4e79">迁移后（目标端）</text>
+  <text x="770" y="178" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">网卡名</text>
+  <text x="870" y="178" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#166534">eth0</text>
+  <text x="770" y="206" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">MAC</text>
+  <text x="870" y="206" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#166534">52:54:00:bb:00:33</text>
+  <text x="770" y="234" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">地址</text>
+  <text x="870" y="234" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#111827">10.0.0.12/24</text>
+  <text x="770" y="262" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="12" fill="#5b6573">网关 / DNS</text>
+  <text x="870" y="262" font-family="ui-monospace,Consolas,monospace" font-size="13" fill="#111827">10.0.0.1 / 10.0.0.1</text>
+  <text x="770" y="300" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">目标启动时内核参数：net.ifnames=0 biosdevname=0</text>
+  <text x="770" y="324" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#5b6573">udev 规则把目标 MAC 固定到 eth0</text>
+
+  <line x1="470" y1="240" x2="482" y2="240" stroke="#44546a" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="710" y1="240" x2="732" y2="240" stroke="#44546a" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+  <rect x="50" y="410" width="1110" height="110" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="70" y="438" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2937">注意</text>
+  <text x="70" y="462" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">源端为静态地址时，目标端沿用同一地址：同网段迁移可在切换后继续使用；跨网段迁移需要人工修改地址、网关与 DNS。</text>
+  <text x="70" y="484" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">防火墙、rc.local 等位置的旧网卡名不会被自动修改，工具只列出提醒。多网卡名称分配依赖固件探测顺序，属于尽力而为。</text>
+  <text x="70" y="506" font-family="'Noto Sans CJK SC','Microsoft YaHei',Arial,sans-serif" font-size="11.5" fill="#374151">验证摘要会输出 MAC 在 Live 中的名称与启动后的预期名称，便于在 BMC 控制台调整配置。</text>
+</svg>
