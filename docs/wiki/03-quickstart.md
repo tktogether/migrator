@@ -28,7 +28,7 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 | 段 | 做什么 | 停在哪里 |
 |---|---|---|
 | 预检 | 只读检查，逐项打印结果 | 有未通过项时停止，本机没有任何改动 |
-| 构建 | 安装依赖、取得源码树、编译 agent、构建迁移 Live | 构建完成后打印私钥并停下 |
+| 构建 | 安装依赖、取得源码树、编译 agent、构建迁移 Live | 构建完成后打印登录信息并停下 |
 | 引导 | 写入 GRUB 引导项并设为默认，然后重启 | 写入之前再询问一次 |
 
 ### 预检
@@ -47,6 +47,7 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 | 构建依赖 | `mmdebstrap`、`squashfs-tools`、`make`、`gcc`、`ssh-keygen`、`libzstd-dev` 是否齐备 |
 | 源码树 | 用 `-s` 指定的源码树可用，或镜像地址可访问 |
 | 网络参数 | 能从本机推出 Live 使用的静态地址、网关与 DNS |
+| 登录方式 | 私钥可用，以及端口与密码的取值。开启密码登录时给出提醒 |
 | 引导 | 本机使用 GRUB，且能执行 `update-grub` |
 | 已有产物 | 产物目录是否已有上一次构建的内容。有则本次会覆盖 |
 
@@ -65,22 +66,45 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 此时回答否，本机仍从当前系统启动，分区与数据都没有改动，构建产物保留在 `/var/tmp/migrator-live`。日后要继续，执行：
 
 ```sh
-bash /var/tmp/migrator-live/live-entry.sh -s -f /var/tmp/migrator-live -i <地址>
+bash /var/tmp/migrator-live/live-entry.sh -s -f /var/tmp/migrator-live -i <地址> -p <端口>
 ```
 
 确认无误并希望无人值守执行时，用 `-y` 跳过两处询问。`-y` 会一直执行到写入引导项并重启。
 
 构建使用本机当前运行的系统，产物随后从内存运行，因此构建它的系统被替换不影响结果。主要耗时在下载与解压基础系统。根文件系统位于 LVM 时，预检的「放置位置」为 FAIL，处理方式见[安装](02-install.md)第 5 节。
 
-### 重启之前：保存私钥
+### 端口与密码
 
-迁移 Live 只接受私钥登录，没有可在控制台键入的密码。脚本在重启之前打印私钥的路径与内容。目标盘随后会被整体替换，保存在这台机器上的副本不会留下，因此需要复制到其他设备或终端记录中：
+默认只接受私钥。端口与密码各有一个可选参数，两者都在构建时写入镜像：
 
 ```sh
-ssh -i ~/.ssh/migrator-live root@192.168.1.50
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash -s -- -p 46496 -P random
 ```
 
-私钥丢失后无法登录迁移 Live。在有控制台的机器上，可以在 GRUB 菜单中选回原系统，重新执行第 0 步得到新的一份。没有控制台时只能重新引导，因此保存这一步不能跳过。
+| 参数 | 取值 | 作用 |
+|---|---|---|
+| `-p PORT` | 1 至 65535 之间的数字，或 `random` | sshd 监听的端口。写 `random` 时在执行阶段从 20000 至 60000 之间选取 |
+| `-P PASS` | 一个字面值，或 `random` | 为 root 设置密码并允许密码登录。写 `random` 时生成 20 位随机密码 |
+
+开启密码登录后，`ssh -p 46496 root@192.168.1.50` 即可进入，不需要私钥。
+
+三点需要说明：
+
+- 端口通过引导参数 `migrator.ssh_port=` 传给 Live，本机的任何用户都能从 `/proc/cmdline` 读到这一行。它的作用是减少被扫描命中的次数，不是访问控制。
+- 密码写入镜像，该镜像构建出的每台机器共用同一个密码。它提供访问，不提供保密。只在可信网络中使用，或在使用后重新构建。
+- 两者都在构建时确定，改动需要重新构建。构建完成后脚本打印端口与密码，与私钥一并交给你。
+
+改动端口后，用普通方式登录的命令也要带上 `-p`。密码登录开启时，密码比私钥更容易在传输途中被记录，长期使用的机器仍以私钥为主。
+
+### 重启之前：保存登录信息
+
+脚本在重启之前打印地址、端口、密码与私钥的路径和内容。目标盘随后会被整体替换，保存在这台机器上的副本不会留下，因此需要复制到其他设备或终端记录中：
+
+```sh
+ssh -i ~/.ssh/migrator-live -p 22 root@192.168.1.50
+```
+
+私钥丢失后无法登录迁移 Live。在有控制台的机器上，可以在 GRUB 菜单中选回原系统，重新执行第 0 步得到新的一份。没有控制台时只能重新引导，因此保存这一步不能跳过。开启了密码登录时，密码是私钥丢失后的第二条路，同样需要保存。
 
 ### 重启之后：确认已进入 Live
 
@@ -102,8 +126,8 @@ ssh -i ~/.ssh/migrator-live root@192.168.1.50
 | 情形 | 做法 |
 |---|---|
 | 已有 ISO，且能插 U 盘或挂光驱 | `dd` 写入 U 盘后从 U 盘引导。UEFI 固件需开启 CSM 或 legacy 支持 |
-| 已有其他机器构建好的三件产物 | 把产物放到目标机，执行 `tools/live-entry.sh -i <地址> -s` |
-| 想从构建机远程完成，不在目标机上操作 | `tools/live-cycle.sh -H root@<目标机> -S root@<构建机>:<产物目录>` |
+| 已有其他机器构建好的三件产物 | 把产物放到目标机，执行 `tools/live-entry.sh -i <地址> -s`。加 `-p <端口>` 可在引导时改变端口 |
+| 想从构建机远程完成，不在目标机上操作 | `tools/live-cycle.sh -H root@<目标机> -S root@<构建机>:<产物目录>`。端口不变时需要传入 `-p <端口>`，否则等待会一直落在 22 上 |
 | 云主机没有控制台，也不想重启固件 | `tools/live-kexec.sh -u <产物地址>`，保留原 IP，不经过 GRUB |
 | 需要自己控制构建参数 | `git clone` 后执行 `rig/build-live.sh`，见[安装](02-install.md)第 5 节 |
 

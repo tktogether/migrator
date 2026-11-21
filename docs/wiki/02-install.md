@@ -214,6 +214,21 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 - `slim`：不包含 QEMU，squashfs 使用 xz 压缩，适合 1 GiB 内存的目标端；无法执行试启动验证。
 - `full`：包含 QEMU 与 QEMU 工具，squashfs 使用 zstd 压缩，可执行 `-o boottest=1`。
 
+登录方式由两个环境变量决定，两者都写入镜像，改动需要重新构建：
+
+| 变量 | 默认 | 作用 |
+|---|---|---|
+| `LIVE_SSH_PORT` | `22` | sshd 监听的端口。写入 `/etc/ssh/sshd_config.d/00-migrator-port.conf` |
+| `LIVE_SSH_PASSWORD` | 空 | 为空时只接受私钥。非空时为 root 设置该密码，并允许密码登录 |
+
+```sh
+LIVE_SSH_PORT=46496 LIVE_SSH_PASSWORD='...' LIVE_PROFILE=slim bash rig/build-live.sh
+```
+
+端口还可以在引导时改变，不需要重建镜像。`tools/live-entry.sh -p PORT` 把 `migrator.ssh_port=` 写进内核参数，Live 内的 `migrator-live-ssh.service` 在 sshd 启动前改写同一个配置文件。两处只保留一个 `Port` 指令，因此不会同时监听两个端口。密码不能通过引导参数设置：内核命令行对本机的任何用户可读。
+
+密码登录开启后，镜像构建出的每台机器共用这个密码。它提供访问，不提供保密。端口写在引导参数里同样不是访问控制，只减少被扫描命中的次数。
+
 构建前需要先编译 agent，否则 ISO 中不会包含在线迁移所需的二进制。
 
 简要步骤：

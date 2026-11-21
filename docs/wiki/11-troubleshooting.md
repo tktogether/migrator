@@ -56,6 +56,40 @@ flowchart TD
 
 标记文件存在却仍报错时，说明启动的是精简 Live（`boot=base`），缺少 `bash`、`systemctl` 或 `apt-get`。改用完整镜像。
 
+## 登不进迁移 Live
+
+现象：`ssh` 报 `Connection refused`、连接超时，或提示 `Permission denied (publickey)`。
+
+三种原因分别检查。以下命令都在迁移 Live 的控制台上执行，或在能进入一次之后执行。
+
+1. 端口。构建时用了 `-p` 或 `-p random`，登录时也要带上同一个端口。引导参数可以覆盖构建时的端口，因此以实际生效者为准：
+
+   ```sh
+   grep -r '^Port ' /etc/ssh/sshd_config.d/
+   tr ' ' '\n' < /proc/cmdline | grep migrator.ssh_port
+   ```
+
+   第一条没有输出时 sshd 使用默认的 22。两条都给出数字时，以引导参数为准：`migrator-live-ssh.service` 在 sshd 启动前改写同一个文件。
+
+2. 密码。没有用 `-P` 构建的镜像不接受密码登录，root 的密码处于锁定状态：
+
+   ```sh
+   passwd -S root
+   grep -r 'PasswordAuthentication' /etc/ssh/sshd_config.d/
+   ```
+
+   `passwd -S root` 输出中的第二个字段为 `L` 表示密码锁定，只能使用私钥。
+
+3. 私钥。镜像中 root 的 `authorized_keys` 只包含构建时生成的那一把公钥：
+
+   ```sh
+   cat /root/.ssh/authorized_keys
+   ```
+
+   私钥丢失时，在有控制台的机器上从 GRUB 菜单选回原系统重新构建，会得到新的一把。没有控制台时无法进入，这是构建时保存私钥这一步不能跳过的原因。
+
+还有一处容易忽略：`tools/live-cycle.sh` 通过轮询 ssh 判断 Live 是否就绪。镜像用了非 22 端口时，要给它 `-p <端口>`，否则它会一直等待 22 端口，直到超时。
+
 ## 连接与身份
 
 | 现象 | 原因 | 处理 |

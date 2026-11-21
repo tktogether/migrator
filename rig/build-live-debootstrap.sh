@@ -75,6 +75,68 @@ debootstrap --variant=minbase --no-check-gpg --include="$PKGS" \
 install -d -m700 "$CH/root/.ssh"
 install -m600 "$KEY" "$CH/root/rig-key"
 install -m600 "$KEY.pub" "$CH/root/.ssh/authorized_keys"
+# 登录方式（D66），与 rig/build-live.sh 相同：默认只接受私钥，端口与 root 密码
+# 由 LIVE_SSH_PORT 与 LIVE_SSH_PASSWORD 决定。
+SSH_PORT=${LIVE_SSH_PORT:-22}
+SSH_PW=${LIVE_SSH_PASSWORD:-}
+# sshd 只读取主配置里 Include 进来的片段。Debian 12 默认包含这一行，缺少时补在
+# 文件顶部：sshd 对同一指令取第一次出现的值，放在末尾会让主配置里的值先生效。
+if ! grep -q '^Include /etc/ssh/sshd_config.d/' "$CH/etc/ssh/sshd_config" 2>/dev/null; then
+	if [ -f "$CH/etc/ssh/sshd_config" ]; then
+		{ printf 'Include /etc/ssh/sshd_config.d/*.conf\n\n'; cat "$CH/etc/ssh/sshd_config"; } \
+			> "$CH/etc/ssh/sshd_config.new"
+		mv -f "$CH/etc/ssh/sshd_config.new" "$CH/etc/ssh/sshd_config"
+	else
+		printf 'Include /etc/ssh/sshd_config.d/*.conf\n' > "$CH/etc/ssh/sshd_config"
+	fi
+fi
+install -d -m755 "$CH/etc/ssh/sshd_config.d"
+printf 'Port %s\n' "$SSH_PORT" > "$CH/etc/ssh/sshd_config.d/00-migrator-port.conf"
+if [ -n "$SSH_PW" ]; then
+	cat > "$CH/etc/ssh/sshd_config.d/10-migrator-auth.conf" <<'AUTH'
+PermitRootLogin yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+MaxAuthTries 3
+LoginGraceTime 20
+AUTH
+	HASH=$(openssl passwd -6 "$SSH_PW")
+	sed -i "s|^root:[^:]*:|root:$HASH:|" "$CH/etc/shadow"
+fi
+chmod 644 "$CH/etc/ssh/sshd_config.d/"*.conf
+cat > "$CH/usr/local/sbin/migrator-live-ssh" <<'SSHPORT'
+#!/bin/sh
+port=
+for w in $(cat /proc/cmdline); do case $w in migrator.ssh_port=*) port=${w#migrator.ssh_port=} ;; esac; done
+[ -n "$port" ] || exit 0
+case $port in *[!0-9]*) exit 0 ;; esac
+[ "$port" -ge 1 ] && [ "$port" -le 65535 ] || exit 0
+f=/etc/ssh/sshd_config.d/00-migrator-port.conf
+cp -f "$f" "$f.orig" 2>/dev/null
+printf 'Port %s\n' "$port" > "$f"
+if ! /usr/sbin/sshd -t 2>/dev/null; then
+	mv -f "$f.orig" "$f" 2>/dev/null
+	echo "migrator: sshd 拒绝端口 $port，恢复构建时的端口" >&2
+fi
+exit 0
+SSHPORT
+cat > "$CH/etc/systemd/system/migrator-live-ssh.service" <<'UNIT'
+[Unit]
+Description=migrator live ssh port (migrator.ssh_port=)
+After=local-fs.target
+Before=ssh.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/migrator-live-ssh
+[Install]
+WantedBy=multi-user.target
+UNIT
+chmod 755 "$CH/usr/local/sbin/migrator-live-ssh"
+install -d "$CH/etc/systemd/system/multi-user.target.wants"
+ln -sf /etc/systemd/system/migrator-live-ssh.service \
+	"$CH/etc/systemd/system/multi-user.target.wants/migrator-live-ssh.service"
+rm -f "$CH/etc/systemd/system/sockets.target.wants/ssh.socket"
 cat > "$CH/etc/network/interfaces" <<'IF'
 auto lo
 iface lo inet loopback

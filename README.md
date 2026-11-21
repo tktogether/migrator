@@ -22,13 +22,15 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash -s -- -n
 ```
 
-脚本在重启之前打印登录用的私钥，请先复制到其他设备。重启后确认已进入迁移 Live：
+脚本在重启之前打印登录用的地址、端口、密码与私钥，请先复制到其他设备。重启后确认已进入迁移 Live：
 
 ```sh
 cat /etc/migrator-live-release
 ```
 
-预检覆盖根文件系统所在分区是否为非 LVM、内存与可用空间是否足够、构建依赖与源码树能否取得、本机是否已有迁移 Live 的引导项。已经有镜像、已有构建产物或没有控制台时，见[快速开始](docs/wiki/03-quickstart.md)第 0 步。
+端口与密码是可选参数。默认只接受私钥，sshd 监听 22。加 `-p 46496` 改变端口，加 `-p random` 随机选取。加 `-P random` 为 root 生成随机密码并允许密码登录。两者在构建时写入镜像，细节见[快速开始](docs/wiki/03-quickstart.md)第 0 步。
+
+预检覆盖根文件系统所在分区是否为非 LVM、内存与可用空间是否足够、构建依赖与源码树能否取得、本机是否已有迁移 Live 的引导项。已经有镜像、已有构建产物或没有控制台时，见同一页。
 
 ### 第 2 步 准备源端访问
 

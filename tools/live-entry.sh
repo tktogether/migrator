@@ -28,13 +28,17 @@
 #            entry must survive a failed boot: -s uses grub-set-default
 #            (persistent) instead of grub-reboot (one shot).
 #
-# usage: live-entry.sh [-n] [-s] [-r] [-f DIR] -i IP[/PREFIX][,GW[,DNS1[,DNS2]]]
+# usage: live-entry.sh [-n] [-s] [-r] [-p PORT] [-f DIR] -i IP[/PREFIX][,GW[,DNS1[,DNS2]]]
 #   -i SPEC   static address for the Live, passed as migrator.ip=, e.g.
 #             "192.168.8.111/24,192.168.8.1,192.168.8.1" (required unless -r:
 #             the Live must not depend on this network handing out DHCP)
 #   -f DIR    where the artefacts are (default /root): vmlinuz-live,
 #             initrd-live.img, live/filesystem.squashfs (a filesystem.squashfs
 #             lying beside them is accepted too)
+#   -p PORT   sshd port for the Live, passed as migrator.ssh_port= (default: as
+#             built, 22 unless the image was built with LIVE_SSH_PORT). Only the
+#             port is settable here: a password cannot go on the boot line,
+#             which every local user can read
 #   -s        also make the entry the DEFAULT (persistent, GRUB_DEFAULT=saved);
 #             without it the entry is only for the next boot (grub-reboot)
 #   -r        remove the entry and the copied artefacts, then re-run update-grub
@@ -52,7 +56,7 @@ set -u
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 TITLE='migrator Live'
-DRY=; SETDEF=; REMOVE=; SRC=/root; SPEC=; GRUB_D=/etc/grub.d/41_migrator-live; CFG=/boot/grub/grub.cfg
+DRY=; SETDEF=; REMOVE=; SRC=/root; SPEC=; SPORT=; GRUB_D=/etc/grub.d/41_migrator-live; CFG=/boot/grub/grub.cfg
 
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit "${1:-2}"; }
 say() { printf '%s\n' "$*"; }
@@ -60,17 +64,22 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 run() { if [ -n "$DRY" ]; then printf '  would run: %s\n' "$*"; else "$@"; fi; }
 iec() { numfmt --to=iec "$1"; }
 
-while getopts "nsrf:i:h" o; do
+while getopts "nsrf:i:p:h" o; do
 	case $o in
 		n) DRY=1;;
 		s) SETDEF=1;;
 		r) REMOVE=1;;
 		f) SRC=$OPTARG;;
 		i) SPEC=$OPTARG;;
+		p) SPORT=$OPTARG;;
 		h) usage 0;;
 		*) usage 2;;
 	esac
 done
+if [ -n "$SPORT" ]; then
+	case $SPORT in *[!0-9]*|'') die "-p $SPORT: 需要 1 到 65535 之间的数字";; esac
+	[ "$SPORT" -ge 1 ] && [ "$SPORT" -le 65535 ] || die "-p $SPORT: 需要 1 到 65535 之间的数字"
+fi
 [ "$(id -u)" = 0 ] || die "must run as root: it writes a grub entry and copies into /boot or /"
 command -v update-grub > /dev/null || die "update-grub not found: this script drives a grub2 system (Debian/Ubuntu)"
 
@@ -129,6 +138,10 @@ if [ -n "$REMOVE" ]; then
 	exit 0
 fi
 
+# 端口由引导参数传给 Live 内的 migrator-live-ssh.service，它在 sshd 启动前改写
+# sshd_config.d 中的同一个文件，因此与构建时的端口不会同时生效。
+SSHPORT=; [ -n "$SPORT" ] && SSHPORT=" migrator.ssh_port=$SPORT"
+
 # --- checks ----------------------------------------------------------------------
 pick_fs || die "no non-LVM filesystem to host the Live: live-boot cannot see inside LVM (D30), so give this machine a plain ext4 /boot"
 [ -n "$SPEC" ] || die "-i is required: the Live needs migrator.ip=IP/PREFIX,GW,DNS (do not bet on DHCP here)"
@@ -158,7 +171,7 @@ menuentry '$TITLE' {
 	search --no-floppy --set=root --fs-uuid $UUID
 	linux /live/vmlinuz-live boot=live components toram=filesystem.squashfs \\
 		net.ifnames=0 biosdevname=0 systemd.default_timeout_start_sec=600 \\
-		console=tty0 console=ttyS0,115200n8 panic=30 migrator.ip=$SPEC
+		console=tty0 console=ttyS0,115200n8 panic=30 migrator.ip=$SPEC$SSHPORT
 	initrd /live/initrd-live.img
 }
 EOF
@@ -193,8 +206,9 @@ else
 fi
 
 say ""
+SSH_LINE="ssh${SPORT:+ -p $SPORT} root@${ADDR%%/*}"
 say "after the reboot:"
-say "  ssh root@${ADDR%%/*}                    # the Live carries /root/rig-key"
+say "  $SSH_LINE                    # the Live carries /root/rig-key"
 say "  cat /etc/migrator-live-release"
 say "  free -m; swapon --show                  # zram does the swapping"
 say "  findmnt -S $TGT_DEV || echo '$TGT_DEV free'   # toram released the disk"

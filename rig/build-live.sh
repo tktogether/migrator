@@ -105,6 +105,96 @@ chmod 0755 "$CH/usr/local/sbin/migrator-zram" "$CH/usr/local/sbin/migrator-live-
 install -d "$CH/etc/systemd/system/swap.target.wants" "$CH/etc/systemd/system/multi-user.target.wants"
 ln -sf /etc/systemd/system/migrator-zram.service "$CH/etc/systemd/system/swap.target.wants/migrator-zram.service"
 ln -sf /etc/systemd/system/migrator-live-net.service "$CH/etc/systemd/system/multi-user.target.wants/migrator-live-net.service"
+# 端口服务要在 sshd 之前跑，因此挂在 multi-user 上并声明 Before=ssh.service。
+ln -sf /etc/systemd/system/migrator-live-ssh.service "$CH/etc/systemd/system/multi-user.target.wants/migrator-live-ssh.service"
+# socket 激活的 ssh 只监听 ssh.socket 里的端口，会忽略 sshd_config 的 Port。镜像里
+# 只保留 ssh.service，使端口文件是唯一来源。
+rm -f "$CH/etc/systemd/system/sockets.target.wants/ssh.socket"
+if [ ! -e "$CH/etc/systemd/system/multi-user.target.wants/ssh.service" ] &&
+	[ -e "$CH/usr/lib/systemd/system/ssh.service" ]; then
+	ln -sf /usr/lib/systemd/system/ssh.service \
+		"$CH/etc/systemd/system/multi-user.target.wants/ssh.service"
+fi
+# 登录方式（D66）。默认只接受私钥：密钥是进入 Live 的唯一凭据。端口与 root 密码
+# 是可选参数，不作为默认值，因为端口写在引导参数里，任何本地用户都能读到，它降低
+# 被扫描命中的概率，但不是访问控制；而写进镜像的密码由该镜像构建出的每台机器共用。
+SSH_PORT=${LIVE_SSH_PORT:-22}
+SSH_PW=${LIVE_SSH_PASSWORD:-}
+case $SSH_PORT in
+	''|*[!0-9]*) echo "LIVE_SSH_PORT=$SSH_PORT: want a number 1-65535" >&2; exit 2 ;;
+esac
+[ "$SSH_PORT" -ge 1 ] && [ "$SSH_PORT" -le 65535 ] ||
+	{ echo "LIVE_SSH_PORT=$SSH_PORT: want a number 1-65535" >&2; exit 2; }
+case $SSH_PW in
+	*:*|*'
+'*) echo "LIVE_SSH_PASSWORD: 不能包含冒号或换行" >&2; exit 2 ;;
+esac
+
+# sshd 只读取主配置里 Include 进来的片段。Debian 12 默认包含这一行，缺少时补在
+# 文件顶部：sshd 对同一指令取第一次出现的值，放在末尾会让主配置里的值先生效。
+if ! grep -q '^Include /etc/ssh/sshd_config.d/' "$CH/etc/ssh/sshd_config" 2>/dev/null; then
+	if [ -f "$CH/etc/ssh/sshd_config" ]; then
+		{ printf 'Include /etc/ssh/sshd_config.d/*.conf\n\n'; cat "$CH/etc/ssh/sshd_config"; } \
+			> "$CH/etc/ssh/sshd_config.new"
+		mv -f "$CH/etc/ssh/sshd_config.new" "$CH/etc/ssh/sshd_config"
+	else
+		printf 'Include /etc/ssh/sshd_config.d/*.conf\n' > "$CH/etc/ssh/sshd_config"
+	fi
+fi
+install -d -m0755 "$CH/etc/ssh/sshd_config.d"
+# 端口只放在这一个文件里。tools/live-boot.sh 在引导时用 migrator.ssh_port= 覆盖同一
+# 个文件，因此两者不会同时生效，一个产物可以用不同端口进入。
+printf 'Port %s\n' "$SSH_PORT" > "$CH/etc/ssh/sshd_config.d/00-migrator-port.conf"
+
+if [ -n "$SSH_PW" ]; then
+	cat > "$CH/etc/ssh/sshd_config.d/10-migrator-auth.conf" <<'AUTH'
+# root 的密码登录，由 LIVE_SSH_PASSWORD 在构建时设定。镜像构建出的每台机器
+# 共用这一个密码，因此它提供的是访问，不是保密。
+PermitRootLogin yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+MaxAuthTries 3
+LoginGraceTime 20
+AUTH
+	# 直接改 /etc/shadow：构建可以无特权运行，chroot 不行。
+	hash=$(openssl passwd -6 "$SSH_PW" 2>/dev/null) || hash=
+	[ -n "$hash" ] || { echo "ERROR: 设置密码需要一个可用的 openssl" >&2; exit 2; }
+	sed -i "s|^root:[^:]*:|root:$hash:|" "$CH/etc/shadow"
+fi
+chmod 0644 "$CH/etc/ssh/sshd_config.d/"*.conf
+
+# 引导参数 migrator.ssh_port= 在 sshd 启动前覆盖端口。同一目录下只保留一个 Port
+# 指令，重复的 Port 会让 sshd 同时监听两个端口。
+cat > "$CH/usr/local/sbin/migrator-live-ssh" <<'SSHPORT'
+#!/bin/sh
+port=
+for w in $(cat /proc/cmdline); do case $w in migrator.ssh_port=*) port=${w#migrator.ssh_port=} ;; esac; done
+[ -n "$port" ] || exit 0
+case $port in *[!0-9]*) exit 0 ;; esac
+[ "$port" -ge 1 ] && [ "$port" -le 65535 ] || exit 0
+f=/etc/ssh/sshd_config.d/00-migrator-port.conf
+cp -f "$f" "$f.orig" 2>/dev/null
+printf 'Port %s\n' "$port" > "$f"
+if ! /usr/sbin/sshd -t 2>/dev/null; then
+	mv -f "$f.orig" "$f" 2>/dev/null
+	echo "migrator: sshd 拒绝端口 $port，恢复构建时的端口" >&2
+fi
+exit 0
+SSHPORT
+cat > "$CH/etc/systemd/system/migrator-live-ssh.service" <<'UNIT'
+[Unit]
+Description=migrator live ssh port (migrator.ssh_port=)
+After=local-fs.target
+Before=ssh.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/migrator-live-ssh
+[Install]
+WantedBy=multi-user.target
+UNIT
+chmod 0755 "$CH/usr/local/sbin/migrator-live-ssh"
+
 install -d -m0700 "$CH/root/.ssh"
 install -m0600 "$KEY.pub" "$CH/root/.ssh/authorized_keys"
 # The pair also travels inside the Live, as build-live-debootstrap.sh does: the

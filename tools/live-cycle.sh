@@ -15,12 +15,15 @@
 #   5. asserts the three things that decide whether the Live is really up:
 #      the release file, swap on zram, and the target disk released by toram
 #
-# usage: live-cycle.sh -H [USER@]HOST -S [USER@]SRC:DIR | -f DIR  [-i SPEC] [-k KEY] [-s] [-n] [-t SECS]
+# usage: live-cycle.sh -H [USER@]HOST -S [USER@]SRC:DIR | -f DIR  [-i SPEC] [-p PORT] [-k KEY] [-s] [-n] [-t SECS]
 #   -H HOST   the machine to boot into the Live (ssh)
 #   -S SRC:DIR  where the artefacts live, reachable over ssh (e.g. the build host)
 #   -f DIR      ...or a local directory that already has them
 #   -i SPEC     migrator.ip=IP/PREFIX,GW,DNS (default: the address the target has
 #               now, its default gateway, and 114.114.114.114)
+#   -p PORT     sshd port of the Live (default 22, or $SSH_PORT). The Live is
+#               built with LIVE_SSH_PORT, and live-entry.sh -p can move it; the
+#               poll below has to knock on the same port or it never answers
 #   -k KEY      ssh private key (default $SSH_KEY or ~/.ssh/id_ed25519)
 #   -s          make the entry the persistent default (for a run that wipes the
 #               disk); without it the entry is one shot, so a plain reboot from
@@ -35,20 +38,22 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 HOST=; SRC_HOST=; SRC_DIR=; LOCAL=; SPEC=; PERSIST=; DRY=; WAIT=300
 KEY=${SSH_KEY:-$HOME/.ssh/id_ed25519}
+SPORT=${SSH_PORT:-22}
 SSHOPTS=${SSHOPTS:--o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o BatchMode=yes}
 
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit "${1:-2}"; }
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 # shellcheck disable=SC2086
-rs() { ssh -i "$KEY" $SSHOPTS -o ConnectTimeout=8 "$@"; }
+rs() { ssh -i "$KEY" $SSHOPTS -o ConnectTimeout=8 -p "$SPORT" "$@"; }
 
-while getopts "H:S:f:i:k:st:nh" o; do
+while getopts "H:S:f:i:p:k:st:nh" o; do
 	case $o in
 		H) HOST=$OPTARG;;
 		S) SRC_HOST=${OPTARG%%:*}; SRC_DIR=${OPTARG#*:};;
 		f) LOCAL=$OPTARG;;
 		i) SPEC=$OPTARG;;
+		p) SPORT=$OPTARG;;
 		k) KEY=$OPTARG;;
 		s) PERSIST=1;;
 		t) WAIT=$OPTARG;;
@@ -148,5 +153,5 @@ say "   /dev/sda:          free (toram released it)"
 say "   tool:              $(rs "$HOST" 'v=$(cat /usr/local/lib/migrator/VERSION /usr/share/migrator/VERSION 2>/dev/null | head -1); echo "${v:--}"')"
 say ""
 say "next (from here, no console):"
-say "  ssh -i $KEY root@${ADDR%%/*} 'migrator -y -i /root/rig-key -d <disks> -o mode=online -o cutover=rollback root@<DONOR>'"
+say "  ssh -i $KEY -p $SPORT root@${ADDR%%/*} 'migrator -y -i /root/rig-key -d <disks> -o mode=online -o cutover=rollback root@<DONOR>'"
 exit 0

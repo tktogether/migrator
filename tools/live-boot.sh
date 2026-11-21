@@ -14,7 +14,12 @@
 #   只看预检、不改动任何东西：在末尾加 -s -- -n
 #
 # 为什么停两次：预检之后停一次，让操作者在改动发生前读到结果；构建之后停一次，
-# 因为写入引导项会改变下次开机的去处，而此时私钥已经生成，需要先交到操作者手上。
+# 因为写入引导项会改变下次开机的去处，而此时登录信息已经生成，需要先交到操作者手上。
+#
+# 登录方式（D66）：默认只接受私钥。端口由 -p 指定或随机选取，密码由 -P 指定或随机
+# 生成，两者在构建时写入镜像。端口写在引导参数里，本机任何用户都能读到，它减少被
+# 扫描命中的次数，不是访问控制；密码由同一份镜像构建出的每台机器共用，提供的是
+# 访问而不是保密。
 #
 # 退出码：0 完成或演练通过 · 1 执行失败 · 2 本机条件不满足或未取得确认
 set -u
@@ -27,6 +32,7 @@ REF=${MIGRATOR_REF:-master}
 OUT=${RIG_OUT:-/var/tmp/migrator-live}
 PROFILE=slim
 SPEC=; YES=; DRY=; TREE=
+SSH_PORT=22; SSH_PW=; PORT_WANT=; PW_WANT=
 LIVE_MP=
 n_pass=0; n_warn=0; n_fail=0
 pkgs=
@@ -110,17 +116,26 @@ usage() {
 
   执行分三段，中间停两次：
     1. 预检。只读检查，逐项打印结果。有未通过项时停止，本机没有改动。
-    2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印私钥。
+    2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印登录信息。
     3. 引导。取得确认后写入引导项并重启。
 
   -i SPEC      Live 的静态地址，格式 IP/前缀,网关,DNS
                例：192.168.1.50/24,192.168.1.1,114.114.114.114
                省略时取本机当前的地址、默认网关与 DNS
-  -p PROFILE   slim（默认，不含 qemu，体积小）或 full（含 qemu，可用于启动测试）
+  -p PORT      Live 的 sshd 端口，默认 22。写 random 则在执行时从 20000 至
+               60000 之间随机选取，并在登录信息中打印
+  -P PASS      为 root 设置密码，允许密码登录。写 random 则随机生成并在登录
+               信息中打印。省略时只接受私钥
+  -m PROFILE   slim（默认，不含 qemu，体积小）或 full（含 qemu，可用于启动测试）
   -s DIR       使用 DIR 中已有的源码树，不从网络下载
   -y           跳过两处确认，一直执行到重启
   -n           只做预检并打印后续步骤，不改动本机
   -h           显示本说明
+
+端口与密码在构建时写入镜像，改动需要重新构建。同一份产物构建出的每台机器共用
+这个密码，因此它提供的是访问，不是保密。端口写在引导参数里，本机的任何用户都能
+读到，它降低被扫描命中的概率，但不是访问控制。两者都不改变「私钥是进入 Live 的
+凭据」这一条。
 
 预检逐项检查：
   root 权限；本机未处于迁移 Live；Debian 或 Ubuntu 系；x86_64；内存至少 1536 MiB；
@@ -128,8 +143,8 @@ usage() {
   源码树是否可取；网络参数能否确定；本机是否已有迁移 Live 的引导项与产物。
 
 构建完成后本机会重启。重启后：
-  ssh -i <私钥> root@<地址>      私钥在构建结束时打印，重启前请先保存
-  cat /etc/migrator-live-release  确认已进入 Live
+  ssh -i <私钥> -p <端口> root@<地址>   私钥、端口与密码在构建结束时打印
+  cat /etc/migrator-live-release        确认已进入 Live
 
 本脚本不做自己的事：构建交给 rig/build-live.sh，写引导项交给 tools/live-entry.sh。
 放弃这次切换、回到原系统：bash <产物目录>/live-entry.sh -r
@@ -141,10 +156,12 @@ usage() {
 EOF
 }
 
-while getopts "i:p:s:ynh" o; do
+while getopts "i:p:P:m:s:ynh" o; do
 	case $o in
 		i) SPEC=$OPTARG ;;
-		p) PROFILE=$OPTARG ;;
+		p) SSH_PORT=$OPTARG ;;
+		P) SSH_PW=$OPTARG ;;
+		m) PROFILE=$OPTARG ;;
 		s) TREE=$OPTARG ;;
 		y) YES=1 ;;
 		n) DRY=1 ;;
@@ -152,8 +169,51 @@ while getopts "i:p:s:ynh" o; do
 		*) usage >&2; exit 2 ;;
 	esac
 done
-case $PROFILE in slim|full) ;; *) die "未知的 PROFILE：$PROFILE（可选 slim 或 full）" ;; esac
+case $PROFILE in slim|full) ;; *) die 2 "未知的 PROFILE：$PROFILE（可选 slim 或 full）" ;; esac
 TREE=${TREE%/}
+
+# 端口：数字或 random。-p slim 是上一版的 profile 写法，给出改法而不是只说错误。
+case $SSH_PORT in
+	random) PORT_WANT=random; SSH_PORT= ;;
+	slim|full) die 2 "profile 改用 -m，例如 -m $SSH_PORT。-p 现在表示 sshd 端口" ;;
+	''|*[!0-9]*) die 2 "端口 $SSH_PORT 不是数字。可写 1 到 65535 之间的数字，或写 random" ;;
+	*) [ "$SSH_PORT" -ge 1 ] && [ "$SSH_PORT" -le 65535 ] ||
+		die 2 "端口 $SSH_PORT 超出范围。可写 1 到 65535 之间的数字，或写 random" ;;
+esac
+
+# 密码：只能写 random 或给一个字面值。含换行的值无法通过命令行传入。
+case $SSH_PW in
+	random) PW_WANT=random; SSH_PW= ;;
+	*'
+'*) die 2 "密码不能包含换行" ;;
+esac
+
+rand_port() {
+	local p=
+	if have shuf; then p=$(shuf -i 20000-60000 -n 1 2>/dev/null); fi
+	case $p in
+		''|*[!0-9]*) p=$(( 20000 + (RANDOM * 32768 + RANDOM) % 40001 )) ;;
+	esac
+	printf '%s\n' "$p"
+}
+# 去掉容易混淆的字符，避免抄写时看错。
+rand_pass() {
+	local p=
+	p=$(LC_ALL=C tr -dc 'A-HJ-NP-Za-km-z2-9' < /dev/urandom 2>/dev/null | head -c 20)
+	[ -n "$p" ] || p="mig$(($RANDOM))$((RANDOM))x"
+	printf '%s\n' "$p"
+}
+
+# 是否开启了密码登录。随机密码在执行时才生成，因此预检阶段凭 PW_WANT 判断。
+want_pw() { [ -n "$SSH_PW" ] || [ -n "$PW_WANT" ]; }
+
+# 预检和登录信息里对端口的说法。随机端口在执行时才确定，因此预检阶段不给出数字。
+port_text() {
+	case $PORT_WANT in
+		random) printf '%s' "随机端口，执行时选取" ;;
+		*)      printf '%s' "$SSH_PORT" ;;
+	esac
+}
 
 # =============================================================================
 # 第一段：预检。只读：不创建目录、不安装软件包、不写引导项。
@@ -330,6 +390,19 @@ else
 	fail "网络参数" "无法确定本机的地址与网关。请用 -i 指定，格式为 IP/前缀,网关,DNS"
 fi
 
+# --- 登录方式 ----------------------------------------------------------------
+# 密码登录一旦开启，22 端口上的常规扫描就会开始尝试；改端口只是把这类噪声挡在
+# 外面，真正的门槛仍是密码本身。
+if want_pw; then
+	if [ "$SSH_PORT" = 22 ]; then
+		warn "登录方式" "私钥与密码，sshd 监听 22。密码登录会出现在常规扫描中，建议同时用 -p 指定端口"
+	else
+		warn "登录方式" "私钥与密码，sshd 监听 $(port_text)。这份镜像构建出的每台机器共用该密码"
+	fi
+else
+	pass "登录方式" "只接受私钥，sshd 监听 $(port_text)"
+fi
+
 # --- 会改变什么 --------------------------------------------------------------
 grubcfg=
 for f in /boot/grub/grub.cfg /boot/grub2/grub.cfg; do [ -r "$f" ] && grubcfg=$f && break; done
@@ -375,8 +448,13 @@ if [ -n "$pkgs" ]; then step "安装构建依赖：$(cn_list "${pkgs# }")"; fi
 if [ -n "$TREE" ]; then step "使用本机已有的源码树"; else step "从镜像下载源码树"; fi
 step "编译在线迁移所需的 agent"
 step "构建迁移 Live（profile=$PROFILE），耗时约十几分钟"
-step "写入 GRUB 引导项并设为默认，然后重启"
+step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
 say ""
+if want_pw; then
+	say "登录方式：sshd 监听 $(port_text)，私钥与密码均可使用。"
+else
+	say "登录方式：sshd 监听 $(port_text)，只接受私钥。"
+fi
 say "重启后本机从迁移 Live 启动，当前系统不再运行。产物写入 $OUT，占用约 2 GiB。"
 say ""
 
@@ -393,6 +471,16 @@ fi
 # =============================================================================
 # 第二段：构建。到这里才开始改动本机。
 # =============================================================================
+# 随机值在这里确定：预检是只读的，演练也不应给出一个最终不会被使用的密码。
+if [ -n "$PORT_WANT" ]; then
+	SSH_PORT=$(rand_port)
+	[ -n "$SSH_PORT" ] || die 2 "无法生成随机端口"
+fi
+if [ -n "$PW_WANT" ]; then
+	SSH_PW=$(rand_pass)
+	[ -n "$SSH_PW" ] || die 2 "无法生成随机密码"
+fi
+
 if [ -n "$pkgs" ]; then
 	say ""
 	say "安装构建依赖：$(cn_list "${pkgs# }")"
@@ -439,8 +527,12 @@ fi
 
 say ""
 say "构建迁移 Live（profile=$PROFILE），这一步需要十几分钟"
-LIVE_PROFILE=$PROFILE LIVE_NO_ISO=1 RIG_OUT=$OUT bash "$TREE/rig/build-live.sh" ||
+# 密码可能含空格与标点，经环境变量传递，不放进命令行参数。
+if [ -n "$SSH_PW" ]; then export LIVE_SSH_PASSWORD="$SSH_PW"; fi
+LIVE_PROFILE=$PROFILE LIVE_NO_ISO=1 RIG_OUT=$OUT LIVE_SSH_PORT=$SSH_PORT \
+	bash "$TREE/rig/build-live.sh" ||
 	die "构建失败。上一次的输出在上面"
+unset LIVE_SSH_PASSWORD
 
 # live-entry.sh 是单文件脚本，复制一份到产物目录，撤销时不必回到源码树。
 if [ -f "$TREE/tools/live-entry.sh" ] && [ "$TREE/tools/live-entry.sh" != "$OUT/live-entry.sh" ]; then
@@ -452,10 +544,22 @@ fi
 # 第三段：引导。写入引导项会改变下次开机的去处，因此先交出私钥，再问一次。
 # =============================================================================
 KEY=$OUT/rig_ed25519
+live_addr=${SPEC%%,*}
+live_addr=${live_addr%%/*}
 say ""
 rule
-say "进入迁移 Live 只接受这把私钥，没有可在控制台键入的密码。"
-say "目标盘随后会被整体替换，保存在本机上的副本不会留下，请现在保存到其他设备："
+say "进入迁移 Live 的登录信息"
+say ""
+say "  地址  $live_addr"
+say "  端口  $SSH_PORT"
+if [ -n "$SSH_PW" ]; then
+	say "  密码  $SSH_PW（用户 root。这份镜像构建出的每台机器共用该密码）"
+else
+	say "  密码  没有。只接受私钥"
+fi
+say ""
+say "私钥是进入迁移 Live 的凭据。目标盘随后会被整体替换，保存在本机上的副本不会"
+say "留下，请现在复制到其他设备："
 say ""
 say "  $KEY"
 say ""
@@ -463,10 +567,12 @@ if [ -f "$KEY" ]; then
 	# shellcheck disable=SC2002
 	cat "$KEY"
 fi
-live_addr=${SPEC%%,*}
-live_addr=${live_addr%%/*}
 say ""
-say "登录命令：ssh -i <保存后的文件> root@$live_addr"
+say "登录命令："
+say "  ssh -i <保存后的文件> -p $SSH_PORT root@$live_addr"
+if [ -n "$SSH_PW" ]; then
+	say "用密码登录：ssh -p $SSH_PORT root@$live_addr"
+fi
 rule
 say ""
 
@@ -474,7 +580,7 @@ if ! confirm "写入引导项并重启（下次开机进入迁移 Live）"; then
 	say ""
 	say "未写入引导项，本机仍从当前系统启动，磁盘上的分区与数据都没有改动。"
 	say "产物保留在 $OUT。日后要继续，执行："
-	say "  bash $OUT/live-entry.sh -s -f $OUT -i $SPEC"
+	say "  bash $OUT/live-entry.sh -s -f $OUT -i $SPEC -p $SSH_PORT"
 	say "放弃这次构建、释放空间：删除 $OUT 即可"
 	exit 0
 fi
