@@ -112,13 +112,21 @@ wz_run() {
 		while read -r d; do
 			[ -n "$d" ] || continue
 			if [ -n "$root_disk" ] && [ "${d%%|*}" = "$root_disk" ]; then
-				c_disk+=("${d%%|*}|${d#*|}（本机当前运行的系统，不能作为目标盘）")
+				c_disk+=("${d%%|*}|${d#*|}（正被当前运行的系统占用，本次不可覆盖）")
 			else
 				c_disk+=("${d%%|*}|${d#*|}")
 			fi
 		done < <(wz_disks)
 		wz_menu disk "目标磁盘（该磁盘将被整盘覆盖）" \
 			"$(wz_index_of "${DISK:-auto}" "${c_disk[@]}")" -- "${c_disk[@]}"
+	fi
+	# 正被当前运行的系统占用的盘本次不能覆盖：整盘覆盖会把运行中的系统一起抹掉。
+	# 菜单已标注该情形，这里再拒绝一次，命令行给 -d 时同样生效。
+	if [ -n "$root_disk" ]; then
+		case ",$disk," in
+			*",$root_disk,"*)
+				die "$EX_ENV" "目标磁盘 $disk 正被当前运行的系统占用。整盘覆盖会破坏该系统，请选择其他磁盘" ;;
+		esac
 	fi
 	DISK=$disk
 

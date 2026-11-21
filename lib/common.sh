@@ -44,8 +44,10 @@ die() {
 	case "$1" in [0-9]|[0-9][0-9]) code=$1; shift;; esac
 	log "ERROR(exit $code): $*"
 	mkdir -p "$RUN" 2>/dev/null
+	# 先静默再写：顺序反了会先打开 $RUN/failure（可能失败，报错漏到终端），
+	# 之后才把标准错误丢给 /dev/null
 	printf 'exit=%s phase=%s volume=%s reason=%s log=%s\n' \
-		"$code" "${PHASE:-}" "${VOLUME:-}" "$*" "$RUN/log" > "$RUN/failure" 2>/dev/null || true
+		"$code" "${PHASE:-}" "${VOLUME:-}" "$*" "$RUN/log" 2>/dev/null > "$RUN/failure" || true
 	echo "$(_tag) ERROR: $*" >&2
 	echo "$(_tag) ERROR: $*"
 	exit "$code"

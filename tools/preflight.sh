@@ -329,8 +329,10 @@ else
 fi
 
 # --- 目标磁盘 ----------------------------------------------------------------
-# 正在运行的系统所在磁盘要单独标出：迁移会整盘覆盖目标盘。迁移 Live 的根文件系统位于
-# 内存，其中的磁盘全部空闲；不在 Live 中时唯一的磁盘往往是系统盘，此时不能作为目标盘。
+# 迁移会整盘覆盖目标盘，而正在运行的系统占着的那块盘本次不能覆盖：内核还挂载着它。
+# 这里标注的是「此刻被占用」，与厂商定义的系统盘位无关。盘的角色由硬件布局、RAID
+# 成员与引导顺序决定，脚本无法判定，也不需要判定。进入迁移 Live 后根位于内存或
+# 启动介质，那块盘即释放；它通常就是迁移的目标盘。
 root_dev=
 if have findmnt && have lsblk; then
 	src=$(findmnt -no SOURCE / 2>/dev/null) || src=
@@ -343,7 +345,7 @@ if have findmnt && have lsblk; then
 fi
 
 if have lsblk; then
-	# 可用盘与系统盘分开记录：系统盘出现在可用清单里，会被读成它可以作为目标盘
+	# 可用盘与被占用的盘分开记录：两者并列在同一句里，会被读成后者也可选
 	disks=; sysd=; usable=0; listed=0
 	for d in $(lsblk -dnpo NAME,SIZE,TYPE 2>/dev/null | awk '$3 == "disk" { print $1"|"$2 }'); do
 		dev=${d%%|*}; size=${d#*|}
@@ -357,11 +359,11 @@ if have lsblk; then
 	disks=${disks% }; sysd=${sysd% }
 	if [ "$listed" -eq 0 ]; then fail "目标磁盘" "lsblk 未列出任何磁盘"; need lsblk util-linux
 	elif [ "$usable" -eq 0 ]; then
-		warn "目标磁盘" "唯一的磁盘 $sysd是当前运行的系统盘。进入迁移 Live 后，该磁盘可作为目标盘"
+		warn "目标磁盘" "唯一的磁盘 $sysd正被当前运行的系统占用。进入迁移 Live 后，该磁盘可作为目标盘"
 	elif [ -z "$sysd" ]; then
 		pass "目标磁盘" "$disks"
 	else
-		pass "目标磁盘" "可用磁盘 $disks。$sysd为本机系统盘，不能作为目标盘"
+		pass "目标磁盘" "可用磁盘 $disks。$sysd正被当前运行的系统占用，进入迁移 Live 后可选"
 	fi
 else
 	fail "目标磁盘" "本机没有 lsblk，无法列出磁盘。该命令由 util-linux 提供"; need lsblk util-linux
