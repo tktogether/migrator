@@ -192,7 +192,15 @@ make agent-test
 
 ## 5. 构建迁移 Live
 
-从零开始的操作顺序见[快速开始](03-quickstart.md)第 0 步。本节列出构建的全部选项与约束。
+在目标主机上就地构建并进入迁移 Live，使用 `tools/live-boot.sh`，不需要第二台机器：
+
+```sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | sh
+```
+
+该脚本检查本机条件、安装依赖、构建、写引导项并重启，内部调用本节的两份构建脚本，因此下面的参数与约束同样适用。它要求根文件系统或独立的 `/boot` 位于非 LVM 分区。根文件系统只有 LVM 时，先分出一个普通的 ext4 `/boot`，或改用本节的手工步骤把产物放到其他分区。
+
+需要自己控制构建参数，或从另一台机器构建时，使用下列脚本。
 
 仓库提供两份构建脚本：
 

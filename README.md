@@ -3,7 +3,15 @@
 migrator 用于将一台已安装的 Linux 服务器迁移到另一台机器。数据通过网络直接传输，
 不需要中间存储。
 
-迁移在新机器上执行，参数为旧机器的地址。执行前先把新机器启动到迁移 Live。迁移 Live 的制作与引导见 [docs/wiki/03-quickstart.md](docs/wiki/03-quickstart.md) 第 0 步，安装方法见后「安装」一节。
+迁移在新机器上执行，参数为旧机器的地址。执行前先把新机器引导到迁移 Live，一条命令：
+
+```sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash
+```
+
+该命令在新机器上就地构建迁移 Live、写入本机引导项并重启进入它，不需要第二台机器。已经有 ISO、构建产物或没有控制台时，见 [docs/wiki/03-quickstart.md](docs/wiki/03-quickstart.md) 第 0 步。
+
+进入 Live 后：
 
 ```sh
 migrator root@10.0.0.12
@@ -137,8 +145,9 @@ MIGRATOR_URL=file://$PWD/dist sh tools/install.sh
 | `make deb` | 生成 `migrator` 与 `migrator-agent` 两个 deb 包，需要 dpkg-dev |
 
 主体由 bash 脚本与若干被 source 的库组成。`agent/` 是一个 C 程序，运行时无外部
-依赖，静态链接后可直接放入 Live 环境。`rig/` 是物理机测试环境；
-`tools/live-entry.sh` 与 `tools/live-cycle.sh` 用于将一台机器引导至 Live 环境。
+依赖，静态链接后可直接放入 Live 环境。`rig/` 是物理机测试环境；`tools/live-boot.sh`
+在目标机上完成构建与引导，`tools/live-entry.sh`、`tools/live-cycle.sh` 与
+`tools/live-kexec.sh` 把已有产物接到一台机器的引导项或内核上。
 
 ## 文档
 

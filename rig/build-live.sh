@@ -7,13 +7,20 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${RIG_OUT:-$HOME/rig}
 SUITE=bookworm
-MIRROR=http://deb.debian.org/debian
+# LIVE_MIRROR: a mirror other than the public one, for a build host that cannot
+# reach deb.debian.org. tools/live-boot.sh passes it through.
+MIRROR=${LIVE_MIRROR:-http://deb.debian.org/debian}
 CH=$OUT/live-rootfs
 ISODIR=$OUT/live-iso
 ISO=$OUT/migrator-live.iso
 # LIVE_PROFILE=slim: no qemu, xz squashfs, zram + static-ip support — for 1 GiB
 # recipients; full keeps qemu for the E4 boot test (D23).
 PROFILE=${LIVE_PROFILE:-full}
+# LIVE_NO_ISO=1 stops before isolinux/xorriso and leaves the three artefacts in
+# $OUT, named the way tools/live-entry.sh reads them. It is the path used by
+# tools/live-boot.sh, where the machine boots the Live from its own disk and
+# there is no ISO to write.
+NO_ISO=${LIVE_NO_ISO:-}
 BASE_PKGS="systemd-sysv,linux-image-amd64,live-boot,live-config,initramfs-tools,openssh-server,rsync,partclone,xfsprogs,e2fsprogs,dosfstools,mdadm,lvm2,fdisk,parted,gdisk,efibootmgr,grub-common,grub2-common,grub-pc-bin,grub-efi-amd64-bin,lz4,zstd,pv,tmux,iproute2,iputils-ping,netbase,ifupdown,isc-dhcp-client,curl,ca-certificates,nano,less,bsdextrautils"
 case $PROFILE in
 	slim) PKGS=$BASE_PKGS ;;
@@ -100,6 +107,11 @@ ln -sf /etc/systemd/system/migrator-zram.service "$CH/etc/systemd/system/swap.ta
 ln -sf /etc/systemd/system/migrator-live-net.service "$CH/etc/systemd/system/multi-user.target.wants/migrator-live-net.service"
 install -d -m0700 "$CH/root/.ssh"
 install -m0600 "$KEY.pub" "$CH/root/.ssh/authorized_keys"
+# The pair also travels inside the Live, as build-live-debootstrap.sh does: the
+# key that the outside uses to ssh in is the same one the Live uses for the
+# donor, so a migration needs one key and not two.
+install -m0600 "$KEY" "$CH/root/rig-key"
+install -m0644 "$KEY.pub" "$CH/root/rig-key.pub"
 install -d -m0755 "$CH/usr/local/sbin" "$CH/usr/local/lib/migrator"
 install -m0755 "$REPO/bin/migrator" "$CH/usr/local/sbin/migrator"
 if [ -x "$REPO/agent/migrator-agent" ]; then
@@ -115,15 +127,30 @@ for f in LICENSE LICENSE-UPSTREAM NOTICE TRADEMARK.md; do
 done
 
 echo "[live] squashfs ($PROFILE)..."
-mkdir -p "$ISODIR/live" "$ISODIR/isolinux"
+if [ -n "$NO_ISO" ]; then
+	ARDIR=$OUT
+else
+	ARDIR=$ISODIR/live
+	mkdir -p "$ISODIR/isolinux"
+fi
+mkdir -p "$ARDIR/live"
 case $PROFILE in slim) SQ="-comp xz" ;; *) SQ="-comp zstd -Xcompression-level 9" ;; esac
 # shellcheck disable=SC2086  # SQ is a deliberate word list
-mksquashfs "$CH" "$ISODIR/live/filesystem.squashfs" -noappend -no-progress $SQ > /dev/null
+mksquashfs "$CH" "$ARDIR/live/filesystem.squashfs" -noappend -no-progress $SQ > /dev/null
 
 KVER=$(basename "$(ls "$CH"/boot/vmlinuz-* | head -1)"); KVER=${KVER#vmlinuz-}
 echo "[live] kernel $KVER"
-cp "$CH/boot/vmlinuz-$KVER" "$ISODIR/live/vmlinuz"
-cp "$CH/boot/initrd.img-$KVER" "$ISODIR/live/initrd.img"
+if [ -n "$NO_ISO" ]; then
+	# the layout tools/live-entry.sh reads: one directory, three names
+	cp "$CH/boot/vmlinuz-$KVER" "$ARDIR/vmlinuz-live"
+	cp "$CH/boot/initrd.img-$KVER" "$ARDIR/initrd-live.img"
+	rm -rf "$CH"
+	ls -lh "$ARDIR/live/filesystem.squashfs" "$ARDIR/vmlinuz-live" "$ARDIR/initrd-live.img"
+	echo "OK: $ARDIR (squashfs, kernel, initrd; no ISO)"
+	exit 0
+fi
+cp "$CH/boot/vmlinuz-$KVER" "$ARDIR/live/vmlinuz"
+cp "$CH/boot/initrd.img-$KVER" "$ARDIR/live/initrd.img"
 cp /usr/lib/ISOLINUX/isolinux.bin "$ISODIR/isolinux/"
 cp /usr/lib/syslinux/modules/bios/ldlinux.c32 "$ISODIR/isolinux/"
 cat > "$ISODIR/isolinux/isolinux.cfg" <<'CFG'

@@ -226,7 +226,8 @@ usage() {
 未指定源端地址时，脚本读取 /run/migrator/state 中上次连接的主机。
 该文件不存在时只检查本机。
 使用 --go 且需要交互时，SSH 连接必须分配终端（ssh -t），脚本会把标准输入接回终端。
-PATH 中没有 migrator 时，脚本在末尾打印安装命令。
+PATH 中没有 migrator 时，脚本在末尾打印下一步：已在迁移 Live 中给出安装命令，
+在普通系统上给出进入迁移 Live 的命令。
 EOF
 }
 
@@ -302,7 +303,9 @@ ui_table_head
 if [ "$(id -u)" = 0 ]; then pass "运行身份" "当前用户为 root"
 else fail "运行身份" "当前用户不是 root，分区与挂载需要 root 权限。请用 sudo 重新运行"; fi
 
+IN_LIVE=
 if [ -r /etc/migrator-live-release ] || [ -r /etc/xserver-live-release ]; then
+	IN_LIVE=1
 	pass "迁移 Live" "本机从迁移 Live 启动"
 else
 	warn "迁移 Live" "本机不是迁移 Live。本次只能完成本机检查；生成计划与执行迁移需要从迁移 Live 启动"
@@ -325,7 +328,7 @@ if have migrator; then
 elif [ -n "$SELF" ] && [ -r "$SELF" ] && [ -x "$(dirname "$SELF")/../bin/migrator" ]; then
 	pass "工具" "使用源码树中的驱动器 $SELF"
 else
-	warn "工具" "PATH 中没有 migrator。安装命令见本脚本末尾"
+	warn "工具" "PATH 中没有 migrator。下一步见本脚本末尾"
 fi
 
 # --- 目标磁盘 ----------------------------------------------------------------
@@ -575,14 +578,25 @@ if [ "$n_fail" -gt 0 ]; then
 fi
 
 # --- 下一步 ------------------------------------------------------------------
+# 没有 migrator 时，下一步取决于身在何处。在迁移 Live 里缺的是工具，装上即可；
+# 在普通系统上缺的不是工具而是环境：迁移只在 Live 中执行，在运行中的系统上装一遍
+# 工具并不能让迁移开始，只会让人以为可以开始。因此这里先讲怎么进 Live。
 if ! have migrator && { [ -z "$SELF" ] || [ ! -x "$(dirname "$SELF")/../bin/migrator" ]; }; then
-	if [ -n "$src" ]; then
-		say "本机尚未安装 migrator。下面的命令使用本机可访问的下载地址："
+	if [ -z "$IN_LIVE" ]; then
+		say "本机尚未进入迁移 Live。迁移只在迁移 Live 中执行：apply 会清空目标盘，在运行中的系统上执行会破坏该系统。"
+		if [ -n "$src" ]; then
+			say "在目标主机上以 root 执行下面这条命令，它会构建迁移 Live、写入引导项并重启："
+			printf '    %s\n' "curl -fsSL ${src%get.sh}live-boot.sh | bash"
+		else
+			say "在线获取所需的地址在本机不可访问。请先解决网络，或把源码树带到本机，执行 rig/build-live.sh 与 tools/live-entry.sh"
+		fi
+	elif [ -n "$src" ]; then
+		say "本机已进入迁移 Live，PATH 中没有 migrator。下面的命令使用本机可访问的下载地址："
 		printf '    %s\n' "curl -fsSL $src | sh"
 	elif have curl || have wget; then
-		say "本机尚未安装 migrator，三个下载地址在当前网络下均不可访问。请先解决网络，或把源码树复制到本机后执行 make install"
+		say "本机已进入迁移 Live，PATH 中没有 migrator，三个下载地址在当前网络下均不可访问。请先解决网络，或把源码树复制到本机后执行 make install"
 	else
-		say "本机尚未安装 migrator。本机没有 curl 也没有 wget，无法在线安装。可把源码树复制到本机后执行 make install"
+		say "本机已进入迁移 Live，PATH 中没有 migrator。本机没有 curl 也没有 wget，无法在线安装。可把源码树复制到本机后执行 make install"
 	fi
 fi
 
@@ -595,7 +609,7 @@ if [ -n "$GO" ]; then
 		say "--go：使用源码树中的驱动器进入向导"
 		WZ_DONOR=$DONOR exec sh "$(dirname "$SELF")/../bin/migrator" -w
 	else
-		say "使用 --go 需要先安装 migrator。请执行上面的安装命令，然后重新运行本脚本"
+		say "使用 --go 需要本机已有 migrator。请先按上面的提示处理，然后重新运行本脚本"
 		exit 2
 	fi
 fi

@@ -8,119 +8,76 @@
 
 | 角色 | 用途 | 需要准备 |
 |---|---|---|
-| 构建机 | 制作迁移 Live 的镜像。只在拿不到现成镜像时需要 | Debian 12 或 Ubuntu 22.04 以上，`mmdebstrap`（或 root 与 `debootstrap`），约 6 GiB 空闲磁盘 |
-| 源主机 | 要迁走的那台机器 | root 的 SSH 访问；离线模式下还需从同一份镜像引导 |
-| 目标主机 | 承接迁移结果。迁移命令在这里执行 | 从迁移 Live 引导，并能用私钥 SSH 登录 |
+| 源主机 | 要迁走的那台机器 | root 的 SSH 访问；离线模式下还需从同一份迁移 Live 引导 |
+| 目标主机 | 承接迁移结果，迁移命令在这里执行 | 能从迁移 Live 引导，并能用私钥 SSH 登录 |
 
-执行顺序固定为三步：制作镜像，把目标主机引导进 Live，在 Live 中执行迁移。
+一次迁移只涉及这两台机器。迁移 Live 在目标主机上就地构建，不需要第三台机器。
 
-## 第 0 步 准备迁移 Live（构建机）
+## 第 0 步 进入迁移 Live（目标主机）
 
-迁移 Live 是可引导的 Debian 环境，内含 `migrator`、静态 agent 与全部运行时工具。迁移命令只在这个环境中执行：`apply` 会清空目标盘、重建分区并格式化，在运行中的系统上执行会破坏该系统。
+迁移命令只在迁移 Live 中执行。`apply` 会清空目标盘、重建分区并格式化，在运行中的系统上执行会破坏该系统。执行顺序因此固定为：先把目标主机引导进迁移 Live，再在其中执行迁移。
 
-目前没有预构建的镜像。自行构建一份，或向已经构建过的人索取同一个文件。两端必须使用同一份镜像：离线模式会比对 partclone、lz4 等工具的版本，不一致时拒绝继续，确认兼容后才可用 `-o force=1`。
-
-### 构建
+在目标主机上以 root 执行一条命令：
 
 ```sh
-git clone https://gitee.com/tktogether/migrator
-cd migrator
-make agent
-LIVE_PROFILE=slim bash rig/build-live.sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash
 ```
 
-`make agent` 不能省略。镜像中没有 agent 时，在线模式无法跟踪源端的写入。
+脚本依次完成六件事：
 
-`rig/build-live.sh` 使用 `mmdebstrap`，可在无特权容器中运行。构建机没有 `mmdebstrap` 时改用另一份脚本。它需要 root、`debootstrap`、一份源码快照与一把已经存在的密钥对；其余依赖由脚本安装：
+1. 检查本机能否承担构建：发行版、架构、内存、非 LVM 分区上的可用空间。
+2. 安装构建依赖。
+3. 从镜像读取源码树，构建迁移 Live。
+4. 编译在线迁移所需的 agent。
+5. 把 Live 写入本机的一个非 LVM 文件系统，新增一条 GRUB 引导项并设为默认。
+6. 重启。
+
+构建使用本机当前运行的系统，产物随后从内存运行，因此构建它的系统被替换不影响结果。主要耗时在下载与解压基础系统。
+
+先看它会做什么，而不改动任何东西：
 
 ```sh
-git archive HEAD > /tmp/migrator.tar.gz
-ssh-keygen -t ed25519 -N '' -f /root/rig_ed25519
-BUILD_DIR=/root/live-build TARBALL=/tmp/migrator.tar.gz KEY=/root/rig_ed25519 \
-  PROFILE=slim bash rig/build-live-debootstrap.sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash -s -- -n
 ```
 
-`LIVE_PROFILE` 决定镜像内容，`debootstrap` 脚本中该变量名为 `PROFILE`：
+本机不适合时（内存不足、根文件系统位于 LVM、空间不足、无法确定网络参数），脚本在下载任何内容之前说明原因并退出。根文件系统位于 LVM 时需要对 `-i` 之外的额外处理，见[安装](02-install.md)第 5 节。
 
-| 取值 | 适用 | 代价 |
-|---|---|---|
-| `slim` | 目标主机内存 1–2 GiB | 不含 QEMU，无法试启动，`-o boottest=1` 会被跳过 |
-| `full` | 内存 3 GiB 以上，希望在切换前试启动 | 镜像更大 |
+### 重启之前：保存私钥
 
-产物：
-
-| 构建方式 | 镜像 | 登录 Live 的私钥 |
-|---|---|---|
-| `rig/build-live.sh` | `$HOME/rig/migrator-live.iso`，可用 `RIG_OUT` 改变 | `$HOME/rig/rig_ed25519` |
-| `rig/build-live-debootstrap.sh` | `$BUILD_DIR/migrator-live.iso` | `$KEY`，默认同目录下的 `rig_ed25519` |
-
-公钥已写入镜像中 root 的 `authorized_keys`，私钥不放进镜像。远程登录 Live 时要带上这把私钥；在另一台机器上重新构建会得到另一把。
-
-`debootstrap` 方式还会输出 `vmlinuz-live`、`initrd-live.img` 与 `live/live/filesystem.squashfs`，用于从目标机自身硬盘引导，细节见[迁移 Live 构建](maintainers/live-build.md)。
-
-### 写入 U 盘
+迁移 Live 只接受私钥登录，没有可在控制台键入的密码。脚本在重启之前打印私钥的路径与内容。目标盘随后会被整体替换，保存在这台机器上的副本不会留下，因此需要复制到其他设备或终端记录中：
 
 ```sh
-lsblk
-sudo dd if=$HOME/rig/migrator-live.iso of=/dev/sdX bs=4M status=progress conv=fsync
+ssh -i ~/.ssh/migrator-live root@192.168.1.50
 ```
 
-`of=` 写错会覆盖那台机器上的磁盘。先看 `lsblk` 输出中的容量与型号，确认后再写。虚拟机可直接把 ISO 挂为光驱，跳过这一步。
+私钥丢失后无法登录迁移 Live。在有控制台的机器上，可以在 GRUB 菜单中选回原系统，重新执行第 0 步得到新的一份。没有控制台时只能重新引导，因此保存这一步不能跳过。
 
-### 引导
+### 重启之后：确认已进入 Live
 
-在目标主机选择从 U 盘或光驱启动。离线模式下源主机也要做同样的操作。镜像使用 BIOS 引导，UEFI 固件需要开启 CSM 或 legacy 支持。
+| 命令 | 期望结果 |
+|---|---|
+| `cat /etc/migrator-live-release` | 输出构建编号 |
+| `migrator -V` | 输出工具版本 |
+| `swapon --show` | 列出 zram 交换区 |
+| `findmnt -S /dev/sda` | 没有输出，目标盘未被挂载 |
 
-启动参数默认包含 `toram`：整个镜像复制到内存，引导介质与目标磁盘都不再被占用，目标盘因此可以被清空。目标主机内存不足时不要去掉 `toram`，改用内存更大的机器。
+最后一条有输出时不要继续：目标盘仍被挂载，`apply` 会擦除正在运行的 Live 自身。`migrator: command not found` 说明镜像中没有工具，见第 1 步。
 
-网络默认使用 DHCP。没有 DHCP 时，在启动参数后追加：
+目标盘是迁移后承接新系统并从它启动的那块磁盘。迁移 Live 从内存运行，引导参数 `toram` 使引导介质与磁盘都不再被占用；不要为省内存去掉它，内存不足时改用内存更大的机器。
 
-```text
-migrator.ip=192.168.1.50/24,192.168.1.1,114.114.114.114
-```
+### 其他进入方式
 
-### 没有 U 盘或没有控制台时
+上一条命令是默认路径。下列情形改用其他方式，构建参数与全部开关见[安装](02-install.md)第 5 节，约束及其原因见[迁移 Live 构建](maintainers/live-build.md)。
 
-云主机与托管机通常无法插入 U 盘，也没有可接显示器的控制台。此时用 `tools/live-entry.sh` 把 Live 装进目标机自身的磁盘：squashfs、内核与 initrd 复制到其中一个非 LVM 文件系统，并写入一条 GRUB 引导项。不需要 ISO，也不需要控制台。
+| 情形 | 做法 |
+|---|---|
+| 已有 ISO，且能插 U 盘或挂光驱 | `dd` 写入 U 盘后从 U 盘引导。UEFI 固件需开启 CSM 或 legacy 支持 |
+| 已有其他机器构建好的三件产物 | 把产物放到目标机，执行 `tools/live-entry.sh -i <地址> -s` |
+| 想从构建机远程完成，不在目标机上操作 | `tools/live-cycle.sh -H root@<目标机> -S root@<构建机>:<产物目录>` |
+| 云主机没有控制台，也不想重启固件 | `tools/live-kexec.sh -u <产物地址>`，保留原 IP，不经过 GRUB |
+| 需要自己控制构建参数 | `git clone` 后执行 `rig/build-live.sh`，见[安装](02-install.md)第 5 节 |
 
-需要 `debootstrap` 脚本产出的三件文件（`vmlinuz-live`、`initrd-live.img`、`live/live/filesystem.squashfs`）放在目标机的 `/root` 下：
-
-```sh
-tools/live-entry.sh -i 192.168.1.50/24,192.168.1.1,114.114.114.114 -s
-```
-
-`-s` 把该引导项设为持久的默认项。目标盘随后会被擦除，引导失败时仍要回到 Live，所以这一步不要省略。只做一次性切换、之后还要回到原系统时去掉 `-s`。
-
-从构建机远程完成全部步骤时用 `tools/live-cycle.sh`，它负责复制文件、写入引导项、重启并等待 SSH 回来：
-
-```sh
-tools/live-cycle.sh -H root@192.168.1.50 -S root@192.168.1.10:/root
-```
-
-squashfs 必须位于非 LVM 文件系统，内核与 initrd 必须与 GRUB 实际搜索的分区一致。这些约束及其原因见[迁移 Live 构建](maintainers/live-build.md)。
-
-### 确认环境
-
-在目标主机登录。镜像没有设置可在控制台键入的密码，登录通过 SSH 完成，使用构建时生成的私钥：
-
-```sh
-ssh -i ~/rig/rig_ed25519 root@192.168.1.50
-```
-
-没有私钥时无法登录，需要在构建机上取回该文件，或用同一把公钥重新构建。
-
-登录后确认四件事：
-
-```sh
-cat /etc/migrator-live-release
-migrator -V
-swapon --show
-findmnt -S /dev/sda
-```
-
-第一条给出构建编号，第二条给出工具版本，第三条显示 zram swap，第四条应当没有输出：目标盘未被挂载。目标盘仍被挂载时不要继续，`apply` 会擦除 Live 自身。
-
-`migrator: command not found` 说明使用的是别人构建的镜像且没有带工具，见第 1 步。
+网络没有 DHCP 时，上述方式都要给出静态地址，格式为 `IP/前缀,网关,DNS`，例如 `192.168.1.50/24,192.168.1.1,114.114.114.114`。离线模式下源主机使用同一份产物引导，两端的构建编号需要一致。
 
 ## 第 1 步 安装工具（目标主机，可选）
 
@@ -160,7 +117,7 @@ ssh -i /root/migrator-key root@10.0.0.12 true && echo ok
 
 也可使用 SSH agent 转发，或在交互终端中输入密码；非交互执行需要密钥。
 
-离线模式另有一步：源主机也从同一份镜像引导，见第 0 步的「引导」。两端构建编号不一致时会被拒绝。
+离线模式另有一步：源主机也引导到迁移 Live，使用与目标端相同的产物，见第 0 步。两端构建编号不一致时会被拒绝。
 
 ## 第 3 步 体检（目标主机）
 
