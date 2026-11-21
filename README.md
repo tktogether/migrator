@@ -99,6 +99,7 @@ MIGRATOR_URL=file://$PWD/dist sh tools/install.sh
 make test         # shellcheck + 表测试，几秒，不需要 root
 make agent        # 静态 agent，需要 C 编译器和 libzstd 静态库
 make agent-test   # 在本机 loop 设备上运行 agent，需要 root
+make deb          # 生成 migrator 与 migrator-agent 两个 deb 包，需要 dpkg-dev
 ```
 
 主体由 bash 脚本与若干被 source 的库组成。`agent/` 是一个 C 程序，运行时无外部
@@ -118,10 +119,10 @@ make agent-test   # 在本机 loop 设备上运行 agent，需要 root
 版权声明与许可全文完整保留在 [LICENSE-UPSTREAM](LICENSE-UPSTREAM) 中
 （`Copyright (c) 2026 XServer`）。
 
-本项目新增的部分为专有材料，见 [LICENSE](LICENSE)。组合作品的对外分发、商业性
-再分发、修改后发布与内部二次开发，需要版权方的书面许可。名称与标识的使用见
-[TRADEMARK.md](TRADEMARK.md)，来源与许可范围的说明见 [NOTICE](NOTICE)，完整政策
-见 [docs/wiki/14-license.md](docs/wiki/14-license.md)。
+本项目新增的部分与上游材料合在一起，整体依 GPL-3.0-or-later 分发，全文见
+[LICENSE](LICENSE)。可以再分发与修改，修改后的版本应以相同许可提供。名称与标识的使用
+见 [TRADEMARK.md](TRADEMARK.md)，该政策不限制 GPL 授予的权利；来源与许可范围的说明见
+[NOTICE](NOTICE)，完整政策见 [docs/wiki/14-license.md](docs/wiki/14-license.md)。
 
 上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。上游的历史变更
 记录在 `docs/CHANGELOG-upstream.md`。

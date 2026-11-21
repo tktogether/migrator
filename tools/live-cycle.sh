@@ -145,7 +145,7 @@ if [ -n "$DISK" ]; then
 	exit 1
 fi
 say "   /dev/sda:          free (toram released it)"
-say "   tool:              $(rs "$HOST" 'cat /usr/local/lib/migrator/VERSION 2>/dev/null || echo -')"
+say "   tool:              $(rs "$HOST" 'v=$(cat /usr/local/lib/migrator/VERSION /usr/share/migrator/VERSION 2>/dev/null | head -1); echo "${v:--}"')"
 say ""
 say "next (from here, no console):"
 say "  ssh -i $KEY root@${ADDR%%/*} 'migrator -y -i /root/rig-key -d <disks> -o mode=online -o cutover=rollback root@<DONOR>'"

@@ -10,3 +10,9 @@ lib/VERSION     text eol=lf
 *.h             text eol=lf
 Makefile        text eol=lf
 agent/Makefile  text eol=lf
+LICENSE*        text eol=lf
+NOTICE          text eol=lf
+debian/**       text eol=lf
+# 'git archive' is how the upstream tarball for the distribution package is
+# made; it must not carry debian/, which belongs to the packaging.
+debian          export-ignore

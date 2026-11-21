@@ -1,0 +1,48 @@
+Source: migrator
+Section: admin
+Priority: optional
+Maintainer: 橙先生 <2376117754@qq.com>
+Build-Depends: debhelper-compat (= 13), gcc, libzstd-dev
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/tktogether/migrator
+Vcs-Git: https://github.com/tktogether/migrator.git
+Vcs-Browser: https://github.com/tktogether/migrator
+
+Package: migrator
+Architecture: all
+Depends: ${misc:Depends}, awk, bash (>= 4.4), coreutils, gzip,
+ openssh-client, tar, util-linux
+Recommends: migrator-agent (= ${source:Version}), partclone, e2fsprogs,
+ initramfs-tools, lz4, mdadm, lvm2, xfsprogs, zstd
+Suggests: gdisk, grub2-common, parted, pv, qemu-system-x86, qemu-utils,
+ rsync, tmux
+Description: move a running Linux server onto this machine over the network
+ migrator copies a whole Linux installation from a donor machine onto the
+ machine it runs on, then reboots the copy. It reads both sides, writes a
+ migration plan that can be inspected and edited, recreates the donor's disk
+ layout on the target, streams every file system, repairs the copy in a chroot
+ (fstab, initramfs drivers, boot loader, network) and verifies that the result
+ boots before the switch-over.
+ .
+ Two modes are supported. Off-line, both machines run the migration Live and
+ the donor is read only. On-line, the donor keeps running: the volumes are
+ copied in passes by migrator-agent, then frozen for a last delta, which keeps
+ the outage to the time it takes to write the remaining differences.
+ .
+ The tool needs root, because it partitions disks and mounts file systems. It
+ is normally run from the migration Live, which ships with everything it needs;
+ this package is for building that Live and for hosts that prepare a plan
+ without writing anything.
+
+Package: migrator-agent
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: on-line migration agent for migrator
+ migrator-agent is the half that runs on the donor during an on-line migration.
+ It tracks block writes, serves the frozen volume over the connection migrator
+ opens, and reports the progress of each pass back to the driver.
+ .
+ It is a statically linked binary so that nothing has to be installed on the
+ donor: migrator copies it into a tmpfs under /run and starts it there. It is
+ not meant to be started by hand.

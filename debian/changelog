@@ -1,0 +1,7 @@
+migrator (1.2-1) unstable; urgency=medium
+
+  * Initial packaging. The tool and its on-line agent are split into two
+    packages: the driver is architecture independent, the agent is a
+    statically linked binary built from agent/.
+
+ -- 橙先生 <2376117754@qq.com>  Sat, 21 Nov 2026 10:40:00 +0800

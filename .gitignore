@@ -4,3 +4,12 @@ bin/migrator-agent
 research
 *.o
 .workbuddy/
+
+# what dpkg-buildpackage leaves behind in the source tree
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/tmp/
+debian/migrator/
+debian/migrator-agent/

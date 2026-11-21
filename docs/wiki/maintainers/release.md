@@ -123,6 +123,28 @@ sha256sum migrator-$VER.tar.gz > SHA256SUMS
 - `migrator -V` 与 `migrator -h` 在干净环境中可执行；
 - `tools/install.sh` 能从 `file://` 与 HTTP(S) 两种来源安装。
 
+## Debian 打包
+
+仓库带 `debian/` 打包目录，产出两个包：
+
+| 包 | 架构 | 内容 | 安装位置 |
+|---|---|---|---|
+| `migrator` | all | 驱动、库、手册页、许可文件 | `/usr/sbin/migrator`、`/usr/share/migrator/` |
+| `migrator-agent` | any | 静态 agent | `/usr/lib/migrator/migrator-agent` |
+
+驱动按候选路径查找库：`$HERE/../lib`、`$HERE/../lib/migrator`、`$HERE/../share/migrator`、
+`/usr/local/lib/migrator`、`/usr/lib/migrator`、`/usr/share/migrator`。仓库布局与安装布局都能
+直接运行，环境变量 `MIGRATOR_LIB` 优先。
+
+```sh
+make dist     # dist/migrator_<ver>.orig.tar.gz，不含 debian/
+make deb      # 两个 deb；需要 dpkg-dev、debhelper、libzstd-dev
+lintian       # 检查
+```
+
+源码包格式为 `3.0 (quilt)`，orig tarball 由 `make dist` 生成。提交到 Debian 时上传到
+mentors.debian.net，或交由 sponsor 上传；Ubuntu 侧等 Debian 收录后同步，不单独维护。
+
 ## 发布检查清单
 
 ### 代码
@@ -160,24 +182,24 @@ sha256sum migrator-$VER.tar.gz > SHA256SUMS
 - [ ] 安装后 `migrator -V` 正常；
 - [ ] 发布说明与版本一致；
 - [ ] `LICENSE`、`LICENSE-UPSTREAM`、`NOTICE`、`TRADEMARK.md` 已随发布包分发；
-- [ ] 许可边界、再分发限制与名称使用政策已由法律顾问确认。
+- [ ] 许可文件与名称使用政策已由法律顾问确认。
 
 ## 许可与来源
 
-本项目为 reloca.to 1.2 的派生作品，采用双许可结构：
+本项目为 reloca.to 1.2 的派生作品，采用两层许可：
 
 - 派生自上游的材料依据 MIT 许可提供，适用 `LICENSE-UPSTREAM`；
-- 本项目新增部分依据 `LICENSE` 中的专有条款提供。
+- 整份作品（上游材料与新增部分）依据 GPL-3.0-or-later 分发，全文见 `LICENSE`。
 
 发布时必须保留：
 
 - 上游版权声明 `Copyright (c) 2026 XServer`；
 - MIT 许可全文 `LICENSE-UPSTREAM`；
-- 本项目专有许可 `LICENSE`；
+- GPL-3.0 全文 `LICENSE`；
 - 来源与许可范围说明 `NOTICE`；
 - 名称与标识使用政策 `TRADEMARK.md`。
 
-组合作品的对外分发、商业性再分发、修改后发布与内部二次开发，均须取得版权方书面许可。上游商标、域名、商店与联系方式不得用于推广。
+分发二进制时还应提供对应源码，或按 GPL 第 6 节给出获取方式。上游商标、域名、商店与联系方式不得用于推广。
 
 ## 不应发布的内容
 

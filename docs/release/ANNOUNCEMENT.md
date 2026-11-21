@@ -24,7 +24,7 @@ migrator 提供三种使用方式：
 
 当前版本不支持 btrfs、ZFS、LUKS、NTFS、F2FS、reiserfs、Windows、SUSE、Arch Linux，以及 CentOS 6 及更老的 grub-legacy 系统。一个 LVM 卷组只能位于一个物理卷。目标端 Secure Boot 仅在源端为 UEFI 且 ESP 上存在 shim 时可用。网络配置保留源端 IP、网关与 DNS，跨网段迁移后需要人工调整。增量传输可以跨越传输进程的中断，但两端任一侧整机重启后，内存中的计划与续传记录会丢失，需要重新开始。
 
-migrator 采用双许可结构：派生自 reloca.to 1.2 的上游材料依据 MIT 许可提供，许可全文见 `LICENSE-UPSTREAM`；本项目新增部分依据 `LICENSE` 中的专有条款提供。组合作品的对外分发、商业性再分发、修改后发布与内部二次开发，均须取得版权方书面许可。名称与标识使用见 `TRADEMARK.md`。上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。
+migrator 采用两层许可：派生自 reloca.to 1.2 的上游材料依据 MIT 许可提供，许可全文见 `LICENSE-UPSTREAM`；整份作品依 GPL-3.0-or-later 分发，全文见 `LICENSE`。可以复制、修改与再分发，包括商业性再分发；分发时应保留许可与版权声明，修改版应以相同许可提供源码，并改用不同的名称。名称与标识使用见 `TRADEMARK.md`。上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。
 
 ## 获取方式
 

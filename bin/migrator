@@ -62,7 +62,18 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 HERE=$(dirname "$(readlink -f "$0")")
-if [ -r "$HERE/../lib/common.sh" ]; then MIGRATOR_LIB=$(readlink -f "$HERE/../lib"); else MIGRATOR_LIB=/usr/local/lib/migrator; fi
+# The libraries sit next to the driver in a checkout (bin/../lib) and in the
+# tarball layout (/usr/local/sbin/../lib/migrator); a distribution package puts
+# them where its policy wants them (/usr/share/migrator, /usr/lib/migrator), so
+# the candidates are tried in turn and MIGRATOR_LIB in the environment wins.
+for d in "${MIGRATOR_LIB:-}" "$HERE/../lib" "$HERE/../lib/migrator" "$HERE/../share/migrator" \
+         /usr/local/lib/migrator /usr/lib/migrator /usr/share/migrator; do
+	if [ -n "$d" ] && [ -r "$d/common.sh" ]; then MIGRATOR_LIB=$(readlink -f "$d"); break; fi
+done
+if [ -z "${MIGRATOR_LIB:-}" ]; then
+	echo "migrator: no libraries found (looked for common.sh beside $(readlink -f "$0")); set MIGRATOR_LIB" >&2
+	exit 2
+fi
 export MIGRATOR_LIB
 RUN=${RUN:-/run/migrator}; export RUN
 DRY=; YES=; SSH_KEYFILE=; DISK=auto; STEP=

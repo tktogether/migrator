@@ -7,7 +7,7 @@
 | 仓库版本 | `1.2`（`VERSION` 文件） |
 | 构建版本 | `git describe --always --dirty`；无 Git 信息时为 `1.2` |
 | 发布日期 | 2026-11-20 |
-| 许可 | 双许可：上游材料 MIT；本项目新增部分专有 |
+| 许可 | 上游材料 MIT；整份作品 GPL-3.0-or-later |
 
 本发布说明对应当前仓库 HEAD。安装后的实际版本字符串以 `migrator -V` 为准。
 
@@ -159,7 +159,7 @@ BUILD_DIR=/data/live-build TARBALL=/tmp/migrator.tar.gz \
 
 本项目是 reloca.to 1.2 的派生作品。派生自上游的材料依据 MIT 许可提供，原始版权声明与许可全文保留在 `LICENSE-UPSTREAM` 中。
 
-本项目新增部分依据 `LICENSE` 中的专有条款提供。组合作品的对外分发、商业性再分发、修改后发布与内部二次开发，均须取得版权方书面许可。名称与标识使用见 `TRADEMARK.md`，许可范围说明见 `NOTICE`。
+整份作品依 `LICENSE` 中的 GPL-3.0-or-later 分发。可以复制、修改与再分发，包括商业性再分发；分发时应保留许可与版权声明，修改版应以相同许可提供源码，并改用不同的名称。名称与标识使用见 `TRADEMARK.md`，许可范围说明见 `NOTICE`。
 
 上游的商标、域名、商店与联系方式不属于许可范围，本项目不使用。上游变更记录作为存档保留在 `docs/CHANGELOG-upstream.md`。
 

@@ -276,10 +276,11 @@ _bootstrap_parity() {
 # /run (/run itself is noexec on Debian). Idempotent: a later phase that
 # reconnects finds it there (gone with a reboot of the donor, copied again).
 MIGRATOR_AGENT=${MIGRATOR_AGENT:-}
-bootstrap_agent_path() {   # where this box's migrator-agent is: next to the driver (installed), in the tree (dev), or on PATH
+bootstrap_agent_path() {   # where this box's migrator-agent is: beside the driver and libs (installed), in the tree (dev), or on PATH
 	local here; here=$(dirname "$(readlink -f "${BASH_SOURCE[1]:-$0}")")
 	if [ -n "$MIGRATOR_AGENT" ] && [ -x "$MIGRATOR_AGENT" ]; then echo "$MIGRATOR_AGENT"; return 0; fi
-	for f in /usr/local/sbin/migrator-agent "$MIGRATOR_LIB/../agent/migrator-agent" "$here/migrator-agent" "$here/../agent/migrator-agent"; do
+	for f in /usr/local/sbin/migrator-agent "$MIGRATOR_LIB/migrator-agent" /usr/lib/migrator/migrator-agent \
+	         "$MIGRATOR_LIB/../agent/migrator-agent" "$here/migrator-agent" "$here/../agent/migrator-agent"; do
 		[ -x "$f" ] && { readlink -f "$f"; return 0; }
 	done
 	command -v migrator-agent 2>/dev/null

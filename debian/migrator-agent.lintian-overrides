@@ -1,0 +1,4 @@
+# The agent is copied into a tmpfs on the donor and run there. The donor may be
+# a different distribution with a different libc, so the binary is linked
+# statically on purpose (agent/Makefile); this is the reason, not an oversight.
+migrator-agent: statically-linked-binary [usr/lib/migrator/migrator-agent]

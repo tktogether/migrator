@@ -129,8 +129,8 @@ BUILD_DIR=/data/live-build TARBALL=/tmp/migrator.tar.gz \
 
 ## 来源与许可
 
-本项目是 [reloca.to](https://reloca.to/) 1.2 的派生作品。派生自上游的材料依据 MIT 许可提供，原始版权声明与许可全文保留在 [LICENSE-UPSTREAM](LICENSE-UPSTREAM) 中。本项目新增部分依据 [LICENSE](LICENSE) 中的专有条款提供。
+本项目是 [reloca.to](https://reloca.to/) 1.2 的派生作品。派生自上游的材料依据 MIT 许可提供，原始版权声明与许可全文保留在 [LICENSE-UPSTREAM](LICENSE-UPSTREAM) 中。整份作品依 [LICENSE](LICENSE) 中的 GPL-3.0-or-later 分发。
 
-组合作品的对外分发、商业性再分发、修改后发布与内部二次开发，均须取得版权方书面许可。名称与标识使用见 [TRADEMARK.md](TRADEMARK.md)。上游商标、域名、商店与联系方式不属于许可范围，本项目不使用。
+可以复制、修改与再分发，包括商业性再分发；分发时应保留许可与版权声明，修改版应以相同许可提供源码，并改用不同的名称。名称与标识使用见 [TRADEMARK.md](TRADEMARK.md)。上游商标、域名、商店与联系方式不属于许可范围，本项目不使用。
 
 上游变更记录见 `docs/CHANGELOG-upstream.md`。

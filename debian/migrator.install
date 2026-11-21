@@ -1,0 +1,4 @@
+bin/migrator	usr/sbin
+lib/*.sh	usr/share/migrator
+VERSION	usr/share/migrator
+tools/relay-tunnel.sh	usr/lib/migrator

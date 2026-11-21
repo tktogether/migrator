@@ -1,0 +1,33 @@
+#!/usr/bin/make -f
+# debian/rules — build migrator and its static on-line agent.
+#
+# The agent is linked with -static so that the donor needs nothing installed;
+# that rules out PIE, so the position-independent flags are stripped from
+# dpkg-buildflags before they reach the compiler. Everything else (stack
+# protector, fortify, RELRO, bind-now) still applies to the static link.
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+CPPFLAGS := $(shell dpkg-buildflags --get CPPFLAGS)
+CFLAGS  := $(shell dpkg-buildflags --get CFLAGS | sed -e 's/-fPIE//g')
+LDFLAGS := $(shell dpkg-buildflags --get LDFLAGS | sed -e 's/-pie//g')
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE) -C agent VERSION=$(DEB_VERSION_UPSTREAM) \
+		CFLAGS="$(CPPFLAGS) $(CFLAGS) -O2 -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -std=gnu11" \
+		LDFLAGS="$(LDFLAGS) -static -pthread -lzstd"
+
+override_dh_auto_test:
+	@echo "tests/ needs root, loop devices and qemu: run 'bash tests/run.sh' on a scratch host"
+
+override_dh_auto_clean:
+	$(MAKE) -C agent clean
+	rm -rf dist
+
+# 'make install' would put the tool in /usr/local; the file layout of the
+# packages is described in debian/*.install instead.
+override_dh_auto_install:
+	@echo "file layout comes from debian/migrator.install and debian/migrator-agent.install"

@@ -1,0 +1,270 @@
+.TH MIGRATOR 8 "2026-11-21" "migrator 1.2" "System Administration"
+.SH NAME
+migrator \- move a Linux server onto this machine over the network
+.SH SYNOPSIS
+.B migrator
+.RB [ \-n ]
+.RB [ \-y ]
+.RB [ \-i
+.IR keyfile ]
+.RB [ \-d
+.IR disk [ ,disk2 ]]
+.RB [ \-s
+.IR step ]
+.RB [ \-o
+.IR key = value ]...
+.RI [ donor ]
+.RI [ arg ]
+.SH DESCRIPTION
+.B migrator
+copies a complete Linux installation from a donor machine onto the machine it
+runs on, then makes the copy bootable.
+It reads the state of both machines, writes a migration plan that can be
+inspected and edited before anything is written, recreates the donor's disk
+layout on the target, streams every file system over the network, repairs the
+copy inside a chroot (fstab, initramfs drivers, boot loader, network settings)
+and verifies the result before the switch-over.
+The donor's disks are only ever read.
+.PP
+Both modes assume the two machines are connected over the network.
+In the off-line mode both are booted into the migration Live, a self-contained
+environment that carries this tool and the utilities it needs.
+In the on-line mode the donor keeps serving:
+.B migrator-agent
+is copied to the donor, the volumes are copied in passes while the file
+systems stay in use, and only the remaining differences are frozen for the
+final copy.
+.PP
+Root is required: the tool partitions disks and mounts file systems.
+Run it with no arguments to perform the whole migration, or with
+.B \-s
+to run a single step.
+Steps are idempotent, so a failed step can be repeated without starting over.
+.SH OPTIONS
+.TP
+.B \-n
+Print every command that would be run and change nothing.
+.TP
+.B \-y
+Answer yes to every confirmation.
+.TP
+.BI \-i " keyfile"
+Use this SSH key for the donor instead of the session key migrator generates.
+.TP
+.BI \-d " disk"
+Target disk on this machine, for example
+.IR /dev/sda ,
+.I /dev/nvme0n1
+or a
+.I /dev/disk/by-id/...
+path.
+Defaults to the only eligible disk; if several qualify, migrator refuses and
+lists them.
+With
+.B \-o raid=1
+two disks are named as
+.IR disk , disk2 .
+.TP
+.BI \-s " step"
+Run one step only.
+The accepted values are listed under STEPS.
+.TP
+.BI \-o " key=value"
+Set one option.
+Repeat the flag for every key; a comma belongs to the value
+.RB ( driver=mod1,mod2 ),
+so keys are never joined by one.
+An unknown key is refused rather than ignored.
+The keys are listed under OPTION KEYS.
+.TP
+.B \-V
+Print the version and exit.
+.TP
+.B \-h
+Print the built-in help and exit.
+.SH STEPS
+.TP
+.B plan " donor"
+Read both machines without writing anything and write the plan.
+.TP
+.B check " [plan]"
+Re-validate a plan, including one that was edited by hand.
+.TP
+.B apply
+Partition and format the target disks and start the initial synchronisation.
+.TP
+.B transfer
+Copy the file systems.
+.TP
+.B postfix " [root]"
+Repair the copy in a chroot: fstab, mdadm, initramfs, boot loader, network.
+.TP
+.B verify " [root]"
+Run the verification items and, with
+.BR boottest=1 ,
+boot the copy in qemu.
+.TP
+.B cutover
+Stop the donor and switch the network identity over to this machine.
+.TP
+.B inventory " [donor]"
+Print the raw records of this machine, or of the donor.
+.TP
+.B attach
+Reattach to the running tmux session, or follow its log.
+.TP
+.B cleanup
+Undo the mounts, activations and read-only marks left behind by a run.
+.SH OPTION KEYS
+Keys accepted in both modes:
+.TP
+.BR root=auto|block|files
+How the root file system is identified in the copy.
+.TP
+.BR label=auto|gpt|dos
+Partition table type on the target.
+.TP
+.BR nic=IFACE
+Network interface name in the copy.
+.TP
+.BR donor-nic=IFACE " and " nic-pin=1|0
+Interface to expect on the donor, and whether the name is pinned.
+.TP
+.BR driver=MOD , console=... , bootorder=pxe|local
+Kernel driver, console and boot order of the copy.
+.TP
+.BR boottest=1|0
+Boot the copy in qemu and wait for multi-user on a serial console.
+Needs
+.BR qemu-system-x86 ,
+which is installed on demand; the target disk is never written.
+.TP
+.BR fsck=quick|full , boot-part=SIZE
+File system check depth and size of the boot partition.
+.TP
+.BR cutover=netdown|poweroff|kexec|none
+How the donor is stopped at the end.
+.TP
+.BR force=1
+Continue where a mismatch would otherwise stop the run.
+.TP
+.BR raw=DIR , cipher=..., expect=SERIAL|MAC
+Raw mode, SSH cipher and the identity to expect.
+.TP
+.BR relay=USER@HOST[:PORT]
+Route the copy through a relay host.
+.TP
+.BR raid=1
+Mirror two identical disks with md RAID1; the boot loader and ESP are written
+to both.
+On-line mode only:
+.TP
+.BR chunk=SIZE , passes=N , converge=N , max-est=N
+Copy granularity and the bounds on the convergence loop.
+.TP
+.BR tracker=auto|bpf|ftrace
+How block writes on the donor are tracked.
+.TP
+.BR stall=SECONDS , settle=MILLISECONDS
+Silence that counts as a wedged connection, and the delay before a pass starts.
+.TP
+.BR precheck=1|0 , precheck-dir=DIR , precheck-cow=SIZE
+Run postfix and verify on a snapshot of the copy while the donor keeps running.
+.TP
+.BR patience=SECONDS
+Extra copying time to trade for a shorter freeze.
+.TP
+.BR verify-hash=1 , cutover-port=PORT , dpkg-wait=SECONDS
+Hash every frozen volume, the port used for the switch-over, and how long to
+let an interrupted package operation on the donor finish before the freeze.
+.TP
+.BR compress=auto|zstd[:LEVEL]|lz4|none
+Compression of the stream; off-line mode uses lz4 by default.
+Off-line mode only:
+.TP
+.BR data=ssh|raw , sshd-port=PORT , watchdog=SECONDS
+Transport of the copy, the port the donor listens on, and the watchdog timeout.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Runtime failure.
+.TP
+.B 2
+Usage, environment or identity problem; nothing was written.
+.TP
+.B 3
+Verification failed.
+The target disk has been written: do not boot it.
+.TP
+.B 4
+The plan is infeasible, or a hand-edited plan was rejected.
+.SH ENVIRONMENT
+.TP
+.B RUN
+Session directory, default
+.IR /run/migrator .
+It holds the plan, the state of the run and the log.
+.TP
+.B MIGRATOR_LIB
+Directory holding the shell libraries.
+Set automatically from the location of the program; override it only when the
+libraries live elsewhere.
+.TP
+.B MIGRATOR_AGENT
+Path to
+.BR migrator-agent ,
+used instead of the search beside the libraries and on
+.SM PATH .
+.SH FILES
+.TP
+.I /run/migrator/plan
+The migration plan, written by the
+.B plan
+step and editable before
+.BR apply .
+.TP
+.I /run/migrator/state
+What the run has completed so far; this is what makes the steps idempotent.
+.TP
+.I /run/migrator/log
+Transcript of the run.
+.PP
+The session directory is on a tmpfs, so it does not survive a reboot.
+.SH EXAMPLES
+Run the whole migration, taking the donor address from the command line:
+.PP
+.RS 4
+.nf
+migrator root@10.0.0.12
+.fi
+.RE
+.PP
+Read both machines and inspect the plan first:
+.PP
+.RS 4
+.nf
+migrator \-s plan root@10.0.0.12
+$EDITOR /run/migrator/plan
+migrator \-s check
+.fi
+.RE
+.PP
+Turn compression off and allow five convergence passes:
+.PP
+.RS 4
+.nf
+migrator \-o compress=none \-o converge=5 root@10.0.0.12
+.fi
+.RE
+.SH SEE ALSO
+.BR ssh (1),
+.BR partclone (8),
+.BR mdadm (8),
+.BR lvm (8)
+.PP
+The full documentation, including the option reference and the acceptance
+checks, is in the project wiki at
+.IR https://github.com/tktogether/migrator/wiki .

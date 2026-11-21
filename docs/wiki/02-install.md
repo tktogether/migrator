@@ -3,6 +3,7 @@
 migrator 的全部代码以仓库为唯一来源，没有内置的厂商下载地址。安装方式取决于使用场景：
 
 - 在已有仓库中构建并安装；
+- 装发行版格式的 deb 包（仓库自带打包目录）；
 - 在迁移 Live 上从自行托管的发布包安装；
 - 构建迁移 Live，使其自带工具与依赖。
 
@@ -24,7 +25,10 @@ make install
 make install PREFIX=/opt/migrator
 ```
 
-注意：主程序只自动识别源码树布局与 `/usr/local/lib/migrator`。使用非默认 `PREFIX` 时，库目录不会被自动发现，需要额外处理或改用默认前缀。生产环境建议安装到 `/usr/local`。
+主程序按候选路径查找库目录：`$HERE/../lib`、`$HERE/../lib/migrator`、`$HERE/../share/migrator`、
+`/usr/local/lib/migrator`、`/usr/lib/migrator`、`/usr/share/migrator`。源码树布局、
+`/usr/local` 安装与发行版包布局都在其中，因此 `PREFIX=/opt/migrator` 也可以直接运行。
+都不命中时程序报错退出，此时用 `MIGRATOR_LIB` 指定库目录。
 
 安装内容：
 
@@ -47,7 +51,38 @@ migrator -h
 
 `-V` 输出主程序版本、库目录和 Live 构建标识。`-h` 列出全部选项、阶段和退出码。
 
-## 2. 从发布包安装
+## 2. 从 deb 安装
+
+仓库带 `debian/` 打包目录，可以生成发行版格式的包：
+
+```sh
+make deb
+```
+
+`dpkg-buildpackage` 把成果放在仓库的上一级目录，例如 `migrator_1.2-1_all.deb` 与
+`migrator-agent_1.2-1_amd64.deb`。安装时用 apt，让依赖一起装上：
+
+```sh
+sudo apt install ../migrator_1.2-1_all.deb ../migrator-agent_1.2-1_amd64.deb
+```
+
+| 包 | 架构 | 路径 | 内容 |
+|---|---|---|---|
+| `migrator` | all | `/usr/sbin/migrator` | 主程序 |
+| `migrator` | all | `/usr/share/migrator/*.sh` | 被主程序加载的库 |
+| `migrator` | all | `/usr/share/migrator/VERSION` | 安装版本 |
+| `migrator` | all | `/usr/share/man/man8/migrator.8` | 手册页，`man migrator` |
+| `migrator-agent` | any | `/usr/lib/migrator/migrator-agent` | 在线迁移使用的静态 agent |
+
+两个包的版本互锁，升级时一并处理。`migrator` 依赖 `bash`、`coreutils`、`util-linux`、
+`openssh-client`、`tar`、`gzip`、`awk`；`partclone`、`xfsprogs`、`mdadm`、`lvm2`、`zstd`、
+`lz4`、`initramfs-tools` 等放在 `Recommends`，`qemu-system-x86`、`gdisk`、`grub2-common`
+在 `Suggests`。工具在 bootstrap 阶段还会按缺失项用 apt 补齐，不必为了跑一次迁移先装满全部
+工具。
+
+进入发行版归档后安装方式为 `apt install migrator`。当前尚未提交归档，只能从本地包安装。
+
+## 3. 从发布包安装
 
 `tools/install.sh` 从 `MIGRATOR_URL` 指向的目录获取发布物。该目录必须包含：
 
@@ -85,7 +120,7 @@ MIGRATOR_URL=https://download.example.com/migrator \
 
 `tools/install.sh` 只依赖 shell、`curl` 或 `wget`、`tar` 与 `sha256sum`。迁移 Live 的根文件系统位于内存，重启后安装内容丢失，因此每次启动 Live 后需要重新安装。
 
-## 3. 构建 agent
+## 4. 构建 agent
 
 ```sh
 make agent
@@ -101,7 +136,7 @@ make agent-test
 
 该测试需要 root、loop 设备和 `losetup`、`mkfs.ext4`、`sfdisk`。测试覆盖 ext4 整盘与分区、eBPF 与 ftrace 两种跟踪方式、块设备目标、cutover 轮询和不可冻结的 vfat 场景。该测试不修改真实磁盘，但会创建和销毁 loop 设备。
 
-## 4. 构建迁移 Live
+## 5. 构建迁移 Live
 
 仓库提供两份构建脚本：
 
@@ -134,7 +169,7 @@ BUILD_DIR=/data/live-build TARBALL=/tmp/migrator.tar.gz \
 
 产物位置、依赖包、构建约束与自包含引导方法见 [迁移 Live 构建](maintainers/live-build.md)。
 
-## 5. 在迁移 Live 中准备工具
+## 6. 在迁移 Live 中准备工具
 
 如果使用现成的迁移 Live，且其中未包含 migrator，可在 Live 中执行：
 
@@ -150,13 +185,13 @@ migrator -V
 
 迁移开始前，工具会自动检查两端缺失的运行时工具，并从镜像安装。离线环境或不希望运行期安装时，使用 `-o offline=1`；此时缺失的工具只产生警告，核心工具缺失会导致后续阶段拒绝执行。
 
-## 6. 版本一致性
+## 7. 版本一致性
 
 离线模式要求两端使用同一次构建的 Live。`bootstrap` 阶段会比较 partclone、lz4 等工具版本；不一致时默认拒绝继续。只有确认兼容性后，才可使用 `-o force=1` 跳过该检查。
 
 在线模式要求目标端的 `migrator-agent` 与源端运行的 agent 版本一致。agent 由目标端上传到源端的 `/run` 临时目录，版本不一致会被拒绝。
 
-## 7. 常见安装问题
+## 8. 常见安装问题
 
 | 现象 | 原因 | 处理 |
 |---|---|---|

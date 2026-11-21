@@ -1,0 +1,18 @@
+#!/bin/sh
+# The migration itself needs two machines, root and spare disks, so what is
+# checked here is that the installed pair starts on this architecture and
+# behaves the way the packages promise: the driver finds its libraries, the
+# help text is reachable, an unknown option is refused, and the agent beside it
+# runs.
+set -eu
+
+migrator -V | grep -q '^migrator '
+migrator -h > /dev/null
+
+if migrator -Z > /dev/null 2>&1; then
+	echo "an unknown option was accepted" >&2
+	exit 1
+fi
+
+test -x /usr/lib/migrator/migrator-agent
+/usr/lib/migrator/migrator-agent version > /dev/null
