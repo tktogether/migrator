@@ -11,22 +11,22 @@ migrator 的代码来源为仓库，程序中没有内置的下载地址。安�
 
 ## 用一条命令安装
 
-源码托管在 GitHub。jsDelivr、Gitee 与 GitHub raw 三个服务同步该仓库。`tools/get.sh` 按此顺序逐个请求，使用第一个可用的源。
+源码托管在 GitHub。Gitee、jsDelivr 与 GitHub raw 三个服务同步该仓库。`tools/get.sh` 按此顺序逐个请求，使用第一个应答的源。
 
 ```sh
-curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh
 ```
 
 `tools/get.sh` 从选定的源逐个读取文件，组成源码树。该脚本按 `tools/install.sh` 要求的格式打包。打包完成后交给 `tools/install.sh` 安装。下载安装与本地 tarball 安装共用同一段安装代码。代码负责暂存、最后一步改名，以及安装后的 `-V` 校验。
 
 安装落点有两套。`tools/get.sh` 与 `make install` 把程序装入 `$PREFIX/sbin`，把库装入 `$PREFIX/lib/migrator`。发行版包按 Debian 策略装入 `/usr/sbin`、`/usr/share/migrator` 与 `/usr/lib/migrator`。两者的文件清单见下文各节。
 
-三个源的适用网络不同。jsDelivr 为全球 CDN，中国大陆以外访问较快。Gitee 在中国大陆境内访问较快，跨境访问存在拥塞与连接重置。GitHub raw 作为兜底。脚本不使用 Gitee 作为默认源。
+三个源的适用网络不同。Gitee 在中国大陆境内访问较快，跨境访问存在拥塞与连接重置。jsDelivr 为全球 CDN，中国大陆以外访问较快。GitHub raw 作为兜底。默认从 Gitee 开始，因为文档与主要使用场景都在中国大陆境内。
 
-中国大陆境内可指定 Gitee 源：
+入口地址只决定这份脚本从哪个地址取到。脚本开始安装时按上面的顺序重新请求三个源，输出中逐条打印尝试的地址。中国大陆以外的网络可直接指定 jsDelivr：
 
 ```sh
-curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh -s -- --base jsdelivr
 ```
 
 指定来源、代理或安装目录时，设置对应的环境变量：

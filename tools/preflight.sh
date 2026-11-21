@@ -421,6 +421,9 @@ else fail "默认路由" "本机没有默认路由，两台主机之间无法通
 
 # 在线安装依赖的三个源。中国大陆境内的网络通常可以访问 Gitee，通常不能访问
 # GitHub，因此列表中有三个地址。
+# 末尾给出的安装命令使用第一个可访问的地址。管道传入的脚本无法得知自己从哪个
+# 地址取到，所以出处不作为依据，只按本机此刻能否连通来选。
+src=
 if have curl || have wget; then
 	reach=; unreach=; i=0
 	for b in "https://gitee.com" "https://cdn.jsdelivr.net" "https://raw.githubusercontent.com"; do
@@ -433,10 +436,24 @@ if have curl || have wget; then
 			wget -q -T 6 -O /dev/null "$b" 2>/dev/null && ok=1 || ok=
 		fi
 		spin_stop
-		if [ -n "$ok" ]; then reach="${reach:+$reach、}$h"; else unreach="${unreach:+$unreach、}$h"; fi
+		if [ -n "$ok" ]; then
+			reach="${reach:+$reach、}$h"
+			# 只记录第一条，用作安装命令的地址
+			if [ -z "$src" ]; then
+				case $b in
+					https://gitee.com)         src=https://gitee.com/tktogether/migrator/raw/master/tools/get.sh ;;
+					https://cdn.jsdelivr.net)  src=https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh ;;
+					*)                         src=https://raw.githubusercontent.com/tktogether/migrator/master/tools/get.sh ;;
+				esac
+			fi
+		else
+			unreach="${unreach:+$unreach、}$h"
+		fi
 	done
-	if [ -n "$unreach" ]; then
-		warn "下载源" "以下地址不可访问：$unreach。安装脚本会改用其余地址"
+	if [ -n "$unreach" ] && [ -n "$reach" ]; then
+		warn "下载源" "以下地址不可访问：$unreach。安装时使用其余地址"
+	elif [ -n "$unreach" ]; then
+		warn "下载源" "三个地址均不可访问：$unreach。在线安装无法进行"
 	else
 		pass "下载源" "$reach 均可访问"
 	fi
@@ -559,8 +576,14 @@ fi
 
 # --- 下一步 ------------------------------------------------------------------
 if ! have migrator && { [ -z "$SELF" ] || [ ! -x "$(dirname "$SELF")/../bin/migrator" ]; }; then
-	say "本机尚未安装 migrator。安装命令如下："
-	printf '    %s\n' "curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh"
+	if [ -n "$src" ]; then
+		say "本机尚未安装 migrator。下面的命令使用本机可访问的下载地址："
+		printf '    %s\n' "curl -fsSL $src | sh"
+	elif have curl || have wget; then
+		say "本机尚未安装 migrator，三个下载地址在当前网络下均不可访问。请先解决网络，或把源码树复制到本机后执行 make install"
+	else
+		say "本机尚未安装 migrator。本机没有 curl 也没有 wget，无法在线安装。可把源码树复制到本机后执行 make install"
+	fi
 fi
 
 if [ -n "$GO" ]; then

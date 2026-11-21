@@ -102,6 +102,12 @@ assert_has "preflight documents --fix"   "--fix"   "$out"
 out=$(https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
 	sh "$REPO/tools/preflight.sh" 2>&1 || true)
 assert_has "preflight prints a summary" "项检查" "$out"
+# 下载地址只在探测到可用的源时才输出：早期的写法固定打印 jsDelivr，在大陆网络的
+# 机器上那条命令必然失败。本用例让三个源都不可达，因此不应出现任何下载地址。
+case $out in
+	*/gh/tktogether/*|*/tktogether/migrator/raw/*) _fail "preflight prints no unusable address" "printed a download URL" ;;
+	*) _pass "preflight prints no unusable address" ;;
+esac
 # 有源端地址时输出可以继续，没有源端地址时输出了解目标端，有 FAIL 时要求先处理。
 # 三句话都在说明下一步做什么，运行测试的机器是否为 root、缺少哪些软件包都不改变这一点。
 case $out in

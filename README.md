@@ -87,7 +87,7 @@ migrator -o compress=none -o converge=5 root@10.0.0.12
 在已有系统上从仓库安装：
 
 ```sh
-curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh
 ```
 
 从源码树安装或从发布包安装：

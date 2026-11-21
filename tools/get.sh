@@ -4,7 +4,7 @@
 # git repository, and three services mirror that repository for free. This
 # script tries them in order and uses the first one that answers.
 #
-#   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
+#   curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh
 #   curl -fsSL .../tools/get.sh | sh -s -- --check        # check only, install nothing
 #   curl -fsSL .../tools/get.sh | sh -s -- -s plan root@192.168.1.111    # install, then run
 #
@@ -13,11 +13,10 @@
 # That script is a single file: it also runs on its own, without this one.
 #
 # Sources, in the order tried (the first that serves VERSION wins):
-#   jsDelivr      cdn.jsdelivr.net/gh/tktogether/migrator@master    a global CDN
 #   Gitee         gitee.com/<owner>/migrator/raw/master             fast inside
-#                 mainland China, and only there: cross-border paths to it are
-#                 congested and routinely reset, so it is not the primary
-#                 source for an audience outside China
+#                 mainland China; cross-border paths to it are congested and
+#                 routinely reset, so from outside China pass --base jsDelivr
+#   jsDelivr      cdn.jsdelivr.net/gh/tktogether/migrator@master    a global CDN
 #   GitHub raw    raw.githubusercontent.com/tktogether/migrator/master
 #
 # All three follow master, so there is no tag to cut and no release to
@@ -70,7 +69,8 @@ usage() {
   --ref REF      读取的分支或标签（默认 master）。jsDelivr 对分支内容有缓存。
                  需要立即生效或可复现的安装时，指定提交号或标签，例如 --ref 1.2
   --proxy URL    为每个请求添加该前缀，适用于 ghproxy 类服务
-  --base URL     只使用该地址，不依次尝试三个镜像
+  --base SRC     只使用该源，不依次尝试三个镜像。SRC 可以是完整地址，
+                 也可以是源名 gitee、jsdelivr、github
   -h, --help     显示本说明
 
 环境变量与选项同名时覆盖选项：MIGRATOR_PREFIX、MIGRATOR_REF、MIGRATOR_PROXY、
@@ -108,10 +108,10 @@ elif command -v wget >/dev/null 2>&1; then
 		wget -q -T 30 -t 1 -O "$2" "$1"
 	}
 else
-	CODE=2 die "neither curl nor wget is here: install one, or copy the tree over and run 'make install'"
+	CODE=2 die "本机既没有 curl 也没有 wget。请先安装其中一个，或把源码树复制到本机后执行 make install"
 fi
 
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/migrator-get.XXXXXX") || die "cannot create a scratch dir"
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/migrator-get.XXXXXX") || die "无法创建临时目录"
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 # --- pick a source -----------------------------------------------------------
@@ -119,22 +119,28 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 # mirror is not serving this repository at this ref (a wrong owner, a repo
 # that is still private, a tag that was not pushed).
 if [ -n "${MIGRATOR_BASE:-}" ]; then
+	# 源名是完整地址的简写：读者不必记住三种镜像的路径形式
+	case $MIGRATOR_BASE in
+		gitee)     MIGRATOR_BASE=https://gitee.com/$GITEE/raw/$REF ;;
+		jsdelivr)  MIGRATOR_BASE=https://cdn.jsdelivr.net/gh/$OWNER@$REF ;;
+		github)    MIGRATOR_BASE=https://raw.githubusercontent.com/$OWNER/$REF ;;
+	esac
 	BASES=$MIGRATOR_BASE
 else
-	BASES="https://cdn.jsdelivr.net/gh/$OWNER@$REF
-https://gitee.com/$GITEE/raw/$REF
+	BASES="https://gitee.com/$GITEE/raw/$REF
+https://cdn.jsdelivr.net/gh/$OWNER@$REF
 https://raw.githubusercontent.com/$OWNER/$REF"
 fi
 
 BASE=
 for b in $BASES; do
-	say "trying $b"
+	say "尝试下载源 $b"
 	if fetch "$b/VERSION" "$TMP/VERSION" && [ -s "$TMP/VERSION" ]; then
 		BASE=$b
 		break
 	fi
 done
-[ -n "$BASE" ] || { CODE=2 die "no source answered. Try again with MIGRATOR_PROXY=https://a.proxy/ or -base URL (sources tried: $(echo $BASES | tr '\n' ' '))"; }
+[ -n "$BASE" ] || { CODE=2 die "安装所需的文件没有从任何下载地址取到。可设置 MIGRATOR_PROXY 指向代理后重试，或用 --base 指定地址。已尝试：$(echo $BASES | tr '\n' ' ')"; }
 
 # --- --check: run the preflight, install nothing ------------------------------
 # The question "can this box do the migration" should cost one command and
@@ -142,8 +148,8 @@ done
 # the same mirror and handed the arguments verbatim.
 if [ -n "$CHECK" ]; then
 	say "只检查，不安装。下载源：$BASE"
-	fetch "$BASE/tools/preflight.sh" "$TMP/preflight.sh" || die "cannot download $BASE/tools/preflight.sh"
-	[ -s "$TMP/preflight.sh" ] || die "$BASE/tools/preflight.sh is empty"
+	fetch "$BASE/tools/preflight.sh" "$TMP/preflight.sh" || die "无法下载 $BASE/tools/preflight.sh"
+	[ -s "$TMP/preflight.sh" ] || die "$BASE/tools/preflight.sh 的内容为空"
 	# 管道进来时 stdin 是上面的脚本，已经读完：把键盘接回终端，--go 才问得动人。
 	# 试探放在子 shell 里：Git Bash 与容器里 /dev/tty 存在却打不开。
 	if [ -t 0 ] || ! ( : < /dev/tty ) 2>/dev/null; then
@@ -154,12 +160,12 @@ if [ -n "$CHECK" ]; then
 	exit "$rc"
 fi
 
-command -v tar >/dev/null 2>&1 || die "tar is missing"
-command -v gzip >/dev/null 2>&1 || die "gzip is missing"
+command -v tar >/dev/null 2>&1 || die "本机缺少 tar"
+command -v gzip >/dev/null 2>&1 || die "本机缺少 gzip"
 
 VER=$(tr -d ' \t\r\n' < "$TMP/VERSION")
-[ -n "$VER" ] || die "$BASE/VERSION is empty"
-say "installing $VER from $BASE"
+[ -n "$VER" ] || die "$BASE/VERSION 的内容为空"
+say "从 $BASE 安装 $VER"
 
 # --- fetch the tree ----------------------------------------------------------
 # The list is the tree, not the tarball: the mirrors serve files out of a
@@ -188,27 +194,27 @@ NOTICE
 TRADEMARK.md"
 
 SRC=$TMP/tree/migrator-$VER
-mkdir -p "$SRC/bin" "$SRC/lib" || die "cannot create $SRC"
+mkdir -p "$SRC/bin" "$SRC/lib" || die "无法创建 $SRC"
 for f in $FILES; do
-	mkdir -p "$SRC/$(dirname "$f")" || die "cannot create $SRC/$(dirname "$f")"
-	[ "$f" = lib/VERSION ] || fetch "$BASE/$f" "$SRC/$f" || die "cannot download $BASE/$f"
+	mkdir -p "$SRC/$(dirname "$f")" || die "无法创建 $SRC/$(dirname "$f")"
+	[ "$f" = lib/VERSION ] || fetch "$BASE/$f" "$SRC/$f" || die "无法下载 $BASE/$f"
 done
 printf '%s\n' "$VER" > "$SRC/lib/VERSION"
-chmod 0755 "$SRC/bin/migrator" || die "cannot set modes on the driver"
+chmod 0755 "$SRC/bin/migrator" || die "无法设置驱动器的文件权限"
 
 if [ -n "$PIN" ]; then
 	got=$(sha256sum "$SRC/bin/migrator" | cut -d' ' -f1)
-	[ "$got" = "$PIN" ] || die "the driver's sha256 is $got, not the pinned $PIN (a mirror serving something else?)"
-	say "driver sha256 matches the pinned value"
+	[ "$got" = "$PIN" ] || die "驱动器的 sha256 为 $got，与指定的 $PIN 不一致。该地址可能提供的是另一份代码"
+	say "驱动器的 sha256 与指定值一致"
 fi
 
 # --- let tools/install.sh do the install -------------------------------------
 # It wants a directory holding SHA256SUMS and one migrator-<ver>.tar.gz, which
 # is exactly what a release publish produces; making that here means the
 # download path and the offline path run the same installer.
-fetch "$BASE/tools/install.sh" "$TMP/install.sh" || die "cannot download $BASE/tools/install.sh"
-( cd "$TMP/tree" && tar -czf "$TMP/migrator-$VER.tar.gz" "migrator-$VER" ) || die "cannot pack the tree"
-( cd "$TMP" && sha256sum "migrator-$VER.tar.gz" > SHA256SUMS ) || die "cannot write SHA256SUMS"
+fetch "$BASE/tools/install.sh" "$TMP/install.sh" || die "无法下载 $BASE/tools/install.sh"
+( cd "$TMP/tree" && tar -czf "$TMP/migrator-$VER.tar.gz" "migrator-$VER" ) || die "无法打包源码树"
+( cd "$TMP" && sha256sum "migrator-$VER.tar.gz" > SHA256SUMS ) || die "无法写入 SHA256SUMS"
 
-say "installing into $PREFIX"
+say "安装到 $PREFIX"
 MIGRATOR_URL="file://$TMP" MIGRATOR_PREFIX="$PREFIX" sh "$TMP/install.sh" "$@"

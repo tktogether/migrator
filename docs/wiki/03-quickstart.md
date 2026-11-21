@@ -66,16 +66,18 @@ sh -c "$(curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/prefl
 需要由脚本选择源并在多个源之间回落时，使用安装脚本的检查模式，结果相同：
 
 ```sh
-curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh -s -- --check
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh -s -- --check
 ```
 
 ## 用一条命令安装
 
-工具本身也可用一条命令安装。源码托管在 GitHub，三个源按顺序回落。中国大陆境内通常使用 Gitee。
+工具本身也可用一条命令安装。源码托管在 GitHub，三个源按顺序回落，默认从 Gitee 开始。
 
 ```sh
-curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh
 ```
+
+中国大陆以外的网络可用 `--base jsdelivr` 直接指定全球 CDN。可指定 `gitee`、`jsdelivr`、`github` 三个源名，也可以给出完整地址。
 
 ## 交互式运行
 
