@@ -3,16 +3,15 @@
 migrator 用于将一台已安装的 Linux 服务器迁移到另一台机器。数据通过网络直接传输，
 不需要中间存储。
 
-迁移在新机器上执行，参数为旧机器的地址：
+迁移在新机器上执行，参数为旧机器的地址。安装方法见后文「安装」一节。
 
 ```sh
-make install                    # 见「安装」
-migrator root@10.0.0.12         # 在新机器上执行，参数是旧机器的地址
+migrator root@10.0.0.12
 ```
 
 传输以文件系统为单位，因此新磁盘可以小于旧磁盘，两端的扇区布局也不需要一致。
 
-迁移按阶段执行。plan 阶段读取两端的磁盘与文件系统信息，生成迁移计划并保存到
+迁移按阶段执行。`plan` 阶段读取两端的磁盘与文件系统信息，生成迁移计划并保存到
 `/run/migrator/plan`。计划是纯文本文件，内容包括磁盘布局、各文件系统的创建参数，
 以及每个卷采用块级复制还是文件级复制。计划可以手动修改，修改后用 `-s check`
 校验。
@@ -58,25 +57,47 @@ Windows。
 
 ## 阶段
 
-各阶段均可用 `-s` 单独执行。已完成的阶段会被跳过，因此某阶段失败后可以直接重试。
+各阶段均可用 `-s` 单独执行。已完成的阶段会被跳过，因此某个阶段失败后可以直接重试。
+
+| 阶段 | 作用 |
+|---|---|
+| `plan` | 读取两端的磁盘与文件系统信息，生成 `/run/migrator/plan`。只读，不修改两端 |
+| `check` | 校验手工修改过的计划 |
+| `apply` | 创建分区、LVM、swap 与文件系统。执行前要求确认 |
+| `transfer` | 传输数据 |
+| `postfix` | 在目标系统的 chroot 环境中重建 fstab、mdadm、initramfs、grub 与网络配置 |
+| `verify` | 执行数十项检查。退出码 3 表示不要重启 |
+| `cutover` | 让旧机器下线，新机器启动 |
+
+按上表顺序执行：
 
 ```sh
-migrator -s plan root@10.0.0.12   # 只读：读取两端信息，生成计划
-$EDITOR /run/migrator/plan        # 按需修改
-migrator -s check                 # 校验计划
-migrator -s apply                 # 分区、LVM、swap、mkfs（先确认再执行）
-migrator -s transfer              # 传输数据
-migrator -s postfix               # chroot 内：fstab、mdadm、initramfs、grub、网络
-migrator -s verify                # 数十项检查，退出码 3 表示不要重启
-migrator -s cutover               # 旧机器下线，新机器启动
+migrator -s plan root@10.0.0.12
+migrator -s apply
+migrator -s transfer
+migrator -s postfix
+migrator -s verify
+migrator -s cutover
 ```
 
-`migrator -n` 为演练模式：只打印计划与将要执行的命令，不修改两端。
+需要调整计划时，在 `plan` 之后编辑计划并校验，然后继续：
+
+```sh
+$EDITOR /run/migrator/plan
+migrator -s check
+```
 
 ## 选项
 
 `migrator -h` 列出全部开关、阶段与 `-o` 键。不支持的键会直接报错，不会静默忽略。
-`-o` 每次只能指定一个键值对，因为逗号属于值的一部分：
+
+`-n` 为演练模式：只打印计划与将要执行的命令，不修改两端。
+
+```sh
+migrator -n -s plan root@10.0.0.12
+```
+
+`-o` 每次只能指定一个键值对，因为逗号属于值的一部分。
 
 ```sh
 migrator -o compress=none -o converge=5 root@10.0.0.12
@@ -84,31 +105,36 @@ migrator -o compress=none -o converge=5 root@10.0.0.12
 
 ## 安装
 
-在已有系统上从仓库安装：
+安装到已有系统有三种方式，任选一种。
+
+**从镜像安装。** 脚本从镜像读取源码树，安装到 `/usr/local/sbin` 与 `/usr/local/lib/migrator`。`PREFIX`、`--ref` 与海外网络可用的 `--base` 见 [docs/wiki/02-install.md](docs/wiki/02-install.md)。
 
 ```sh
 curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/get.sh | sh
 ```
 
-从源码树安装或从发布包安装：
+**从源码树安装。** 默认前缀为 `/usr/local`，可用 `PREFIX` 改变。
 
 ```sh
-make install                                   # 装到 /usr/local/sbin，PREFIX= 可改
-sh tools/install.sh                            # 从 MIGRATOR_URL 指向的目录取 tarball
+make install
+make install PREFIX=/opt/migrator
+```
+
+**从发布包安装。** `tools/install.sh` 只使用 `MIGRATOR_URL`，没有内置下载地址。该目录中需要有 `SHA256SUMS` 与 `migrator-<ver>.tar.gz`。发行物的存放位置由部署方决定。
+
+```sh
+sh tools/install.sh
 MIGRATOR_URL=file://$PWD/dist sh tools/install.sh
 ```
 
-`tools/install.sh` 只使用 `MIGRATOR_URL`，没有内置下载地址；该目录中需要有
-`SHA256SUMS` 和 `migrator-<ver>.tar.gz`。发行物的存放位置由部署方决定。
-
 ## 构建
 
-```sh
-make test         # shellcheck + 表测试，几秒，不需要 root
-make agent        # 静态 agent，需要 C 编译器和 libzstd 静态库
-make agent-test   # 在本机 loop 设备上运行 agent，需要 root
-make deb          # 生成 migrator 与 migrator-agent 两个 deb 包，需要 dpkg-dev
-```
+| 目标 | 作用 |
+|---|---|
+| `make test` | shellcheck 与表测试，数秒，不需要 root |
+| `make agent` | 构建静态链接的 agent，需要 C 编译器与 libzstd 静态库 |
+| `make agent-test` | 在本机 loop 设备上运行 agent，需要 root |
+| `make deb` | 生成 `migrator` 与 `migrator-agent` 两个 deb 包，需要 dpkg-dev |
 
 主体由 bash 脚本与若干被 source 的库组成。`agent/` 是一个 C 程序，运行时无外部
 依赖，静态链接后可直接放入 Live 环境。`rig/` 是物理机测试环境；
