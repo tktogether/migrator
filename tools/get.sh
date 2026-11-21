@@ -5,7 +5,7 @@
 # script tries them in order and uses the first one that answers.
 #
 #   curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh
-#   curl -fsSL .../tools/get.sh | sh -s -- --check        # 只体检，不装任何东西
+#   curl -fsSL .../tools/get.sh | sh -s -- --check        # check only, install nothing
 #   curl -fsSL .../tools/get.sh | sh -s -- -s plan root@192.168.1.111    # install, then run
 #
 # --check fetches tools/preflight.sh from the same mirror and runs it, so the
@@ -64,17 +64,19 @@ usage() {
 	cat <<'EOF'
 用法：get.sh [选项] [-- migrator 的参数...]
 
-  --check            只体检，不安装：取 tools/preflight.sh 来跑，参数原样传给它
-  --prefix DIR       装到这里（默认 /usr/local）
-  --ref REF          取哪个 ref（默认 master。jsDelivr 对分支内容有缓存，
-                     需要立即生效或可复现时，钉提交号或 tag，例如 --ref 1.2）
-  --proxy URL        所有请求前面加这个前缀（ghproxy 类服务）
-  --base URL         只用这一个源，不走三镜像回落
-  -h, --help         这一段
+  从镜像读取源码并安装 migrator，默认安装到 /usr/local。
+  --check        只检查，不安装。脚本读取 tools/preflight.sh 并运行，选项原样传给该脚本
+  --prefix DIR   安装目录（默认 /usr/local）
+  --ref REF      读取的分支或标签（默认 master）。jsDelivr 对分支内容有缓存。
+                 需要立即生效或可复现的安装时，指定提交号或标签，例如 --ref 1.2
+  --proxy URL    为每个请求添加该前缀，适用于 ghproxy 类服务
+  --base URL     只使用该地址，不依次尝试三个镜像
+  -h, --help     显示本说明
 
-环境变量同名覆盖：MIGRATOR_PREFIX / MIGRATOR_REF / MIGRATOR_PROXY / MIGRATOR_BASE /
-MIGRATOR_GITEE / MIGRATOR_SHA256。不给 --check 时，装完会把剩下的参数交给 migrator，
-所以 "curl ... | sh -s -- -s plan root@IP" 一步到位。
+环境变量与选项同名时覆盖选项：MIGRATOR_PREFIX、MIGRATOR_REF、MIGRATOR_PROXY、
+MIGRATOR_BASE、MIGRATOR_GITEE、MIGRATOR_SHA256。
+不使用 --check 时，安装完成后其余参数传给 migrator。
+因此「curl ... | sh -s -- -s plan root@IP」可以在一条命令中完成安装与运行。
 EOF
 }
 
@@ -139,7 +141,7 @@ done
 # leave nothing behind. preflight.sh is a single file, so it is fetched from
 # the same mirror and handed the arguments verbatim.
 if [ -n "$CHECK" ]; then
-	say "只体检，不安装（$BASE）"
+	say "只检查，不安装。下载源：$BASE"
 	fetch "$BASE/tools/preflight.sh" "$TMP/preflight.sh" || die "cannot download $BASE/tools/preflight.sh"
 	[ -s "$TMP/preflight.sh" ] || die "$BASE/tools/preflight.sh is empty"
 	# 管道进来时 stdin 是上面的脚本，已经读完：把键盘接回终端，--go 才问得动人。

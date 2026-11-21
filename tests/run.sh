@@ -19,8 +19,10 @@ REPO=$(readlink -f "$(dirname "$0")/..")
 cd "$REPO" || exit 2
 shopt -s nullglob
 
-# /tmp on the build host is a small tmpfs shared with the stands; /var/tmp is not
-TMP=$(mktemp -d /var/tmp/xslive-migrator-test.XXXXXX) || exit 2
+# /tmp on the build host is a small tmpfs shared with the stands; /var/tmp is not.
+# A host without /var/tmp (Git Bash) falls back to TMPDIR so the suite still runs.
+TMP=$(mktemp -d /var/tmp/xslive-migrator-test.XXXXXX 2>/dev/null) ||
+	TMP=$(mktemp -d "${TMPDIR:-/tmp}/xslive-migrator-test.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT
 FAILED=0
 

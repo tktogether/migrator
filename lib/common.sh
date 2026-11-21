@@ -30,7 +30,7 @@ CLEANUP_CMDS=()
 # --- output -----------------------------------------------------------------
 _tag() { if [ -n "$ROLE_TAG" ]; then echo "[migrator $ROLE_TAG]"; else echo "[migrator]"; fi; }
 _ts()  { date '+%Y-%m-%d %H:%M:%S'; }
-log()  { mkdir -p "$RUN" 2>/dev/null; echo "$(_ts) $*" >> "$RUN/log" 2>/dev/null || true; }
+log()  { mkdir -p "$RUN" 2>/dev/null; echo "$(_ts) $*" 2>/dev/null >> "$RUN/log" || true; }
 say()  { echo "$(_tag) $*"; log "$*"; }
 # warnings go to both streams (startup-task keeps only stdout on the console);
 # plain writes, not tee /dev/stderr: tee would reopen a redirected stderr file

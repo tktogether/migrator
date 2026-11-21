@@ -38,14 +38,14 @@ wz_menu() {   # wz_menu VAR QUESTION DEFAULT_INDEX -- CHOICE...
 	say "$q"
 	for o in "${opts[@]}"; do
 		if [ "${o#*|}" = "$o" ]; then printf '    %d) %s\n' "$i" "$o"
-		else printf '    %d) %s — %s\n' "$i" "${o%%|*}" "${o#*|}"; fi
+		else printf '    %d) %s：%s\n' "$i" "${o%%|*}" "${o#*|}"; fi
 		i=$((i + 1))
 	done
-	read -rp "$(_tag) 选 1-${#opts[@]}  [$d] " a || die "$EX_ENV" "no answer to '$q'"
+	read -rp "$(_tag) 请输入编号 1-${#opts[@]}  [$d] " a || die "$EX_ENV" "no answer to '$q'"
 	a=${a:-$d}
 	case $a in /dev/*) printf -v "$__v" '%s' "$a"; return 0 ;; esac
-	case $a in ''|*[!0-9]*) die "$EX_ENV" "'$a' 不是编号：输 1-${#opts[@]}，或直接写磁盘路径" ;; esac
-	[ "$a" -ge 1 ] && [ "$a" -le ${#opts[@]} ] || die "$EX_ENV" "编号 $a 超出范围 1-${#opts[@]}"
+	case $a in ''|*[!0-9]*) die "$EX_ENV" "「$a」不是编号。请输入 1 至 ${#opts[@]} 的编号，或输入 /dev/ 开头的磁盘路径" ;; esac
+	[ "$a" -ge 1 ] && [ "$a" -le ${#opts[@]} ] || die "$EX_ENV" "编号 $a 超出范围，应在 1 至 ${#opts[@]} 之间"
 	printf -v "$__v" '%s' "${opts[$((a - 1))]%%|*}"
 }
 
@@ -82,27 +82,27 @@ wz_run() {
 	self=$(readlink -f "$0")
 	donor=${WZ_DONOR:-${PA_DONOR:-}}
 
-	say "交互式设置：直接回车接受方括号里的默认值，Ctrl-C 随时退出。"
-	say "这里只回答问题；真正迁移时计划照样打印，目标盘照样要你亲手打一遍。"
+	say "交互式设置：按回车键采用方括号内的默认值。按 Ctrl-C 可随时退出。"
+	say "本步骤只收集参数。迁移开始时仍会打印计划，目标磁盘仍需要手工输入一次。"
 
 	# --- the source ---------------------------------------------------------
 	while [ -z "$donor" ]; do
-		wz_ask donor "源机地址（例 root@192.168.1.111，只写 IP 也行）" ""
-		[ -n "$donor" ] || warn "源机地址不能为空"
+		wz_ask donor "源端地址（例 root@192.168.1.111，可省略用户名）" ""
+		[ -n "$donor" ] || warn "源端地址不能为空"
 	done
-	case $donor in *" "*) die "$EX_ENV" "源机地址里不能有空格：'$donor'" ;; esac
+	case $donor in *" "*) die "$EX_ENV" "源端地址不能包含空格：$donor" ;; esac
 
 	# --- on-line or off-line ------------------------------------------------
-	c_mode=("auto|自动：源机在跑系统就按在线处理，已在 Live 里就按离线处理"
-		"online|在线：源机继续运行，只在最后冻结一小段时间"
-		"offline|离线：源机也已经启动到 Live")
+	c_mode=("auto|源端运行自身系统时按在线处理，已启动到 Live 时按离线处理"
+		"online|源端继续运行，仅在最后冻结一小段时间"
+		"offline|源端已启动到 Live")
 	wz_menu mode "迁移方式" \
 		"$(wz_index_of "${OPT[mode]:-auto}" "${c_mode[@]}")" -- "${c_mode[@]}"
 	if [ "$mode" = auto ]; then unset 'OPT[mode]'; else OPT[mode]=$mode; fi
 
 	# --- the target disk ----------------------------------------------------
 	root_disk=$(wz_root_disk)
-	c_disk=("auto|自动：只有一块合适的盘就用它，否则停下并列出所有盘")
+	c_disk=("auto|只有一块可用磁盘时选择该磁盘，否则列出全部磁盘并停止")
 	case ${DISK:-auto} in
 		auto) ;;
 		*,*) disk=$DISK ;;                        # -d a,b is a RAID1 pair: pass it through
@@ -112,42 +112,42 @@ wz_run() {
 		while read -r d; do
 			[ -n "$d" ] || continue
 			if [ -n "$root_disk" ] && [ "${d%%|*}" = "$root_disk" ]; then
-				c_disk+=("${d%%|*}|${d#*|}（本机正在运行的系统，不能选）")
+				c_disk+=("${d%%|*}|${d#*|}（本机当前运行的系统，不能作为目标盘）")
 			else
 				c_disk+=("${d%%|*}|${d#*|}")
 			fi
 		done < <(wz_disks)
-		wz_menu disk "目标磁盘（会被整盘覆盖）" \
+		wz_menu disk "目标磁盘（该磁盘将被整盘覆盖）" \
 			"$(wz_index_of "${DISK:-auto}" "${c_disk[@]}")" -- "${c_disk[@]}"
 	fi
 	DISK=$disk
 
 	# --- how much cpu to spend on the wire ----------------------------------
-	c_comp=("auto|auto：在线按源机 CPU 与链路速度自动定级别，离线用 lz4"
-		"zstd|zstd：压得更狠，CPU 有富余时用"
-		"lz4|lz4：最快，链路快于 CPU 时用"
-		"none|none：不压，省 CPU")
+	c_comp=("auto|在线按源端 CPU 与链路速度选择级别，离线使用 lz4"
+		"zstd|压缩率较高，CPU 有富余时适用"
+		"lz4|压缩速度最快，链路速度快于 CPU 时适用"
+		"none|不压缩，占用 CPU 最少")
 	wz_menu comp "压缩" \
 		"$(wz_index_of "${OPT[compress]:-auto}" "${c_comp[@]}")" -- "${c_comp[@]}"
 	if [ "$comp" = auto ]; then unset 'OPT[compress]'; else OPT[compress]=$comp; fi
 
 	# --- what the donor does once the copy is confirmed ----------------------
-	c_cut=("netdown|断网停住（默认）：源机不再对外服务，人工确认后再关机"
-		"poweroff|直接关机"
-		"kexec|直接重启进新系统（要求 kexec 可用）"
-		"none|什么都不做")
-	wz_menu cut "迁移完成后，源机做什么" \
+	c_cut=("netdown|先断开网络，人工确认后关闭电源（默认）"
+		"poweroff|立即关闭源端电源"
+		"kexec|重启并进入新系统，要求 kexec 可用"
+		"none|保持源端运行")
+	wz_menu cut "迁移完成后源端的操作" \
 		"$(wz_index_of "${OPT[cutover]:-netdown}" "${c_cut[@]}")" -- "${c_cut[@]}"
 	OPT[cutover]=$cut
 
 	# --- prove the copy boots before cutting over ----------------------------
 	mt=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null)
 	[ -n "$mt" ] && [ "$mt" -lt 3072 ] && def_bt=0
-	c_bt=("要|多花十几分钟，但能在切换前发现引导问题（约需 3G 空闲内存）"
-		"不要|直接进入验收")
+	c_bt=("要|耗时增加约十几分钟，可在切换前发现引导问题，需要约 3 GiB 空闲内存"
+		"不要|跳过该步骤，直接进入验收")
 	local bt_def=1
 	[ "${OPT[boottest]:-$def_bt}" = 0 ] && bt_def=2
-	wz_menu bt "切换前要不要在本机用 qemu 试启动一次新系统" "$bt_def" -- "${c_bt[@]}"
+	wz_menu bt "切换前是否用 qemu 试启动新系统" "$bt_def" -- "${c_bt[@]}"
 	if [ "$bt" = 要 ]; then OPT[boottest]=1; else OPT[boottest]=0; fi
 
 	# --- what those answers add up to ---------------------------------------
@@ -160,16 +160,16 @@ wz_run() {
 		args+=(-o "$k=${OPT[$k]}")
 	done
 
-	say "将执行："
+	say "将执行以下命令："
 	printf '    %q' "$self"
 	printf ' %q' "${args[@]}"
 	printf ' %q\n' "$donor"
 	if declare -f pa_dump >/dev/null; then
-		say "同样的设置存成文件，下次不用再答："
+		say "以下为等价的参数文件，保存后可用于后续运行："
 		pa_dump | sed 's/^/    /'
-		say "存好后：migrator -f <那个文件>"
+		say "保存为文件后，使用 migrator -f <文件路径> 运行"
 	fi
 	[ -n "${WZ_PRINT_ONLY:-}" ] && return 0
-	confirm "就这样开始？"
+	confirm "确认按以上设置开始迁移？"
 	exec bash "$self" "${args[@]}"
 }

@@ -1,34 +1,36 @@
 #!/bin/sh
-# preflight.sh — 一条命令回答「现在能不能开始」，然后给出（或直接执行）下一步。
+# preflight.sh — 检查本机能否执行一次迁移，输出检查结果与下一步命令。
 #
-# 一个文件，不装任何东西，也不需要仓库：取来即跑。
+# 单文件脚本，不安装任何软件，也不依赖仓库，取到即可运行。
 #
-#   curl -fsSL <地址> | sh -s --              只查（默认）
-#   curl -fsSL <地址> | sh -s -- --fix        缺什么装上，然后重跑
-#   curl -fsSL <地址> | sh -s -- --go         没有 FAIL 就直接进迁移向导
-#   或者先落盘：curl -fsSL -o /tmp/pf.sh <地址> && sh /tmp/pf.sh --go
+#   curl -fsSL <地址> | sh -s --              只检查（默认）
+#   curl -fsSL <地址> | sh -s -- --fix        安装缺失的软件包，然后重新检查
+#   curl -fsSL <地址> | sh -s -- --go         没有 FAIL 项时进入迁移向导
+#   或者先保存到本地：curl -fsSL -o /tmp/pf.sh <地址> && sh /tmp/pf.sh --go
 #
-# 三种取法，哪个通用哪个（国内常用 Gitee）：
+# 三个可用的下载地址，选择可访问的一个（中国大陆境内通常使用 Gitee）：
 #   https://gitee.com/tktogether/migrator/raw/master/tools/preflight.sh
 #   https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh
-#   或者 sh tools/preflight.sh（仓库已在手边）
+#   或者 sh tools/preflight.sh（仓库已在本地）
 #
-# 参数要写在 `sh -s --` 后面。写成 sh -c "$(curl …)" 时第一个参数会被当成 $0，
-# 传不进去——这是 sh 的规矩，不是这里的。
+# 选项必须写在 `sh -s --` 之后。写成 sh -c "$(curl …)" 时，第一个参数会被
+# 解释为 $0，无法传入脚本。这是 sh 的参数规则。
 #
-# 源机地址按这个顺序取，取到就用，取不到就只查本机：
-#   MIGRATOR_DONOR 环境变量 → 参数 → /run/migrator/state 里上次连过的那台
-# 不猜：源机地址是操作者唯一确定的信息，扫描网段既不靠谱（第一次跑时收端
-# 还没有源机的密钥）又会在别人的机房里发出噪声。
+# 源端地址按以下顺序读取，任一处取到即停止；全部未取到时只检查本机：
+#   MIGRATOR_DONOR 环境变量 → 命令行参数 → /run/migrator/state 中上次连接的主机
+# 脚本不扫描网段。首次运行时目标端尚未持有源端的密钥，扫描无法得到可用地址；
+# 源端地址由操作者提供，脚本不推测。
 #
-# 结果三档：
-#   PASS  已满足
-#   WARN  不挡路，但会让某一步变慢或不可用（例如不在 Live 里：能出计划，不能执行）
-#   FAIL  这样跑下去会失败，先处理
-# exit: 0 没有 FAIL · 1 有 FAIL · 2 探测本身跑不起来
+# 结果分三档：
+#   PASS  已满足要求
+#   WARN  不阻止继续，但相关步骤会变慢或不可用。例如不在 Live 中：可以生成计划，
+#         不能执行迁移
+#   FAIL  按当前条件执行会失败，需要先处理
+# exit: 0 没有 FAIL · 1 有 FAIL · 2 探测本身无法完成
 #
-# 默认只读：不挂载、不写盘、不改网络、不装东西。--fix 与 --go 是仅有的两个
-# 会动手的开关，而且都在全部检查之后才生效。查源机只用 ssh 跑只读命令。
+# 默认只读：不挂载、不写入磁盘、不修改网络、不安装软件。--fix 与 --go 是仅有的
+# 两个产生改动的选项，且都在全部检查完成后才生效。检查源端时只通过 ssh 执行
+# 只读命令。
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 set -u
 
@@ -36,17 +38,18 @@ usage() {
 	cat <<'EOF'
 用法：preflight.sh [--go] [--fix] [--donor HOST] [root@]HOST[:PORT]
 
-  默认只查，什么都不装、不写、不动网络；一个文件就能跑，不需要安装工具。
-  远端用法：curl -fsSL <地址> | sh -s -- [选项]
-  --go          检查通过后直接进迁移向导（源机已填好，其余照问）
-  --fix         把缺的包装上（apt-get install -y），然后重跑本脚本
-  --check       明确「只检查」：装了 migrator 也不进向导（默认行为，给脚本用）
-  --donor HOST  指定源机，跳过自动查找
-  -h, --help    这一段
+  默认只检查，不安装软件、不写入磁盘、不修改网络。脚本为单文件，无需安装即可运行。
+  从网络直接运行时，选项写在 sh -s -- 之后：curl -fsSL <地址> | sh -s -- [选项]
+  --go          检查通过后进入迁移向导。源端地址已填入，其余项目照常询问
+  --fix         安装缺失的软件包。安装后本脚本退出，由操作者重新运行以确认结果
+  --check       只检查。即使已安装 migrator 也不进入向导，供脚本调用
+  --donor HOST  指定源端地址，不读取上次连接的记录
+  -h, --help    显示本说明
 
-不给源机也行：先看 /run/migrator/state 里上次连过的那台；没有就只查本机。
-用 --go 又要问话时，ssh 那边得分配终端（ssh -t）；脚本会把 stdin 接回 /dev/tty。
-PATH 里没有 migrator 时，会打印装它的那一行。
+未指定源端地址时，脚本读取 /run/migrator/state 中上次连接的主机。
+该文件不存在时只检查本机。
+使用 --go 且需要交互时，SSH 连接必须分配终端（ssh -t），脚本会把标准输入接回终端。
+PATH 中没有 migrator 时，脚本在末尾打印安装命令。
 EOF
 }
 
@@ -55,95 +58,120 @@ while [ $# -gt 0 ]; do
 	case $1 in
 		--go|-g)      GO=1 ;;
 		--fix|-f)     FIX=1 ;;
-		--check|-c)   GO= ;;                       # 默认已经是只查；写出来让调用方放心
+		--check|-c)   GO= ;;                       # 默认即只检查；显式写出便于调用方确认
 		--donor)      DONOR=${2:-}; [ -n "$DONOR" ] || { echo "--donor 需要一个地址" >&2; exit 2; }; shift ;;
 		--donor=*)    DONOR=${1#*=} ;;
 		-h|--help)    usage; exit 0 ;;
 		--)           shift; continue ;;
-		-*)           echo "不认识的选项：$1" >&2; usage >&2; exit 2 ;;
+		-*)           echo "无法识别的选项：$1" >&2; usage >&2; exit 2 ;;
 		*)            DONOR=$1 ;;
 	esac
 	shift
 done
 
 n_pass=0; n_warn=0; n_fail=0; fix_pkgs=
-# 列不按宽度对齐：中文一个字占两个显示列、三个字节，printf 的 %-28s 会把它排歪。
-# 结果放最前（纯 ASCII），检查项与说明跟在后面，读起来自然对齐。
-row()  { printf '  %-4s %s  %s\n' "$2" "$1" "$3"; }
+# 结果列固定为 4 个字符，均为 ASCII，对齐可靠。中文按显示宽度占两列、按字节占
+# 三字节，printf 的 %-28s 会把中文列排歪。因此检查项与说明连续排在同一列。
+row()  { printf '  %-4s %s\n' "$2" "$1：$3"; }
 pass() { n_pass=$((n_pass + 1)); row "$1" PASS "$2"; }
 warn() { n_warn=$((n_warn + 1)); row "$1" WARN "$2"; }
 fail() { n_fail=$((n_fail + 1)); row "$1" FAIL "$2"; }
-need() { fix_pkgs="$fix_pkgs $2"; }   # 记下补这个命令要装的包
+need() { fix_pkgs="$fix_pkgs $2"; }   # 记录补齐该项需要安装的软件包
 
 have() { command -v "$1" >/dev/null 2>&1; }
 say()  { echo "[migrator-preflight] $*"; }
+# 空格分隔的命令名转为顿号分隔，便于接在中文句子中
+cn_list() { printf '%s' "$1" | sed 's/ /、/g'; }
 
-# 用管道跑时 stdin 就是脚本本身，而且已经读完：问话会立刻读到 EOF。有终端
-# 就从 /dev/tty 接回来，这样 "curl ... | sh -s -- --go" 也能回答问题。
-# 判断放在子 shell 里试探：redirection 失败在 dash 里会让 exec 直接退出整个
-# 脚本，[ -r /dev/tty ] 又会在容器与 Git Bash 里给出假的「有」。
+# 通过管道运行时，标准输入指向脚本内容且已读到末尾，交互会立即读到 EOF。
+# 存在终端时把标准输入接回 /dev/tty，"curl ... | sh -s -- --go" 因此可以回答问题。
+# 判断在子 shell 中试探：在 dash 中重定向失败会使 exec 直接结束整个脚本；
+# [ -r /dev/tty ] 在容器与 Git Bash 中会给出错误结果。
 can_ask()   { [ -t 0 ] || ( : < /dev/tty ) 2>/dev/null; }
 tty_stdin() { [ -t 0 ] && return 0; can_ask && exec 0</dev/tty; return 0; }
 
-echo "[migrator-preflight] 收端 $(hostname 2>/dev/null || echo '?')"
-printf '  %-4s %s\n' "结果" "检查项 — 说明"
+echo "[migrator-preflight] 目标端 $(hostname 2>/dev/null || echo '?')"
+printf '  %-4s %s\n' "结果" "检查项与说明"
 printf '  %s\n' "----------------------------------------------------------------------------"
 
 # --- 身份与运行环境 ----------------------------------------------------------
-if [ "$(id -u)" = 0 ]; then pass "运行身份" "root"
-else fail "运行身份" "不是 root：分区、挂载、chroot 都需要它，请用 sudo 或 root 重跑"; fi
+if [ "$(id -u)" = 0 ]; then pass "运行身份" "当前用户为 root"
+else fail "运行身份" "当前用户不是 root，分区与挂载需要 root 权限。请用 sudo 重新运行"; fi
 
 if [ -r /etc/migrator-live-release ] || [ -r /etc/xserver-live-release ]; then
-	pass "迁移 Live" "已在本项目的 Live 里"
+	pass "迁移 Live" "本机从迁移 Live 启动"
 else
-	warn "迁移 Live" "不在 Live 里：可以出计划（-s plan）并审阅，执行要进 Live"
+	warn "迁移 Live" "本机不是迁移 Live。可以生成计划并审阅，执行迁移需要进入 Live"
 fi
 
 mem=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null || echo 0)
-if [ "${mem:-0}" -ge 3072 ]; then pass "内存" "${mem} MiB：够 precheck 与 boottest"
-elif [ "${mem:-0}" -ge 1536 ]; then warn "内存" "${mem} MiB：precheck 会被自动关掉（-o precheck=1 可强开）"
-else fail "内存" "${mem:-?} MiB：低于 1.5G，收尾的 chroot 与拆包都容易失败"; fi
+if [ "${mem:-0}" -ge 3072 ]; then pass "内存" "${mem} MiB，满足预检与启动测试的需要"
+elif [ "${mem:-0}" -ge 1536 ]; then warn "内存" "${mem} MiB，预检阶段将自动关闭。可用 -o precheck=1 强制开启"
+else fail "内存" "低于 1536 MiB，收尾阶段的 chroot 与解包可能失败"; fi
 
 cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
-if [ "${cpus:-1}" -ge 2 ]; then pass "CPU" "$cpus 核：压缩与校验有余量"
-else warn "CPU" "$cpus 核：在线迁移的压缩级别会被压低，冻结窗口会变长"; fi
+if [ "${cpus:-1}" -ge 2 ]; then pass "CPU" "$cpus 核，压缩与校验可使用多核"
+else warn "CPU" "$cpus 核，在线迁移将降低压缩级别，冻结窗口会变长"; fi
 
 # --- 工具本身 ----------------------------------------------------------------
 if have migrator; then
-	v=$(migrator -V 2>/dev/null | head -1)
-	pass "工具" "${v:-migrator 已在 PATH 里}"
+	# -V 的同一行还带有库目录与 Live 字段，这里只取名称与版本
+	v=$(migrator -V 2>/dev/null | head -1 | awk '{ print $1, $2 }')
+	pass "工具" "PATH 中存在 ${v:-migrator}"
 elif [ -r "$(dirname "$0")/../bin/migrator" ] && [ -n "$0" ] && [ -r "$0" ]; then
-	pass "工具" "在源码树里：$0"
+	pass "工具" "使用源码树中的驱动器 $0"
 else
-	warn "工具" "PATH 里没有 migrator：先装（本脚本末尾会打印那一行）"
+	warn "工具" "PATH 中没有 migrator。安装命令见本脚本末尾"
 fi
 
 # --- 目标磁盘 ----------------------------------------------------------------
-if have lsblk; then
-	disks=$(lsblk -dnpo NAME,SIZE,TYPE 2>/dev/null | awk '$3 == "disk" { printf "%s(%s) ", $1, $2 }')
-	if [ -z "$disks" ]; then fail "目标磁盘" "lsblk 看不到任何整盘"; need lsblk util-linux
-	else pass "目标磁盘" "$disks"; fi
-else
-	fail "目标磁盘" "没有 lsblk：装 util-linux，否则无法判定目标盘"; need lsblk util-linux
+# 正在运行的系统所在磁盘要单独标出：整盘覆盖会破坏当前系统，迁移工具会拒绝该盘。
+root_dev=
+if have findmnt && have lsblk; then
+	src=$(findmnt -no SOURCE / 2>/dev/null) || src=
+	# 反向查询会依次给出 LVM 卷、分区与整盘，取最后的 disk；根文件系统直接位于
+	# 整盘时（无分区表）该层就是它本身。lsblk 在非 raw 模式下给名称加树形字符，
+	# 因此先去掉非名称字符再比较
+	[ -n "$src" ] && root_dev=$(lsblk -sno NAME,TYPE "$src" 2>/dev/null |
+		awk '{ n = $1; gsub(/[^A-Za-z0-9._-]/, "", n); if ($2 == "disk") { print "/dev/" n; exit } }')
+	[ -n "${root_dev:-}" ] || root_dev=$src
 fi
 
-# a disk that is in use cannot be the target, and finding that out now is the
-# whole point of this script
+if have lsblk; then
+	disks=; usable=0
+	for d in $(lsblk -dnpo NAME,SIZE,TYPE 2>/dev/null | awk '$3 == "disk" { print $1"|"$2 }'); do
+		dev=${d%%|*}; size=${d#*|}
+		if [ -n "$root_dev" ] && [ "$dev" = "$root_dev" ]; then
+			disks="$disks$dev（$size，本机系统盘） "
+		else
+			disks="$disks$dev（$size） "; usable=$((usable + 1))
+		fi
+	done
+	disks=${disks% }
+	if [ -z "$disks" ]; then fail "目标磁盘" "lsblk 未列出任何磁盘"; need lsblk util-linux
+	elif [ "$usable" -eq 0 ]; then warn "目标磁盘" "可供选择的磁盘只有 $disks。需要另接一块磁盘作为目标盘"
+	else pass "目标磁盘" "$disks"; fi
+else
+	fail "目标磁盘" "本机没有 lsblk，无法列出磁盘。该命令由 util-linux 提供"; need lsblk util-linux
+fi
+
+# 已投入使用的磁盘不能作为目标盘。尽早发现该情况是本脚本的目的之一。
 busy=
 if have pvs; then busy=$(pvs --noheadings -o pv_name 2>/dev/null | tr -d ' ' | tr '\n' ' '); fi
 if have swapon; then busy="$busy $(swapon --noheadings -o NAME 2>/dev/null | tr -d ' ' | tr '\n' ' ')"; fi
-if [ -n "$(echo "$busy" | tr -d ' ')" ]; then
-	warn "被占用的设备" "$(echo "$busy" | tr -s ' ')：这些是 LVM/swap 成员，不能当目标盘（工具会拒绝，这里先提示）"
+busy=$(echo "$busy" | tr -s ' ' | sed 's/^ //; s/ $//')
+if [ -n "$busy" ]; then
+	warn "被占用的设备" "以下设备是 LVM 或 swap 成员，其所在磁盘不能作为目标盘：$busy"
 else
-	pass "被占用的设备" "没有 LVM/swap 占着待选盘"
+	pass "被占用的设备" "没有 LVM 或 swap 占用磁盘"
 fi
 
 # --- 依赖 --------------------------------------------------------------------
 miss=
 for t in tar gzip sha256sum awk sed findmnt lsblk blkid; do have "$t" || miss="$miss $t"; done
-if [ -z "$miss" ]; then pass "基础工具" "都在"
+if [ -z "$miss" ]; then pass "基础工具" "所需命令均已安装"
 else
-	fail "基础工具" "缺：${miss# }"
+	fail "基础工具" "缺少 $(cn_list "${miss# }")。这些是迁移过程必需的命令"
 	case $miss in *tar*) need tar tar ;; esac
 	case $miss in *gzip*) need gzip gzip ;; esac
 	case $miss in *sha256sum*) need sha256sum coreutils ;; esac
@@ -153,56 +181,61 @@ fi
 
 miss=
 for t in partclone.ext4 mkfs.ext4 e2fsck tune2fs; do have "$t" || miss="$miss $t"; done
-if [ -z "$miss" ]; then pass "ext4 工具链" "都在"
+if [ -z "$miss" ]; then pass "ext4 工具链" "所需命令均已安装"
 else
-	fail "ext4 工具链" "缺：${miss# }（--fix 会装上 partclone 与 e2fsprogs）"
+	fail "ext4 工具链" "缺少 $(cn_list "${miss# }")。可用 --fix 安装 partclone 与 e2fsprogs"
 	case $miss in *partclone*) need partclone partclone ;; esac
 	case $miss in *mkfs*|*e2fsck*|*tune2fs*) need e2fsprogs e2fsprogs ;; esac
 fi
 
 miss=
 for t in zstd lz4; do have "$t" || miss="$miss $t"; done
-if [ -z "$miss" ]; then pass "压缩" "zstd 与 lz4 都在"
+if [ -z "$miss" ]; then pass "压缩" "zstd 与 lz4 均已安装"
 else
-	warn "压缩" "缺：${miss# }（离线默认用 lz4，在线默认 zstd；--fix 会装上）"
+	warn "压缩" "缺少 $(cn_list "${miss# }")。离线迁移默认使用 lz4，在线迁移默认使用 zstd。可用 --fix 安装"
 	case $miss in *zstd*) need zstd zstd ;; esac
 	case $miss in *lz4*) need lz4 lz4 ;; esac
 fi
 
-if have qemu-system-x86_64 || have qemu-system-x86; then pass "boottest" "qemu 在：切换前可以先试启动新系统"
-else warn "boottest" "没有 qemu：无法在切换前验证新系统能否引导（-o boottest=0 跳过）"; need qemu qemu-system-x86; fi
+if have qemu-system-x86_64 || have qemu-system-x86; then pass "启动测试" "qemu 已安装，可在切换前验证新系统能否启动"
+else warn "启动测试" "缺少 qemu，无法在切换前验证新系统能否启动。可用 -o boottest=0 跳过该步骤"; need qemu qemu-system-x86; fi
 
 # --- 网络 --------------------------------------------------------------------
 gw=$(ip route show default 2>/dev/null | awk '/default/ { print $3; exit }')
 if [ -n "$gw" ]; then pass "默认路由" "网关 $gw"
-else fail "默认路由" "没有默认路由：两机之间怎么走？先配好网络"; fi
+else fail "默认路由" "本机没有默认路由，两台主机之间无法通信。请先配置网络"; fi
 
-# the mirrors a one-line install depends on; a Chinese network usually reaches
-# gitee and often not github, which is exactly why the list has three entries
+# 在线安装依赖的三个源。中国大陆境内的网络通常可以访问 Gitee，通常不能访问
+# GitHub，因此列表中有三个地址。
 if have curl || have wget; then
-	reach=
+	reach=; unreach=
 	for b in "https://gitee.com" "https://cdn.jsdelivr.net" "https://raw.githubusercontent.com"; do
 		h=${b#https://}
 		if have curl; then
-			curl -s -o /dev/null -m 6 -w '' "$b" 2>/dev/null && reach="$reach $h=通" || reach="$reach $h=不通"
+			curl -s -o /dev/null -m 6 -w '' "$b" 2>/dev/null && ok=1 || ok=
 		else
-			wget -q -T 6 -O /dev/null "$b" 2>/dev/null && reach="$reach $h=通" || reach="$reach $h=不通"
+			wget -q -T 6 -O /dev/null "$b" 2>/dev/null && ok=1 || ok=
 		fi
+		if [ -n "$ok" ]; then reach="${reach:+$reach、}$h"; else unreach="${unreach:+$unreach、}$h"; fi
 	done
-	case $reach in *不通*) warn "下载源" "$reach（不通的那个会被自动跳过）" ;; *) pass "下载源" "$reach" ;; esac
+	if [ -n "$unreach" ]; then
+		warn "下载源" "以下地址不可访问：$unreach。安装脚本会改用其余地址"
+	else
+		pass "下载源" "$reach 均可访问"
+	fi
 else
-	warn "下载源" "没有 curl 也没有 wget：无法在线取工具包"
+	warn "下载源" "本机既没有 curl 也没有 wget，无法在线获取安装包"
 fi
 
-# --- 源机：有地址才查 --------------------------------------------------------
-# 地址只从这三处来：环境变量、参数、这台机器上次连过的那台。不做网段扫描——
-# 第一次跑的时候收端还没有源机的密钥，扫也扫不出来；而源机地址是操作者手上
-# 本来就有的东西，猜它只会让人怀疑工具到底连上了谁。
+# --- 源端：取得地址后才检查 --------------------------------------------------
+# 地址只从三处读取：环境变量、命令行参数、本机上次连接的主机。脚本不扫描网段。
+# 首次运行时目标端尚未持有源端的密钥，扫描无法得到可用地址；源端地址是操作者
+# 已有的信息，推测该地址会使连接对象不明确。
 if [ -z "$DONOR" ]; then
 	for f in /run/migrator/state /run/migrator/dry/state; do
 		[ -r "$f" ] || continue
 		d=$(sed -n 's/^donor\.target=//p' "$f" 2>/dev/null | tail -1)
-		[ -n "$d" ] && { DONOR=$d; say "源机：用上次连过的 $DONOR（$f 记着）"; break; }
+		[ -n "$d" ] && { DONOR=$d; say "源端地址取自 $f 中上次连接的主机：$DONOR"; break; }
 	done
 fi
 
@@ -213,36 +246,37 @@ if [ -n "$DONOR" ]; then
 	if have ssh; then
 		if ssh -o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new \
 			-p "$port" "$DONOR" true 2>/dev/null; then
-			pass "源机 ssh" "$host:$port 可登录（免密或已装密钥）"
+			pass "源端 SSH" "可免密登录 $host:$port"
 			os=$(ssh -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$DONOR" \
 				'. /etc/os-release 2>/dev/null; echo "$PRETTY_NAME"' 2>/dev/null | tail -1)
-			[ -n "$os" ] && pass "源机系统" "$os" || warn "源机系统" "读不到 /etc/os-release"
+			[ -n "$os" ] && pass "源端系统" "$os" || warn "源端系统" "无法读取 /etc/os-release"
 			if ssh -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$DONOR" \
 				'test -r /etc/migrator-live-release -o -r /etc/xserver-live-release' 2>/dev/null; then
-				pass "源机状态" "已在 Live 里：离线迁移"
+				pass "源端状态" "已启动到 Live，将按离线迁移处理"
 			else
-				pass "源机状态" "在跑自己的系统：在线迁移（可在业务不停的情况下复制）"
+				pass "源端状态" "运行自身系统，将按在线迁移处理，业务可继续运行"
 			fi
 		else
-			fail "源机 ssh" "$host:$port 连不上或没有免密：ssh-copy-id root@$host，或用 -i 指定密钥"
+			fail "源端 SSH" "无法登录 $host:$port。请确认地址与密钥，或执行 ssh-copy-id root@$host"
 		fi
 	else
-		fail "源机 ssh" "本机没有 ssh 客户端"
+		fail "源端 SSH" "本机没有 ssh 客户端"
 	fi
 else
-	warn "源机" "没找到：只查了本机。给地址即可（preflight.sh root@10.0.0.9），或用 --donor"
+	warn "源端" "未提供地址，本次只检查了本机。可用 --donor root@10.0.0.9 检查两端"
 fi
 
 # --- 结论 --------------------------------------------------------------------
 echo "----------------------------------------------------------------------------"
-printf '[migrator-preflight] %d 项：%d PASS · %d WARN · %d FAIL\n' \
+printf '[migrator-preflight] 共 %d 项检查：%d 项通过，%d 项提醒，%d 项未通过\n' \
 	$((n_pass + n_warn + n_fail)) "$n_pass" "$n_warn" "$n_fail"
 
-# 缺包时只打印一条能直接粘的命令；--fix 才真装，装完让人重跑，不藏在脚本里。
-# 想要的名字不一定等于能装的名字：bionic 没有 lz4（叫 liblz4-tool），老发行版的
-# qemu 叫 qemu。所以装之前先问 apt 有没有候选，并把 apt 的原话带出来——上次
-# 把输出丢进 /dev/null，结果只说了句「多半是网络问题」，实际是包名不存在。
-apt_cand() {   # 给定几个等价包名，输出这台机器上真能装的那个
+# 缺少软件包时只输出一条可直接执行的命令；--fix 才会实际安装，安装后由操作者
+# 重新运行本脚本，脚本不隐藏该过程。
+# 命令名与软件包名不一定相同：bionic 没有 lz4 包，对应包名为 liblz4-tool；旧发行版
+# 的 qemu 包名为 qemu。因此安装前先用 apt-cache 查询候选版本，并保留 apt 的原话。
+# 此前该输出被丢弃，只提示网络问题，而实际原因是软件包名不存在。
+apt_cand() {   # 给定若干等价包名，输出本机软件源中可安装的那个
 	for p in "$@"; do
 		apt-cache policy "$p" 2>/dev/null | grep -q 'Candidate: [^(]' && { printf '%s' "$p"; return 0; }
 	done
@@ -251,7 +285,7 @@ apt_cand() {   # 给定几个等价包名，输出这台机器上真能装的那
 
 pkgs=$(echo "$fix_pkgs" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ')
 pkgs=${pkgs% }
-# --fix 连 WARN 级的也装（例如只有 qemu 没装），否则只报 FAIL 那几项
+# --fix 同时安装 WARN 项对应的软件包（例如仅缺少 qemu），否则只报告 FAIL 项。
 if [ -n "$pkgs" ] && { [ "$n_fail" -gt 0 ] || [ -n "$FIX" ]; }; then
 	resolved=; missing=; cand=
 	if have apt-cache; then
@@ -269,55 +303,59 @@ if [ -n "$pkgs" ] && { [ "$n_fail" -gt 0 ] || [ -n "$FIX" ]; }; then
 	fi
 
 	if [ -n "$FIX" ]; then
-		[ -n "$missing" ] && say "这台机器的源里没有这几个包，跳过：$missing"
+		[ -n "$missing" ] && say "本机软件源中没有以下软件包，已跳过：$missing"
 		if ! have apt-get; then
-			say "--fix 只会用 apt-get，这台机器没有；请手工装：${resolved:-（无可自动安装的包）}"
+			say "--fix 只使用 apt-get，本机没有该命令。请手工安装：${resolved:-无}"
 			exit 1
 		fi
-		[ -n "$resolved" ] || { say "没有可自动安装的包，剩下的请手工处理"; exit 1; }
+		[ -n "$resolved" ] || { say "没有可自动安装的软件包，其余项目需要手工处理"; exit 1; }
 		say "--fix：apt-get install -y $resolved"
 		if log=$(apt-get install -y $resolved 2>&1); then
-			say "装好了，重跑一次本脚本确认"
+			say "安装完成。请重新运行本脚本确认结果"
 		else
-			say "apt 没装成，它最后说的是："
+			say "apt-get 未完成安装，最后三行输出如下："
 			printf '%s\n' "$log" | tail -3 | sed 's/^/    /'
-			say "手工重试：apt-get install -y $resolved"
+			say "请手工重试：apt-get install -y $resolved"
 		fi
 		exit 1
 	fi
 
-	say "缺的包一条命令装：apt-get install -y ${resolved:-$pkgs}（或重跑本脚本加 --fix）"
-	[ -n "$missing" ] && say "其中 $missing 在这台机器的源里没有同名包，需要另找"
+	say "缺失的软件包可用一条命令安装："
+	printf '    apt-get install -y %s\n' "${resolved:-$pkgs}"
+	say "也可重新运行本脚本并加 --fix，由脚本完成安装"
+	[ -n "$missing" ] && say "以下软件包在本机软件源中没有同名包，需要另行处理：$missing"
 fi
 
 if [ "$n_fail" -gt 0 ]; then
-	echo "[migrator-preflight] 有 $n_fail 项会直接导致失败，先处理上面的 FAIL 再开始。"
+	say "有 $n_fail 项未通过。这些问题会使迁移失败，请先处理，然后重新运行本脚本"
 	exit 1
 fi
 
-# --- 下一步：一个命令 --------------------------------------------------------
+# --- 下一步 ------------------------------------------------------------------
 if ! have migrator && [ ! -x "$(dirname "$0")/../bin/migrator" ]; then
-	echo "[migrator-preflight] 工具还没装，一条命令装好（三个镜像自动回落）："
-	echo "    curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh"
+	say "本机尚未安装 migrator。安装命令如下："
+	printf '    %s\n' "curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh"
 fi
 
 if [ -n "$GO" ]; then
-	tty_stdin   # 向导要读键盘；管道进来时把 stdin 接回终端
+	tty_stdin   # 向导需要读取键盘输入；通过管道运行时把标准输入接回终端
 	if have migrator; then
-		say "--go：进迁移向导（源机已填好，其余照问）"
+		say "--go：进入迁移向导，源端地址已填入，其余项目照常询问"
 		WZ_DONOR=$DONOR exec migrator -w
 	elif [ -n "$0" ] && [ -r "$0" ] && [ -x "$(dirname "$0")/../bin/migrator" ]; then
-		say "--go：用源码树里的驱动器进向导"
+		say "--go：使用源码树中的驱动器进入向导"
 		WZ_DONOR=$DONOR exec sh "$(dirname "$0")/../bin/migrator" -w
 	else
-		say "--go 需要先装好工具：跑上面那条安装命令，再 preflight.sh --go"
+		say "使用 --go 需要先安装 migrator。请执行上面的安装命令，然后重新运行本脚本"
 		exit 2
 	fi
 fi
 
 if [ -n "$DONOR" ]; then
-	echo "[migrator-preflight] 可以继续：migrator -w（向导，源机填 $DONOR），或 migrator -d /dev/sdX $DONOR"
+	say "两端检查完成，可以继续。下一步命令："
+	printf '    交互式运行：migrator -w\n'
+	printf '    指定目标磁盘运行：migrator -d /dev/sdX %s\n' "$DONOR"
 else
-	echo "[migrator-preflight] 收端看起来可用；把源机地址也给它（--donor root@IP），才能判断整条链路。"
+	say "本机检查完成。指定源端地址（--donor root@IP）后可检查完整链路"
 fi
 exit 0

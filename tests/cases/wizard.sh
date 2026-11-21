@@ -67,11 +67,12 @@ assert_eq  "no args off a terminal still exits 2" 2 "$rc"
 assert_has "no args off a terminal says DONOR"    "DONOR is required" "$out"
 
 # --- get.sh: the file list must be the tree -----------------------------------
-# The one-key installer fetches file by file from a mirror, so its list is a
+# The installer fetches file by file from a mirror, so its list is a
 # second copy of lib/. This keeps the copies equal: a lib added without the
-# list is a package that installs and then cannot start.
+# list is a package that installs and then cannot start. Only lib/ entries are
+# compared here; tools/ entries are checked separately below.
 listing=$(sed -n '/^FILES="/,/"/p' "$REPO/tools/get.sh" | sed '1s/^FILES="//; $s/"$//')
-listed=$(printf '%s\n' "$listing" | grep '\.sh$' | sed 's|^lib/||' | LC_ALL=C sort)
+listed=$(printf '%s\n' "$listing" | grep '^lib/.*\.sh$' | sed 's|^lib/||' | LC_ALL=C sort)
 actual=$(cd "$REPO/lib" && ls *.sh | LC_ALL=C sort)
 assert_eq "get.sh fetches exactly lib/*.sh" "$actual" "$listed"
 if printf '%s\n' "$listing" | grep -qx 'bin/migrator'; then
@@ -79,27 +80,32 @@ if printf '%s\n' "$listing" | grep -qx 'bin/migrator'; then
 else
 	_fail "get.sh fetches the driver" "bin/migrator is not in FILES"
 fi
+if printf '%s\n' "$listing" | grep -qx 'tools/relay-tunnel.sh'; then
+	_pass "get.sh fetches the relay helper"
+else
+	_fail "get.sh fetches the relay helper" "tools/relay-tunnel.sh is not in FILES"
+fi
 for f in lib/VERSION; do
 	if printf '%s\n' "$listing" | grep -qx "$f"; then _pass "get.sh fetches $f"
 	else _fail "get.sh fetches $f" "$f is not in FILES"; fi
 done
 
 # --- preflight: one file, nothing installed ----------------------------------
-# 一键体检的全部意义是「不装东西也能先问一句」，所以这里在没有任何安装的
-# 情况下直接跑它：帮助、汇总、拒绝坏参数，三件都必须成立。
+# 本脚本用于在未安装任何软件的情况下给出检查结论，因此这里在没有任何安装的
+# 环境中运行它。帮助、汇总、拒绝错误参数三项都必须成立。
 out=$(sh "$REPO/tools/preflight.sh" -h 2>&1)
 assert_has "preflight documents --check" "--check" "$out"
 assert_has "preflight documents --go"    "--go"    "$out"
 assert_has "preflight documents --fix"   "--fix"   "$out"
 
-# 用不可达的代理让三镜像探测立刻失败，别让这条用例去等 raw.githubusercontent
+# 用不可达的代理让三个下载源的探测立即失败，避免这条用例等待 raw.githubusercontent
 out=$(https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
 	sh "$REPO/tools/preflight.sh" 2>&1 || true)
-assert_has "preflight prints a summary" "项：" "$out"
-# 有源机就给可以继续那一行，没有就说收端可用，有 FAIL 就让人先处理——三句话
-# 都在告诉人下一步做什么，跑测试的机器是不是 root、缺不缺包都不该改变这一点
+assert_has "preflight prints a summary" "项检查" "$out"
+# 有源端地址时输出可以继续，没有源端地址时输出了解目标端，有 FAIL 时要求先处理。
+# 三句话都在说明下一步做什么，运行测试的机器是否为 root、缺少哪些软件包都不改变这一点。
 case $out in
-	*"可以继续"*|*"收端看起来可用"*|*"先处理上面的 FAIL"*) _pass "preflight says what is next" ;;
+	*"可以继续"*|*"本机检查完成"*|*"请先处理"*) _pass "preflight says what is next" ;;
 	*) _fail "preflight says what is next" "no actionable line at the end" ;;
 esac
 
@@ -107,7 +113,7 @@ rc=0; sh "$REPO/tools/preflight.sh" --nope >/dev/null 2>&1 || rc=$?
 assert_eq "preflight refuses an unknown option" 2 "$rc"
 
 out=$(sh "$REPO/tools/get.sh" -h 2>&1)
-assert_has "get.sh documents --check" "只体检，不安装" "$out"
+assert_has "get.sh documents --check" "只检查，不安装" "$out"
 
 t_end
 
