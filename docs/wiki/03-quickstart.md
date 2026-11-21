@@ -41,6 +41,24 @@ sh -c "$(curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools
 
 使用 `--go` 时，采用上文的 `sh -c ...` 形式。`curl ... | sh` 形式下，标准输入由脚本本身占用，向导无法读取键盘输入。
 
+### 输出格式
+
+在交互终端上运行时，脚本输出标志块与颜色。网络检查进行期间显示旋转指示。输出被重定向或经管道传给其他程序时，脚本只输出纯文本。`TERM` 为 `dumb` 时同样如此。纯文本模式不输出颜色、标志块与动画，边框使用 ASCII 字符，宽度固定。每一行仍是完整的句子。判断与退出码不受输出方式影响。
+
+| 开关 | 作用 |
+|---|---|
+| `--plain` | 纯文本输出，用于日志与逐行比对 |
+| `--no-color` | 不输出颜色。与设置环境变量 `NO_COLOR` 相同 |
+| `--color` | 输出颜色。输出不是终端时默认关闭，该选项将其打开 |
+
+`--color` 只影响颜色。输出不是终端时，标志块与动画仍然关闭。
+
+日志中需要保留检查结果时，用 `--plain` 并重定向：
+
+```sh
+sh -c "$(curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/preflight.sh)" --plain > preflight.log 2>&1
+```
+
 需要由脚本选择源并在多个源之间回落时，使用安装脚本的检查模式，结果相同：
 
 ```sh

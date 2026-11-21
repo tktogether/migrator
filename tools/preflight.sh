@@ -13,8 +13,8 @@
 #   https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh
 #   或者 sh tools/preflight.sh（仓库已在本地）
 #
-# 选项必须写在 `sh -s --` 之后。写成 sh -c "$(curl …)" 时，第一个参数会被
-# 解释为 $0，无法传入脚本。这是 sh 的参数规则。
+# 选项写在 `sh -s --` 之后。写成 sh -c "$(curl …)" --fix 时，第一个参数会落到
+# $0 而不是参数表；脚本把 $0 取回当作第一个参数，两种写法等价。
 #
 # 源端地址按以下顺序读取，任一处取到即停止；全部未取到时只检查本机：
 #   MIGRATOR_DONOR 环境变量 → 命令行参数 → /run/migrator/state 中上次连接的主机
@@ -31,8 +31,156 @@
 # 默认只读：不挂载、不写入磁盘、不修改网络、不安装软件。--fix 与 --go 是仅有的
 # 两个产生改动的选项，且都在全部检查完成后才生效。检查源端时只通过 ssh 执行
 # 只读命令。
+#
+# 显示：交互终端上输出标志块、颜色与进度动画。以下任一情况只输出纯文本，便于
+# 写入日志与比对：标准输出或标准错误不是终端、TERM 为 dumb 或未设置、
+# 设置了 NO_COLOR、指定了 --plain。纯文本模式下边框使用 ASCII，宽度固定 78 列。
+# --color 强制输出颜色，但不启用标志块与动画。
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 set -u
+
+# --- 显示层 ------------------------------------------------------------------
+# 颜色、标志块与进度动画都只影响显示。关闭时每一行仍是完整的中文句子，脚本的判断
+# 与退出码不受影响。颜色使用 ANSI SGR 序列，不依赖 tput：终端不识别的序列会被
+# 忽略，而下面先判断是否应当输出。
+ui_mode=${MIGRATOR_COLOR:-auto}   # auto | always | never
+ui_plain=; ui_force=
+ui_tty=; ui_utf8=
+ui_anim=; ui_logo=
+spin_pid=
+ESC=$(printf '\033_'); ESC=${ESC%_}
+C_RESET=; C_DIM=; C_PASS=; C_WARN=; C_FAIL=; C_HEAD=; C_KEY=
+RULE_CH=-; BAR_CH='#'; VT='|'; TL='+'; TR='+'; BL='+'; BR='+'
+SPIN_FRAMES='- \ | /'
+
+ui_init() {
+	# 显式指定的 --color / --no-color 优先于环境变量；NO_COLOR 只在 auto 下生效
+	[ -n "$ui_force" ] && ui_mode=$ui_force
+	if [ -z "$ui_force" ] && [ -n "${NO_COLOR:-}" ] && [ "$ui_mode" = auto ]; then
+		ui_mode=never
+	fi
+	[ -n "$ui_plain" ] && ui_mode=never
+	# 动画与标志块要求标准输出与标准错误都是终端：只写入其中一路时，回车符与
+	# 转义序列会留在文件里
+	if [ -t 1 ] && [ -t 2 ]; then ui_tty=1; fi
+	case ${TERM:-} in ''|dumb) ui_tty= ;; esac
+	case $ui_mode in
+		always|never) ;;
+		*) if [ -n "$ui_tty" ]; then ui_mode=always; else ui_mode=never; fi ;;
+	esac
+	# --color 只强制颜色。标志块与动画仍然要求终端：写入文件时那一行会变成
+	# 一串回车符，读起来比纯文本更差
+	if [ -n "$ui_tty" ]; then ui_anim=1; ui_logo=1; fi
+	# 非 UTF-8 环境使用 ASCII 边框与填充字符，避免出现无法显示的方块
+	case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in
+		*UTF-8*|*utf-8*|*UTF8*|*utf8*) ui_utf8=1 ;;
+	esac
+	# 制表字符只在交互终端上使用。写入日志或交给其他程序处理时保持 ASCII，
+	# 以免按字节比较的工具把边框当成数据
+	if [ -n "$ui_tty" ] && [ -n "$ui_utf8" ]; then
+		RULE_CH='─'; BAR_CH='█'; VT='│'; TL='╭'; TR='╮'; BL='╰'; BR='╯'
+		SPIN_FRAMES='⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏'
+	fi
+	if [ "$ui_mode" = always ]; then
+		C_RESET="$ESC[0m"; C_DIM="$ESC[2m"
+		C_PASS="$ESC[1;32m"; C_WARN="$ESC[1;33m"; C_FAIL="$ESC[1;31m"
+		C_HEAD="$ESC[1;36m"; C_KEY="$ESC[1;37m"
+	fi
+	# 分数秒的 sleep 并非所有系统都支持。不支持时退到整秒，避免动画占满 CPU
+	SPIN_T=1
+	sleep 0.05 2>/dev/null && SPIN_T=0.12
+}
+
+ui_str() {   # ui_str 次数 字符：把字符重复若干次写到标准输出
+	i=0
+	while [ "$i" -lt "$1" ]; do printf '%s' "$2"; i=$((i + 1)); done
+}
+
+ui_rule() {
+	# 写入日志时宽度固定，便于比对；交互终端上随窗口宽度变化，上限 78 列
+	n=78
+	if [ -n "$ui_tty" ]; then
+		n=${COLUMNS:-78}
+		case $n in ''|*[!0-9]*) n=78 ;; esac
+		[ "$n" -gt 78 ] && n=78
+		[ "$n" -lt 56 ] && n=56
+	fi
+	printf '  %s%s%s\n' "$C_DIM" "$(ui_str $((n - 2)) "$RULE_CH")" "$C_RESET"
+}
+
+ui_clear() {
+	if [ "$ui_mode" = always ]; then printf '\r%s[K' "$ESC" >&2
+	else printf '\r%78s\r' '' >&2; fi
+}
+
+# 进度动画：只在交互终端上运行，写入标准错误，因此不会进入管道与重定向。
+# 每帧回车回到行首，结束时由 ui_clear 擦除整行。
+spin_start() {
+	[ -n "$ui_anim" ] || return 0
+	spin_label=$1
+	( while :; do
+		for f in $SPIN_FRAMES; do
+			printf '\r  %s%s%s %s' "$C_DIM" "$f" "$C_RESET" "$spin_label" >&2
+			sleep "$SPIN_T" 2>/dev/null
+		done
+	  done ) &
+	spin_pid=$!
+}
+
+spin_stop() {
+	[ -n "${spin_pid:-}" ] || return 0
+	kill "$spin_pid" 2>/dev/null
+	wait "$spin_pid" 2>/dev/null
+	spin_pid=
+	ui_clear
+}
+
+ui_banner() {
+	host=$(hostname 2>/dev/null || echo '?')
+	if [ -n "$ui_logo" ]; then
+		# 边框内只放 ASCII，宽度用 %-22s 计算，不涉及中文字符的列宽
+		printf '\n'
+		printf '  %s%s%s%s%s\n' "$C_DIM" "$TL" "$(ui_str 26 "$RULE_CH")" "$TR" "$C_RESET"
+		printf '  %s%s%s  %s%-22s%s  %s%s%s\n' \
+			"$C_DIM" "$VT" "$C_RESET" "$C_HEAD" "m i g r a t o r" "$C_RESET" "$C_DIM" "$VT" "$C_RESET"
+		printf '  %s%s%s%s%s\n' "$C_DIM" "$BL" "$(ui_str 26 "$RULE_CH")" "$BR" "$C_RESET"
+		printf '  %s整机迁移 · 预检%s\n' "$C_DIM" "$C_RESET"
+		printf '  目标端 %s\n\n' "$host"
+	else
+		printf '[migrator-preflight] 目标端 %s\n' "$host"
+	fi
+	ui_rule
+}
+
+ui_table_head() {
+	printf '  %s%-4s  %s%s\n' "$C_DIM" "结果" "检查项与说明" "$C_RESET"
+}
+
+# 通过、提醒、未通过三段的条形图，只在终端上出现
+ui_bar() {
+	[ -n "$ui_tty" ] || return 0
+	total=$((n_pass + n_warn + n_fail))
+	[ "$total" -gt 0 ] || return 0
+	w=24
+	g=$((n_pass * w / total))
+	y=$((n_warn * w / total))
+	r=$((n_fail * w / total))
+	# 整除的余数给数量最多的一段。若按减法把余数留给未通过段，0 项未通过时
+	# 也会画出红色
+	left=$((w - g - y - r))
+	if [ "$n_pass" -ge "$n_warn" ] && [ "$n_pass" -ge "$n_fail" ]; then g=$((g + left))
+	elif [ "$n_warn" -ge "$n_fail" ]; then y=$((y + left))
+	else r=$((r + left)); fi
+	printf '  %s' "$C_DIM"
+	[ "$ui_mode" = always ] && printf '%s' "$C_PASS"
+	ui_str "$g" "$BAR_CH"
+	[ "$ui_mode" = always ] && printf '%s' "$C_WARN"
+	ui_str "$y" "$BAR_CH"
+	[ "$ui_mode" = always ] && printf '%s' "$C_FAIL"
+	ui_str "$r" "$BAR_CH"
+	printf '%s  %d 项通过 · %d 项提醒 · %d 项未通过\n' \
+		"$C_RESET" "$n_pass" "$n_warn" "$n_fail"
+}
 
 usage() {
 	cat <<'EOF'
@@ -44,6 +192,9 @@ usage() {
   --fix         安装缺失的软件包。安装后本脚本退出，由操作者重新运行以确认结果
   --check       只检查。即使已安装 migrator 也不进入向导，供脚本调用
   --donor HOST  指定源端地址，不读取上次连接的记录
+  --plain       纯文本输出。不输出颜色、标志块与进度动画
+  --color       输出颜色。输出不是终端时默认关闭，该选项将其打开
+  --no-color    不输出颜色。与设置环境变量 NO_COLOR 效果相同
   -h, --help    显示本说明
 
 未指定源端地址时，脚本读取 /run/migrator/state 中上次连接的主机。
@@ -53,6 +204,18 @@ PATH 中没有 migrator 时，脚本在末尾打印安装命令。
 EOF
 }
 
+# sh -c "$(curl …)" --fix 时，--fix 会进入 $0 而不是参数表。这里把它取回来当作
+# 第一个参数，使该写法与 sh -s -- --fix 等价。$0 只在含斜杠时视为脚本路径，
+# 否则（管道运行时的 sh）置空，后续不再用它拼目录。
+case ${0:-} in
+	-*) [ $# -eq 0 ] && set -- "$0" ;;
+esac
+SELF=${0:-}
+case $SELF in
+	*/*) ;;
+	*)   SELF= ;;
+esac
+
 GO=; FIX=; DONOR=${MIGRATOR_DONOR:-}
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -61,6 +224,9 @@ while [ $# -gt 0 ]; do
 		--check|-c)   GO= ;;                       # 默认即只检查；显式写出便于调用方确认
 		--donor)      DONOR=${2:-}; [ -n "$DONOR" ] || { echo "--donor 需要一个地址" >&2; exit 2; }; shift ;;
 		--donor=*)    DONOR=${1#*=} ;;
+		--color)      ui_force=always ;;
+		--no-color)   ui_force=never ;;
+		--plain)      ui_plain=1; ui_force=never ;;
 		-h|--help)    usage; exit 0 ;;
 		--)           shift; continue ;;
 		-*)           echo "无法识别的选项：$1" >&2; usage >&2; exit 2 ;;
@@ -69,10 +235,23 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+ui_init
+
 n_pass=0; n_warn=0; n_fail=0; fix_pkgs=
 # 结果列固定为 4 个字符，均为 ASCII，对齐可靠。中文按显示宽度占两列、按字节占
 # 三字节，printf 的 %-28s 会把中文列排歪。因此检查项与说明连续排在同一列。
-row()  { printf '  %-4s %s\n' "$2" "$1：$3"; }
+row() {
+	if [ "$ui_mode" = always ]; then
+		case $2 in
+			PASS) c=$C_PASS ;;
+			WARN) c=$C_WARN ;;
+			*)    c=$C_FAIL ;;
+		esac
+		printf '  %s%-4s%s  %s%s%s：%s\n' "$c" "$2" "$C_RESET" "$C_KEY" "$1" "$C_RESET" "$3"
+	else
+		printf '  %-4s  %s：%s\n' "$2" "$1" "$3"
+	fi
+}
 pass() { n_pass=$((n_pass + 1)); row "$1" PASS "$2"; }
 warn() { n_warn=$((n_warn + 1)); row "$1" WARN "$2"; }
 fail() { n_fail=$((n_fail + 1)); row "$1" FAIL "$2"; }
@@ -90,9 +269,8 @@ cn_list() { printf '%s' "$1" | sed 's/ /、/g'; }
 can_ask()   { [ -t 0 ] || ( : < /dev/tty ) 2>/dev/null; }
 tty_stdin() { [ -t 0 ] && return 0; can_ask && exec 0</dev/tty; return 0; }
 
-echo "[migrator-preflight] 目标端 $(hostname 2>/dev/null || echo '?')"
-printf '  %-4s %s\n' "结果" "检查项与说明"
-printf '  %s\n' "----------------------------------------------------------------------------"
+ui_banner
+ui_table_head
 
 # --- 身份与运行环境 ----------------------------------------------------------
 if [ "$(id -u)" = 0 ]; then pass "运行身份" "当前用户为 root"
@@ -118,8 +296,8 @@ if have migrator; then
 	# -V 的同一行还带有库目录与 Live 字段，这里只取名称与版本
 	v=$(migrator -V 2>/dev/null | head -1 | awk '{ print $1, $2 }')
 	pass "工具" "PATH 中存在 ${v:-migrator}"
-elif [ -r "$(dirname "$0")/../bin/migrator" ] && [ -n "$0" ] && [ -r "$0" ]; then
-	pass "工具" "使用源码树中的驱动器 $0"
+elif [ -n "$SELF" ] && [ -r "$SELF" ] && [ -x "$(dirname "$SELF")/../bin/migrator" ]; then
+	pass "工具" "使用源码树中的驱动器 $SELF"
 else
 	warn "工具" "PATH 中没有 migrator。安装命令见本脚本末尾"
 fi
@@ -208,14 +386,17 @@ else fail "默认路由" "本机没有默认路由，两台主机之间无法通
 # 在线安装依赖的三个源。中国大陆境内的网络通常可以访问 Gitee，通常不能访问
 # GitHub，因此列表中有三个地址。
 if have curl || have wget; then
-	reach=; unreach=
+	reach=; unreach=; i=0
 	for b in "https://gitee.com" "https://cdn.jsdelivr.net" "https://raw.githubusercontent.com"; do
 		h=${b#https://}
+		i=$((i + 1))
+		spin_start "检查下载源 $h（$i/3）"
 		if have curl; then
 			curl -s -o /dev/null -m 6 -w '' "$b" 2>/dev/null && ok=1 || ok=
 		else
 			wget -q -T 6 -O /dev/null "$b" 2>/dev/null && ok=1 || ok=
 		fi
+		spin_stop
 		if [ -n "$ok" ]; then reach="${reach:+$reach、}$h"; else unreach="${unreach:+$unreach、}$h"; fi
 	done
 	if [ -n "$unreach" ]; then
@@ -244,8 +425,11 @@ if [ -n "$DONOR" ]; then
 	port=22
 	case $DONOR in *:*) port=${DONOR##*:} ;; esac
 	if have ssh; then
-		if ssh -o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new \
-			-p "$port" "$DONOR" true 2>/dev/null; then
+		spin_start "连接源端 $host:$port"
+		ssh -o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new \
+			-p "$port" "$DONOR" true 2>/dev/null && ok=1 || ok=
+		spin_stop
+		if [ -n "$ok" ]; then
 			pass "源端 SSH" "可免密登录 $host:$port"
 			os=$(ssh -o BatchMode=yes -o ConnectTimeout=6 -p "$port" "$DONOR" \
 				'. /etc/os-release 2>/dev/null; echo "$PRETTY_NAME"' 2>/dev/null | tail -1)
@@ -267,9 +451,10 @@ else
 fi
 
 # --- 结论 --------------------------------------------------------------------
-echo "----------------------------------------------------------------------------"
+ui_rule
 printf '[migrator-preflight] 共 %d 项检查：%d 项通过，%d 项提醒，%d 项未通过\n' \
 	$((n_pass + n_warn + n_fail)) "$n_pass" "$n_warn" "$n_fail"
+ui_bar
 
 # 缺少软件包时只输出一条可直接执行的命令；--fix 才会实际安装，安装后由操作者
 # 重新运行本脚本，脚本不隐藏该过程。
@@ -310,7 +495,10 @@ if [ -n "$pkgs" ] && { [ "$n_fail" -gt 0 ] || [ -n "$FIX" ]; }; then
 		fi
 		[ -n "$resolved" ] || { say "没有可自动安装的软件包，其余项目需要手工处理"; exit 1; }
 		say "--fix：apt-get install -y $resolved"
-		if log=$(apt-get install -y $resolved 2>&1); then
+		spin_start "安装软件包（apt-get install）"
+		log=$(apt-get install -y $resolved 2>&1) && ok=1 || ok=
+		spin_stop
+		if [ -n "$ok" ]; then
 			say "安装完成。请重新运行本脚本确认结果"
 		else
 			say "apt-get 未完成安装，最后三行输出如下："
@@ -332,7 +520,7 @@ if [ "$n_fail" -gt 0 ]; then
 fi
 
 # --- 下一步 ------------------------------------------------------------------
-if ! have migrator && [ ! -x "$(dirname "$0")/../bin/migrator" ]; then
+if ! have migrator && { [ -z "$SELF" ] || [ ! -x "$(dirname "$SELF")/../bin/migrator" ]; }; then
 	say "本机尚未安装 migrator。安装命令如下："
 	printf '    %s\n' "curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/get.sh | sh"
 fi
@@ -342,9 +530,9 @@ if [ -n "$GO" ]; then
 	if have migrator; then
 		say "--go：进入迁移向导，源端地址已填入，其余项目照常询问"
 		WZ_DONOR=$DONOR exec migrator -w
-	elif [ -n "$0" ] && [ -r "$0" ] && [ -x "$(dirname "$0")/../bin/migrator" ]; then
+	elif [ -n "$SELF" ] && [ -r "$SELF" ] && [ -x "$(dirname "$SELF")/../bin/migrator" ]; then
 		say "--go：使用源码树中的驱动器进入向导"
-		WZ_DONOR=$DONOR exec sh "$(dirname "$0")/../bin/migrator" -w
+		WZ_DONOR=$DONOR exec sh "$(dirname "$SELF")/../bin/migrator" -w
 	else
 		say "使用 --go 需要先安装 migrator。请执行上面的安装命令，然后重新运行本脚本"
 		exit 2

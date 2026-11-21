@@ -112,6 +112,35 @@ esac
 rc=0; sh "$REPO/tools/preflight.sh" --nope >/dev/null 2>&1 || rc=$?
 assert_eq "preflight refuses an unknown option" 2 "$rc"
 
+# --- preflight: the display layer must be invisible in a pipe -----------------
+# 输出不是终端时，颜色、标志块与动画都不应出现，否则写入日志的内容会带上转义
+# 序列。--color 用于显式打开颜色，此时也不应出现标志块与动画。
+esc=$(printf '\033')
+out=$(https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
+	sh "$REPO/tools/preflight.sh" --plain 2>&1 || true)
+case $out in
+	*"$esc"*) _fail "preflight --plain emits no escape sequences" "found ESC" ;;
+	*)        _pass "preflight --plain emits no escape sequences" ;;
+esac
+case $out in
+	*"m i g r a t o r"*) _fail "preflight --plain omits the logo" "printed the logo block" ;;
+	*)                   _pass "preflight --plain omits the logo" ;;
+esac
+
+out=$(https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
+	sh "$REPO/tools/preflight.sh" --color 2>&1 || true)
+case $out in
+	*"$esc"*) _pass "preflight --color emits escape sequences" ;;
+	*)        _fail "preflight --color emits escape sequences" "no ESC in output" ;;
+esac
+case $out in
+	*"m i g r a t o r"*) _fail "preflight --color keeps the logo off a pipe" "printed the logo block" ;;
+	*)                   _pass "preflight --color keeps the logo off a pipe" ;;
+esac
+
+assert_has "preflight documents --plain" "--plain" "$(sh "$REPO/tools/preflight.sh" -h 2>&1)"
+assert_has "preflight documents --no-color" "--no-color" "$(sh "$REPO/tools/preflight.sh" -h 2>&1)"
+
 out=$(sh "$REPO/tools/get.sh" -h 2>&1)
 assert_has "get.sh documents --check" "只检查，不安装" "$out"
 
