@@ -15,7 +15,8 @@ assert_eq "the help exits 0" 0 "$rc"
 assert_has "the help says no second machine is needed" "构建不需要第二台机器" "$out"
 assert_has "the help names the two scripts it drives" "rig/build-live.sh" "$out"
 assert_has "the help says how to get back out" "live-entry.sh -r" "$out"
-assert_has "the help says the run stops twice" "中间停两次" "$out"
+assert_has "the help says the run stops twice" "停两次确认" "$out"
+assert_has "the help says it asks two things first" "问两项设置" "$out"
 assert_has "the help says -n changes nothing" "不改动本机" "$out"
 
 assert_has "the help documents the port" "-p PORT" "$out"
@@ -73,17 +74,18 @@ grep -q "$TMPD/stub" "$TMPD/lb.sh" || _fail "the stub dir reaches the script's P
 out=$(bash "$TMPD/lb.sh" -n 2>&1); rc=$?
 assert_eq "a precheck that passes exits 0 in a dry run" 0 "$rc"
 assert_has "the precheck prints the table header" "结果  检查项与说明" "$out"
-assert_has "the table counts every item" "共 13 项检查" "$out"
+assert_has "the table counts every item" "共 12 项检查" "$out"
 assert_has "the table ends with zero failures" "0 项未通过" "$out"
 assert_has "the dry run lists the following steps" "接下来依次执行" "$out"
 assert_has "the dry run says nothing was changed" "未做任何改动" "$out"
 assert_has "the default way in is the key alone" "只接受私钥" "$out"
-assert_has "the table has a row for how one logs in" "登录方式" "$out"
+assert_has "the dry run says the questions come first" "执行时会询问登录方式与端口" "$out"
+assert_has "the dry run prints the settings it would ask about" "取值：只接受私钥，sshd 监听 22" "$out"
 
-# 随机端口在预检阶段没有数字可显示：预检只读，端口在执行时才确定
+# 随机端口在问答阶段没有数字可显示：端口在构建时才确定
 out=$(bash "$TMPD/lb.sh" -n -p random 2>&1); rc=$?
 assert_eq "a random port still clears the precheck" 0 "$rc"
-assert_has "a random port is described as undecided" "随机端口，执行时选取" "$out"
+assert_has "a random port is described as undecided" "随机端口，构建时选取" "$out"
 
 # 演练不打印密码：真跑时会重新生成一个，演练给出的那个永远不会被使用
 out=$(bash "$TMPD/lb.sh" -n -P random 2>&1)
@@ -114,6 +116,95 @@ if command -v setsid >/dev/null 2>&1; then
 	assert_has "the refusal says to add -y" "加 -y 重新运行" "$out"
 else
 	skip "the no-terminal refusal" "needs setsid, absent here"
+fi
+
+# 演练与 -y 都不该走到提问：前者只读，后者一律取默认值
+out=$(bash "$TMPD/lb.sh" -n 2>&1); rc=$?
+assert_eq "a dry run needs no terminal" 0 "$rc"
+
+# -y 不问地址：推不出来就停下，而不是拿一个猜的值构建。把 ip 桩换成不说话，
+# 探测必然失败；此后第一件事是拒绝，所以不会真的开始构建。
+stub ip 'exit 0'
+out=$(bash "$TMPD/lb.sh" -y 2>&1); rc=$?
+assert_eq "-y without an address is refused with exit 2" 2 "$rc"
+assert_has "the refusal says -y does not ask" "-y 不提问" "$out"
+stub ip 'case "$*" in "route get"*) echo "1.1.1.1 via 192.168.22.1 dev eth0 src 192.168.22.50 uid 0" ;; "-o -4 addr show"*) echo "2: eth0    inet 192.168.22.50/24 brd 192.168.22.255 scope global eth0" ;; esac'
+
+# 问答段单独取出执行：本仓库的测试环境造不出伪终端，但「回答怎么变成取值、
+# 取值怎么被打印」这一步与终端无关，用桩 ask 按顺序喂答案即可覆盖。
+SEG=$TMPD/ask-seg.sh
+sed -n '/^# 交互：只问预检给不出取值的地方/,/^# =* 交互结束/p' "$L" > "$SEG"
+if grep -q '^ask_settings()' "$SEG"; then
+	_pass "the settings segment can be taken out of live-boot.sh"
+
+	# ask_run 答案串 [前置赋值]：答案以 | 分隔，空段表示回车（取默认值）。
+	# 答案写进文件后按顺序读：$( ) 里的 ask 在子 shell 中运行，计数器带不出来，
+	# 而文件偏移量是共享的。
+	ask_run() {
+		printf '%s' "$1" | tr '|' '\n' > "$TMPD/answers"
+		bash -c '
+			set -u
+			die() { printf "ERROR: %s\n" "$*" >&2; exit 2; }
+			can_ask() { return 0; }
+			say() { printf "%s\n" "$*"; }
+			rule() { printf "%s\n" "---"; }
+			SSH_PORT=22; SSH_PW=; PORT_WANT=; PW_WANT=; PORT_SET=
+			SPEC=192.168.22.50/24,192.168.22.1,114.114.114.114
+			. "$1"
+			exec 3< "$2"
+			eval "${3:-:}"
+			ask() {
+				local a=
+				IFS= read -r a <&3
+				[ -n "$a" ] || a=$2
+				printf "%s\n" "$a"
+			}
+			ask_settings
+			printf "STATE spec=%s port=%s want=%s pw=%s\n" \
+				"${SPEC:-none}" "${SSH_PORT:-none}" "${PORT_WANT:-none}" "${PW_WANT:-none}"
+		' _ "$SEG" "$TMPD/answers" "${2:-}" 2>&1
+	}
+
+	# 一路回车：只接受私钥，22
+	out=$(ask_run "")
+	assert_has "enter twice keeps the key-only login" "本次：只接受私钥，sshd 监听 22" "$out"
+	assert_has "enter twice leaves the port at 22" "STATE spec=192.168.22.50/24,192.168.22.1,114.114.114.114 port=22" "$out"
+
+	# 选了密码登录：端口默认改为随机，而不是 22
+	out=$(ask_run "2|")
+	assert_has "choosing a password says both ways in work" "私钥与密码均可登录" "$out"
+	assert_has "choosing a password moves the default port off 22" "随机端口，构建时选取" "$out"
+	assert_has "choosing a password records a random one" "want=random pw=random" "$out"
+
+	# 密码登录仍停在 22 时要说清代价
+	out=$(ask_run "2|2")
+	assert_has "a password on 22 is called out" "常规扫描" "$out"
+	assert_has "a password on 22 leaves the port there" "sshd 监听 22" "$out"
+
+	# 指定端口：数字落到取值里；直接回车则退回随机
+	out=$(ask_run "1|3|65022")
+	assert_has "a typed port is used" "sshd 监听 65022" "$out"
+	out=$(ask_run "1|3|")
+	assert_has "an empty port answer falls back to random" "随机端口，构建时选取" "$out"
+
+	# 不认识的编号重问一次，第二次被接受
+	out=$(ask_run "9|2|2")
+	assert_has "an unknown choice is rejected with what is allowed" "只能填 1 或 2" "$out"
+	assert_has "the next answer is taken" "pw=random" "$out"
+
+	# -p 给了就不问端口；-P random 给了就不问登录方式
+	out=$(ask_run "" "PORT_SET=1 SSH_PORT=46496")
+	assert_has "a given port is not asked about" "sshd 监听 46496" "$out"
+	out=$(ask_run "" "PW_WANT=random")
+	assert_has "a given password is not asked about" "私钥与密码均可登录" "$out"
+	assert_has "a given password makes the default port random" "随机端口，构建时选取" "$out"
+
+	# 预检探测不到地址时补问，回答写回 SPEC
+	out=$(ask_run "10.0.0.5/24,10.0.0.1,1.1.1.1|1|2" "SPEC=")
+	assert_has "an unknown address is asked for" "无法自动确定，需要手工指定" "$out"
+	assert_has "the typed address is used" "STATE spec=10.0.0.5/24,10.0.0.1,1.1.1.1" "$out"
+else
+	skip "the settings segment" "could not locate it in live-boot.sh"
 fi
 
 # The names have to agree: build-live.sh writes them, live-entry.sh reads them.
