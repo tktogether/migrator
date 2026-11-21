@@ -7,7 +7,7 @@ migrator 的代码来源为仓库，程序中没有内置的下载地址。安�
 - 在迁移 Live 上从自行托管的发布包安装；
 - 构建迁移 Live，使其自带工具与依赖。
 
-以上四种方式安装的工具，其迁移命令都需要在完整的迁移 Live 中执行。
+以上四种方式安装的工具，其迁移命令都需要在完整的迁移 Live 中执行。目标主机上的工具装在 Live 内：Live 的根文件系统位于内存，重启后需要重新安装。迁移 Live 的制作与引导见[快速开始](03-quickstart.md)第 0 步。
 
 ## 用一条命令安装
 
@@ -192,6 +192,8 @@ make agent-test
 
 ## 5. 构建迁移 Live
 
+从零开始的操作顺序见[快速开始](03-quickstart.md)第 0 步。本节列出构建的全部选项与约束。
+
 仓库提供两份构建脚本：
 
 | 脚本 | 适用环境 | 说明 |
@@ -225,6 +227,8 @@ BUILD_DIR=/data/live-build TARBALL=/tmp/migrator.tar.gz \
 
 ## 6. 在迁移 Live 中准备工具
 
+自建镜像已包含工具，本节用于镜像中没有工具的情况。
+
 现成的迁移 Live 中若没有 migrator，可在 Live 内执行：
 
 ```sh
@@ -249,8 +253,8 @@ migrator -V
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `not a Live OS (no /etc/migrator-live-release)` | 当前系统不是完整迁移 Live | 启动迁移 Live 后再执行 |
-| `this needs the full Live OS, not boot=base` | 使用了基础 Live | 改用完整 Live |
+| `当前系统不是迁移 Live：找不到 /etc/migrator-live-release` | 当前系统不是完整迁移 Live | 启动迁移 Live 后再执行，见[快速开始](03-quickstart.md)第 0 步 |
+| `当前系统是精简 Live，缺少 systemctl、bash 或 apt-get` | 使用了基础 Live（`boot=base`） | 改用完整 Live |
 | `migrator: command not found` | 未安装或不在 `PATH` | 使用 `make install`，或把安装目录加入 `PATH` |
 | `cannot log in ... without a terminal` | 非交互环境缺少密钥 | 使用 `-i KEYFILE`，或在执行前转发 SSH agent |
 | `tool versions differ` | 两端 Live 构建不同 | 使用同一份 ISO；确认后才使用 `force=1` |

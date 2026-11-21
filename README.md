@@ -3,7 +3,7 @@
 migrator 用于将一台已安装的 Linux 服务器迁移到另一台机器。数据通过网络直接传输，
 不需要中间存储。
 
-迁移在新机器上执行，参数为旧机器的地址。执行前先把新机器启动到迁移 Live。安装方法见后文「安装」一节。
+迁移在新机器上执行，参数为旧机器的地址。执行前先把新机器启动到迁移 Live。迁移 Live 的制作与引导见 [docs/wiki/03-quickstart.md](docs/wiki/03-quickstart.md) 第 0 步，安装方法见后「安装」一节。
 
 ```sh
 migrator root@10.0.0.12
@@ -105,7 +105,7 @@ migrator -o compress=none -o converge=5 root@10.0.0.12
 
 ## 安装
 
-安装到已有系统有三种方式，任选一种。
+安装到已有系统有三种方式，任选一种。目标主机上的工具装在迁移 Live 内：Live 的根文件系统位于内存，重启后需要重新安装。
 
 **从镜像安装。** 脚本从镜像读取源码树，安装到 `/usr/local/sbin` 与 `/usr/local/lib/migrator`。`PREFIX`、`--ref` 与海外网络可用的 `--base` 见 [docs/wiki/02-install.md](docs/wiki/02-install.md)。
 
