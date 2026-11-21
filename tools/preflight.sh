@@ -305,7 +305,7 @@ else fail "运行身份" "当前用户不是 root，分区与挂载需要 root �
 if [ -r /etc/migrator-live-release ] || [ -r /etc/xserver-live-release ]; then
 	pass "迁移 Live" "本机从迁移 Live 启动"
 else
-	warn "迁移 Live" "本机不是迁移 Live。可以生成计划并审阅，执行迁移需要进入 Live"
+	warn "迁移 Live" "本机不是迁移 Live。本次只能完成本机检查；生成计划与执行迁移需要从迁移 Live 启动"
 fi
 
 mem=$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null || echo 0)
@@ -329,7 +329,8 @@ else
 fi
 
 # --- 目标磁盘 ----------------------------------------------------------------
-# 正在运行的系统所在磁盘要单独标出：整盘覆盖会破坏当前系统，迁移工具会拒绝该盘。
+# 正在运行的系统所在磁盘要单独标出：迁移会整盘覆盖目标盘。迁移 Live 的根文件系统位于
+# 内存，其中的磁盘全部空闲；不在 Live 中时唯一的磁盘往往是系统盘，此时不能作为目标盘。
 root_dev=
 if have findmnt && have lsblk; then
 	src=$(findmnt -no SOURCE / 2>/dev/null) || src=
@@ -342,19 +343,26 @@ if have findmnt && have lsblk; then
 fi
 
 if have lsblk; then
-	disks=; usable=0
+	# 可用盘与系统盘分开记录：系统盘出现在可用清单里，会被读成它可以作为目标盘
+	disks=; sysd=; usable=0; listed=0
 	for d in $(lsblk -dnpo NAME,SIZE,TYPE 2>/dev/null | awk '$3 == "disk" { print $1"|"$2 }'); do
 		dev=${d%%|*}; size=${d#*|}
+		listed=$((listed + 1))
 		if [ -n "$root_dev" ] && [ "$dev" = "$root_dev" ]; then
-			disks="$disks$dev（$size，本机系统盘） "
+			sysd="$sysd$dev（$size） "
 		else
 			disks="$disks$dev（$size） "; usable=$((usable + 1))
 		fi
 	done
-	disks=${disks% }
-	if [ -z "$disks" ]; then fail "目标磁盘" "lsblk 未列出任何磁盘"; need lsblk util-linux
-	elif [ "$usable" -eq 0 ]; then warn "目标磁盘" "可供选择的磁盘只有 $disks。需要另接一块磁盘作为目标盘"
-	else pass "目标磁盘" "$disks"; fi
+	disks=${disks% }; sysd=${sysd% }
+	if [ "$listed" -eq 0 ]; then fail "目标磁盘" "lsblk 未列出任何磁盘"; need lsblk util-linux
+	elif [ "$usable" -eq 0 ]; then
+		warn "目标磁盘" "唯一的磁盘 $sysd是当前运行的系统盘。进入迁移 Live 后，该磁盘可作为目标盘"
+	elif [ -z "$sysd" ]; then
+		pass "目标磁盘" "$disks"
+	else
+		pass "目标磁盘" "可用磁盘 $disks。$sysd为本机系统盘，不能作为目标盘"
+	fi
 else
 	fail "目标磁盘" "本机没有 lsblk，无法列出磁盘。该命令由 util-linux 提供"; need lsblk util-linux
 fi
