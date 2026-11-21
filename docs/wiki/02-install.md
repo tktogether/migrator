@@ -9,6 +9,29 @@ migrator 的全部代码以仓库为唯一来源，没有内置的厂商下载�
 
 无论采用哪种方式，迁移命令都必须在完整迁移 Live 中执行。
 
+## 最快的方式：一条命令
+
+源码在 GitHub，三个免费镜像会同步它：jsDelivr、Gitee、GitHub raw。`tools/get.sh` 按这个顺序逐个试，第一个能用的就装。
+
+```sh
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/get.sh | sh
+```
+
+它按文件取源码树，打包成 `tools/install.sh` 认得的样子，然后交给它安装——所以在线安装与离线安装走的是同一段安装逻辑，只有一处需要维护。
+
+需要指定来源、走代理或换安装目录时，改环境变量即可，不必改代码：
+
+```sh
+curl -fsSL .../get.sh | MIGRATOR_PROXY=https://your.proxy/ sh
+curl -fsSL .../get.sh | sh -s -- --prefix /opt/migrator --ref 1.2
+```
+
+也可以先安装再直接运行，参数会原样交给 `migrator`：
+
+```sh
+curl -fsSL .../get.sh | sh -s -- -s plan root@192.168.1.111
+```
+
 ## 1. 从仓库安装
 
 ![安装布局](assets/release-layout.svg)

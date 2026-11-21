@@ -6,7 +6,12 @@
 # in a chroot (fstab, initramfs drivers, grub, network), verify it boots, and
 # only then cut over. The donor is never written to.
 #
-# usage: migrator [-n] [-y] [-i KEYFILE] [-d DISK] [-s STEP] [-o key=value]... [DONOR] [ARG]
+# usage: migrator [-n] [-y] [-i KEYFILE] [-f FILE] [-w] [-d DISK] [-s STEP] [-o key=value]... [DONOR] [ARG]
+#   (no DONOR, on a terminal)
+#                 ask the few questions that matter — source, on-line or off-line,
+#                 target disk, compression, what the donor does afterwards, whether
+#                 to test-boot the copy — print the command they add up to, and run
+#                 it. The plan is still printed and the disk still has to be typed.
 #   DONOR         [root@]host[:port] of the source: booted into the Live (off-line migration,
 #                 source.migrator) or running its own OS (on-line migration: the volumes are
 #                 copied in passes by migrator-agent while it runs and frozen for the last delta;
@@ -25,6 +30,13 @@
 #                 -d DISK,DISK2 with -o raid=1: mirror the two (md RAID1 per slot, grub/ESP on both)
 #   -n   dry run: print every command, change nothing      -y   never ask (answers yes)
 #   -i KEYFILE    ssh key for the source                    -V   version
+#   -f FILE       read the flags and options from FILE, one key=value per line:
+#                 donor= disk= step= key= yes= dry=, and every other key is an
+#                 -o (mode=online, compress=zstd:3 ...). A DONOR on the command
+#                 line beats the file. Comments start with '#'. This is what the
+#                 wizard prints, so a run that worked can be repeated exactly.
+#   -w            ask the questions even when arguments are already given; the
+#                 answers fill in what is missing and the same command is printed
 #   -o key=value  repeat it for every key ("-o compress=none -o patience=600"):
 #                  a comma belongs to the value (driver=mod1,mod2,
 #                  console=ttyS0,115200), so options are never joined by one.
@@ -56,7 +68,7 @@
 #         dpkg-wait=600  seconds to let the donor finish an interrupted dpkg before the freeze
 #            (0 skips the wait): freezing mid-upgrade leaves the target unable to install
 #            what postfix needs, which is how the first RAID1 run lost half a day
-#   long forms: --dry-run --yes --key K --disk D --step S --option k=v --version --help
+#   long forms: --dry-run --yes --key K --disk D --file F --wizard --step S --option k=v --version --help
 # exit: 0 ok · 1 runtime failure · 2 usage/environment/identity · 3 verify failed
 #       (disk written, do NOT reboot) · 4 plan infeasible or edited plan rejected
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -76,7 +88,7 @@ if [ -z "${MIGRATOR_LIB:-}" ]; then
 fi
 export MIGRATOR_LIB
 RUN=${RUN:-/run/migrator}; export RUN
-DRY=; YES=; SSH_KEYFILE=; DISK=auto; STEP=
+DRY=; YES=; SSH_KEYFILE=; DISK=auto; STEP=; PARAMFILE=; WIZARD=
 declare -A OPT
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit "${1:-2}"; }
 # long options are rewritten to the short ones getopts knows
@@ -84,9 +96,10 @@ ARGS=()
 while [ $# -gt 0 ]; do
 	case $1 in
 		--dry-run) ARGS+=(-n) ;; --yes) ARGS+=(-y) ;; --version) ARGS+=(-V) ;; --help) ARGS+=(-h) ;;
-		--key|--disk|--step|--option) [ $# -ge 2 ] || { echo "$1 needs a value" >&2; exit 2; }
-			case $1 in --key) ARGS+=(-i "$2");; --disk) ARGS+=(-d "$2");; --step) ARGS+=(-s "$2");; --option) ARGS+=(-o "$2");; esac; shift ;;
-		--key=*|--disk=*|--step=*|--option=*) v=${1#*=}; case $1 in --key=*) ARGS+=(-i "$v");; --disk=*) ARGS+=(-d "$v");; --step=*) ARGS+=(-s "$v");; --option=*) ARGS+=(-o "$v");; esac ;;
+		--wizard) ARGS+=(-w) ;;
+		--key|--disk|--step|--option|--file) [ $# -ge 2 ] || { echo "$1 needs a value" >&2; exit 2; }
+			case $1 in --key) ARGS+=(-i "$2");; --disk) ARGS+=(-d "$2");; --step) ARGS+=(-s "$2");; --option) ARGS+=(-o "$2");; --file) ARGS+=(-f "$2");; esac; shift ;;
+		--key=*|--disk=*|--step=*|--option=*|--file=*) v=${1#*=}; case $1 in --key=*) ARGS+=(-i "$v");; --disk=*) ARGS+=(-d "$v");; --step=*) ARGS+=(-s "$v");; --option=*) ARGS+=(-o "$v");; --file=*) ARGS+=(-f "$v");; esac ;;
 		--) shift; ARGS+=("$@"); break ;;
 		--*) echo "unknown option $1" >&2; usage 2 ;;
 		*) ARGS+=("$1") ;;
@@ -94,17 +107,45 @@ while [ $# -gt 0 ]; do
 	shift
 done
 set -- "${ARGS[@]}"
-while getopts "nyi:d:s:o:Vh" o; do
+while getopts "nyi:d:s:o:f:wVh" o; do
 	case $o in
 		n) DRY=y ;; y) YES=y ;; i) SSH_KEYFILE=$OPTARG ;; d) DISK=$OPTARG ;; s) STEP=$OPTARG ;;
+		f) PARAMFILE=$OPTARG ;; w) WIZARD=y ;;
 		o) case $OPTARG in *=*) OPTKEY=${OPTARG%%=*}; OPT[${OPTKEY//_/-}]=${OPTARG#*=} ;; *) echo "bad -o $OPTARG (want key=value)" >&2; exit 2 ;; esac ;;
 		V) STEP=version ;; h) usage 0 ;; *) usage 2 ;;
 	esac
 done
 shift $((OPTIND-1))
+# shellcheck source=lib/common.sh
+. "$MIGRATOR_LIB/common.sh"
+# -f: the same run, written down. The parser is always sourced (it only defines
+# functions) so the wizard can print that file too; pa_load runs when -f is on.
+# shellcheck source=lib/params.sh
+. "$MIGRATOR_LIB/params.sh"
+if [ -n "$PARAMFILE" ]; then
+	pa_load "$PARAMFILE"
+fi
+# an argument on the command line beats the file: that is what makes
+# "migrator -f base.conf -d /dev/sdb" a one-word change to a saved run
+[ -n "${1:-}" ] || [ -z "${PA_DONOR:-}" ] || set -- "$PA_DONOR"
 CMD=${STEP:-all}
 case $CMD in all|plan|check|apply|transfer|postfix|verify|cutover|inventory|attach|cleanup|version) ;;
 	*) echo "unknown step: $CMD" >&2; usage 2 ;; esac
+export DRY YES RUN
+opt_check
+# No source given and somebody is sitting in front of it: ask. -w asks even
+# when arguments are already there and fills in only what is missing. A run
+# driven by a script has no terminal and gets the plain "DONOR is required".
+case $CMD in
+	all|plan)
+		if [ -n "$WIZARD" ] || { [ -z "${1:-}" ] && [ -z "$YES" ] && is_tty; }; then
+			# shellcheck source=lib/wizard.sh
+			. "$MIGRATOR_LIB/wizard.sh"
+			WZ_DONOR=${1:-}
+			wz_run
+			exit "$EX_OK"                 # only reachable with WZ_PRINT_ONLY
+		fi ;;
+esac
 [ "$CMD" != all ] && [ "$CMD" != plan ] || [ -n "${1:-}" ] || { echo "DONOR is required: migrator [-s plan] [root@]host[:port]" >&2; usage 2; }
 # A dry run must not leave state, keys or a lock that a real run would trip
 # over: the steps that PRODUCE files (plan, all, inventory) work in $RUN/dry.
@@ -116,10 +157,6 @@ if [ -n "$DRY" ]; then
 		*) [ -r "$RUN/plan" ] || [ ! -r "$RUN/dry/plan" ] || RUN=$RUN/dry ;;
 	esac
 fi
-export DRY YES RUN
-# shellcheck source=lib/common.sh
-. "$MIGRATOR_LIB/common.sh"
-opt_check
 low_mem_defaults
 for f in ssh bootstrap inventory plan apply transfer target postfix netfix verify; do
 	# shellcheck disable=SC1090  # the libs are known, listed just above

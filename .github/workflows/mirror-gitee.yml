@@ -1,0 +1,49 @@
+name: mirror-gitee
+
+# Gitee mirrors this repository so that "curl | sh" works from a mainland
+# network, where raw.githubusercontent.com is usually unreachable. One-time
+# setup, then nothing:
+#
+#   1. create an EMPTY public repository on Gitee (gitee.com/<owner>/migrator);
+#      Gitee does not create one on push, and public repos need the owner's
+#      real-name verification
+#   2. in this repository: Settings -> Secrets and variables -> Actions
+#        secret  GITEE_TOKEN   a Gitee private token, scope "projects"
+#        var     GITEE_REPO    "<owner>/migrator"
+#   3. run this workflow once by hand (Actions -> mirror-gitee -> Run)
+#
+# After that every push to master and every tag lands on Gitee within a
+# minute, which is what tools/get.sh tries second.
+
+on:
+  push:
+    branches: [master]
+    tags: ['*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: push to gitee
+        env:
+          GITEE_USER: ${{ secrets.GITEE_USER }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ vars.GITEE_REPO }}
+        run: |
+          set -eu
+          # GITEE_USER is optional: the token's owner is used when it is absent
+          user=${GITEE_USER:-git}
+          : "${GITEE_REPO:?set the GITEE_REPO variable (owner/repo)}"
+          : "${GITEE_TOKEN:?set the GITEE_TOKEN secret}"
+          git remote add gitee "https://${user}:${GITEE_TOKEN}@gitee.com/${GITEE_REPO}.git"
+          # --force is deliberate: this is a mirror, so the source of truth wins
+          git push --force --prune gitee \
+            "HEAD:refs/heads/master" \
+            "refs/tags/*:refs/tags/*"

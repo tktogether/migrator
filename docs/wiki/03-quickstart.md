@@ -18,6 +18,74 @@ ssh-keygen -t ed25519 -N '' -f /root/migrator-key
 
 `-y` 表示不进行人工确认。首次使用建议不加 `-y`，以便在写入目标盘前检查提示。
 
+## 先探测，再动手
+
+不确定这台机器能不能跑完一次迁移时，先探测。它只有一个文件，一条命令，**不安装任何东西**：不挂载、不写盘、不改网络、不装包。
+
+```sh
+sh -c "$(curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/preflight.sh)"
+sh -c "$(curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/tools/preflight.sh)"
+```
+
+两个地址是同一份文件，哪个能通就用哪个。源机地址可以不给：脚本先看 `/run/migrator/state` 里上次连过的那台，再到网段里找免密能登录的 root，认到一台就直接用。
+
+每项一行，结果分 `PASS`、`WARN`、`FAIL` 三档，末尾汇总，并给出下一步那一行。`WARN` 不挡路但会让某一步变慢或不可用，`FAIL` 会让这次迁移直接失败，此时退出码为 1，并打印补齐缺包的 `apt-get install` 命令。
+
+三个开关：
+
+| 开关 | 作用 |
+|---|---|
+| `--go` | 没有 FAIL 就直接进迁移向导（源机已填好，其余照问） |
+| `--fix` | 把缺的包装上，然后重跑一次 |
+| `--check` | 明确「只检查」：装了工具也不进向导，供脚本调用 |
+
+要 `--go` 请用上面 `sh -c "$(curl ...)"` 的写法。写成 `curl ... | sh` 时标准输入被脚本本身占用，向导读不到键盘。
+
+希望由脚本自己选源、并且从多个镜像回落时，用安装脚本的检查模式，效果相同：
+
+```sh
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@master/get.sh | sh -s -- --check
+```
+
+## 一条命令安装
+
+工具本身也可以一条命令安装。源码在 GitHub，三个镜像按顺序自动回落，国内网络通常走 Gitee：
+
+```sh
+curl -fsSL https://cdn.jsdelivr.net/gh/tktogether/migrator@1.2/get.sh | sh
+```
+
+## 交互式运行
+
+不带参数、在有终端的机器上运行 `migrator`，它逐项提问：源机地址、在线还是离线、目标磁盘（列出本机所有磁盘，并标出正在运行的那一块）、压缩、完成后源机做什么、要不要先试启动。
+
+答完先打印等价的完整命令，再打印一份可保存的参数文件，确认后才开始。计划照旧打印，目标盘照旧要手打一遍：问答只省掉记参数，不跳过任何确认。
+
+## 参数式运行
+
+把问答打印出来的内容存成文件，之后直接读文件：
+
+```sh
+migrator -f migrate.conf
+```
+
+文件一行一个 `key=value`，`#` 开头是注释：
+
+```ini
+donor=root@192.168.1.111
+disk=/dev/sda
+mode=online
+compress=zstd:3
+```
+
+除 `donor`、`disk`、`step`、`key`、`yes`、`dry` 六行外，每一行都当作 `-o` 的键。命令行参数覆盖文件，所以"同一套设置、换一块盘"只改一个参数：
+
+```sh
+migrator -f migrate.conf -d /dev/sdb
+```
+
+键名写错会在开始前报错，并给出最接近的正确写法，不会被静默忽略。
+
 ## 选择场景
 
 ```mermaid
