@@ -190,6 +190,27 @@ sha256sum migrator-$VER.tar.gz > SHA256SUMS
 - 内部 IP、序列号、MAC 与磁盘标识；
 - 未脱敏的测试输出。
 
+## 文档同步
+
+`docs/wiki/` 是文档源，GitHub Wiki 是它的渲染结果，地址为
+`https://github.com/tktogether/migrator/wiki`。两者结构不同，需要转换：
+
+- Wiki 只把仓库根目录下的文件显示为页面，子目录不生成页面；
+- 页面标题取自文件名，文件名中的连字符显示为空格。
+
+因此 `docs/wiki/` 中的 `01-overview.md` 在 Wiki 上是 `01-产品概览.md`，标题显示为
+“01 产品概览”；维护者文档的 `maintainers/` 前缀改为 `维护者-` 前缀，与其他页面平铺在同一层。
+页面内的相对链接在发布时改写为 Wiki 的绝对路径，同时生成 `_Sidebar.md` 与 `_Footer.md`。
+
+修改 `docs/wiki/` 后执行：
+
+```
+tools/wiki-publish.sh            # 重新渲染并推送
+tools/wiki-publish.sh --no-push  # 只渲染，用于检查结果
+```
+
+脚本在临时目录中克隆 Wiki 仓库，内容无变化时不产生提交。Wiki 页面不要直接编辑，下次发布会覆盖。
+
 ## 相关文档
 
 - [安装与构建](../02-install.md)
