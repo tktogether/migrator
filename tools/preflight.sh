@@ -35,7 +35,8 @@
 # 显示：交互终端上输出标志块、颜色与进度动画。以下任一情况只输出纯文本，便于
 # 写入日志与比对：标准输出或标准错误不是终端、TERM 为 dumb 或未设置、
 # 设置了 NO_COLOR、指定了 --plain。纯文本模式下边框使用 ASCII，宽度固定 78 列。
-# --color 强制输出颜色，但不启用标志块与动画。
+# --color 强制输出颜色，但不启用标志块与动画。环境变量 MIGRATOR_COLOR 取
+# always / never / auto，效果与对应的开关相同。
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 set -u
 
