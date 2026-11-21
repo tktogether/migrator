@@ -93,6 +93,7 @@ migrator 在两台 Linux 主机之间执行整机迁移：把源主机的磁盘�
 | files / 文件级 | 用 tar 按目录树复制，可缩小目标容量 |
 | freeze / 冻结 | 对源文件系统执行 `fsfreeze`，使写入暂停并取得一致快照 |
 | precheck / 预检 | 在线模式下在副本的 dm 快照上提前运行 postfix 与 verify |
+| boottest / 启动测试 | 切换前用 qemu 试启动目标系统，验证其能否引导 |
 | cutover / 切换 | 将源端移出网络并启动目标端 |
 | postfix | 在目标系统 chroot 中修正引导与系统配置的阶段 |
 
