@@ -72,19 +72,19 @@ flowchart TD
 
 `debootstrap` 在 Debian 与 Ubuntu 的主源里都有。两者都装不上时，先确认软件源可访问。若只是想让构建继续，也可以在一台有 mmdebstrap 或 debootstrap 的机器上手工构建，把产物交给 `tools/live-entry.sh`。
 
-## 重新构建会替换上一次的产物
+## 产物目录中已有上一次构建
 
-产物目录默认是 `/var/tmp/migrator-live`。目录里已有上一次构建时，预检的「已有产物」一行会说明，开始之前的那次确认也会点名，形如 `开始执行，替换 /var/tmp/migrator-live 中上一次构建的产物 [y/N]`；回答 N 则本机没有任何改动。
+`live-boot.sh` 的产物目录默认是 `/var/tmp/migrator-live`。再次运行时，预检的「已有产物」一行给出判定，设置阶段的第一问给出三条路。
 
-替换的是三样：`live/filesystem.squashfs`、`vmlinuz-live`、`initrd-live.img`。旧镜像不保留，构建中途失败也一样，因为 `mksquashfs` 直接写在原位置。想留着它，先回答 N，再把整个目录移走，或者改用另一个产物目录：
+- **直接使用**。跳过构建，用现有产物写引导项，省去十几分钟。判据是引导要用的五项都在：`live/filesystem.squashfs`、`vmlinuz-live`、`initrd-live.img`、`live-entry.sh`、`rig_ed25519`。缺一项就不提供这一项，预检的那一行写明缺什么。
+- **重新构建并保留**。现有产物的目录在原名称后加时间戳改名，新的产物写入原路径。两个目录同时占用空间，可用空间不足时预检的「产物空间」一行给出两个数字，设置阶段不提供这一项。
+- **重新构建并替换**。旧文件不再保留。`mksquashfs` 直接写在原位置，构建中途失败也留不下旧镜像。
 
-```sh
-curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | RIG_OUT=/var/tmp/migrator-live2 bash
-```
+三者的参数分别是：`-b` 重新构建并替换，`-k` 重新构建并保留，`-r` 重新生成私钥。`-k` 要求两个目录同时占用空间，空间不足时脚本在设置之前结束，退出码为 2。
 
-新目录同样要通过预检的「产物空间」一项。
+私钥另有一问。继续使用时，上一次构建打印的私钥对新的镜像有效：`rig/build-live.sh` 发现 `rig_ed25519` 已经存在就使用它。重新生成时，旧私钥对新镜像无效，需要重新保存一份。要主动换一把，也可以先删除 `rig_ed25519` 与 `rig_ed25519.pub` 再运行。
 
-私钥不在替换之列。`rig/build-live.sh` 发现 `rig_ed25519` 已存在就沿用，因此上一次打印的私钥对这次构建出的镜像仍然有效，不需要重新抄一遍。要主动换一把，先删掉 `rig_ed25519` 与 `rig_ed25519.pub` 再构建。
+使用现有产物时不能设置密码，密码在构建时写入镜像。带 `-P` 运行会在设置阶段以退出码 2 结束并说明这一点。
 
 ## 登不进迁移 Live
 

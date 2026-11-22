@@ -16,12 +16,15 @@ assert_has "the help says no second machine is needed" "构建不需要第二台
 assert_has "the help names the two scripts it drives" "rig/build-live.sh" "$out"
 assert_has "the help says how to get back out" "live-entry.sh -r" "$out"
 assert_has "the help says the run stops twice" "停两次确认" "$out"
-assert_has "the help says it asks two things first" "问两项设置" "$out"
+assert_has "the help says how many things it asks" "问两到三项设置" "$out"
 assert_has "the help says -n changes nothing" "不改动本机" "$out"
 
 assert_has "the help documents the port" "-p PORT" "$out"
 assert_has "the help documents the password" "-P PASS" "$out"
 assert_has "the help says the port can be random" "random" "$out"
+assert_has "the help documents the rebuild flag" "-b " "$out"
+assert_has "the help documents the keep flag" "-k " "$out"
+assert_has "the help documents the new-key flag" "-r " "$out"
 
 out=$(bash "$L" -m nope 2>&1); rc=$?
 assert_eq "an unknown profile is refused" 2 "$rc"
@@ -83,37 +86,57 @@ assert_has "the dry run says the questions come first" "执行时会询问登录
 assert_has "the dry run prints the settings it would ask about" "取值：只接受私钥，sshd 监听 22" "$out"
 assert_has "the build names the backend it will use" "构建后端 mmdebstrap" "$out"
 
-# 已有产物：替换的是镜像文件，不是私钥。rig/build-live.sh 复用已有的 rig_ed25519，
-# 所以预检不能再说私钥会被替换——那句话会让人以为手里的钥匙作废。
+# 已有产物：可用的判据是「引导要用的五样都在」，不是「目录里有文件」。齐全时
+# 设置阶段多一问：直接使用、重新构建并保留、重新构建并替换。
 mkdir -p "$TMPD/out/live"
 : > "$TMPD/out/live/filesystem.squashfs"
 out=$(RIG_OUT="$TMPD/out" bash "$TMPD/lb.sh" -n 2>&1); rc=$?
-assert_eq "a previous build still clears the precheck" 0 "$rc"
-assert_has "a previous build is reported" "中有上一次构建的产物" "$out"
-assert_has "the key is said to be kept" "私钥沿用" "$out"
-assert_has "the dry run says the old image goes away" "旧镜像不保留" "$out"
+assert_eq "an incomplete previous build still clears the precheck" 0 "$rc"
+assert_has "an incomplete build says what is missing" "内容不完整" "$out"
+assert_has "an incomplete build cannot be used as it is" "不能直接使用" "$out"
+
+for f in live/filesystem.squashfs vmlinuz-live initrd-live.img live-entry.sh rig_ed25519; do printf 'x' > "$TMPD/out/$f"; done
+out=$(RIG_OUT="$TMPD/out" bash "$TMPD/lb.sh" -n 2>&1); rc=$?
+assert_eq "a complete previous build clears the precheck" 0 "$rc"
+assert_has "a complete build is reported as such" "完整产物" "$out"
+assert_has "a complete build can be used without rebuilding" "可以直接使用它，跳过构建" "$out"
+assert_has "the space row names both costs" "保留现有产物需要" "$out"
+assert_has "the dry run says the choice exists" "直接使用、重新构建并保留、重新构建并替换" "$out"
 case $out in
 	*"私钥会被替换"*)
 		_fail "the report does not claim the key is replaced" "still claims it" ;;
 	*)
 		_pass "the report does not claim the key is replaced" ;;
 esac
-# 替换发生在确认之后，回答 N 是唯一一次机会：这一句必须点名替换。
-if grep -qF '替换 $OUT 中上一次构建的产物' "$L"; then
-	_pass "the start confirmation names what it replaces"
-else
-	_fail "the start confirmation names what it replaces" "the prompt does not mention it"
-fi
-# 没有产物时不多说一句：这一行只在重新构建时出现。用一个空目录，避免读到本机
+
+# 有完整产物时，源码树取不到不拦下整次执行：改用现有产物不需要它。这一类拦截
+# 降为提醒，真正重新构建时仍会被 apt 与下载拦住。
+stub curl 'exit 1'
+stub wget 'exit 1'
+out=$(RIG_OUT="$TMPD/out" bash "$TMPD/lb.sh" -n 2>&1); rc=$?
+assert_eq "an unreachable tree does not stop a run that can reuse the build" 0 "$rc"
+assert_has "the tree row says when it is needed" "选择重新构建时才需要" "$out"
+stub curl 'exit 0'
+stub wget 'exit 0'
+
+# -k 要两个目录同时放得下。放不下时在设置之前就拒绝，而不是构建到一半才失败。
+stub du 'echo 4000000000'
+stub df 'echo 3500000000'
+out=$(RIG_OUT="$TMPD/out" bash "$TMPD/lb.sh" -n -k 2>&1); rc=$?
+assert_eq "-k without room for two copies is refused" 2 "$rc"
+assert_has "the refusal says what is short" "可用空间不足以同时保留现有产物" "$out"
+rm -f "$TMPD/stub/du"
+stub df 'echo 99999999999'
+
+# 没有产物时不多说一句：这几行只在有现有产物时出现。用一个空目录，避免读到本机
 # 真实存在的默认产物目录。
 out=$(RIG_OUT="$TMPD/none" bash "$TMPD/lb.sh" -n 2>&1)
 case $out in
-	*"旧镜像不保留"*)
-		_fail "a first build says nothing about replacing" "printed the replacement line" ;;
+	*"现有产物"*)
+		_fail "a first build says nothing about existing products" "printed the row" ;;
 	*)
-		_pass "a first build says nothing about replacing" ;;
+		_pass "a first build says nothing about existing products" ;;
 esac
-rm -rf "$TMPD/out"
 
 # 构建后端：mmdebstrap 只存在于 Ubuntu 的 universe 源里。没有它就装 debootstrap，
 # 两者在真 root 下产出同一个 minbase 树。
@@ -203,8 +226,9 @@ if grep -q '^ask_settings()' "$SEG"; then
 				printf "%s\n" "$a"
 			}
 			ask_settings
-			printf "STATE spec=%s port=%s want=%s pw=%s\n" \
-				"${SPEC:-none}" "${SSH_PORT:-none}" "${PORT_WANT:-none}" "${PW_WANT:-none}"
+			printf "STATE spec=%s port=%s want=%s pw=%s use=%s keep=%s newkey=%s\n" \
+				"${SPEC:-none}" "${SSH_PORT:-none}" "${PORT_WANT:-none}" "${PW_WANT:-none}" \
+				"${USE_OLD:-}" "${KEEP_OLD:-}" "${NEW_KEY:-}"
 		' _ "$SEG" "$TMPD/answers" "${2:-}" 2>&1
 	}
 
@@ -246,6 +270,90 @@ if grep -q '^ask_settings()' "$SEG"; then
 	out=$(ask_run "10.0.0.5/24,10.0.0.1,1.1.1.1|1|2" "SPEC=")
 	assert_has "an unknown address is asked for" "无法自动确定，需要手工指定" "$out"
 	assert_has "the typed address is used" "STATE spec=10.0.0.5/24,10.0.0.1,1.1.1.1" "$out"
+	# 现有产物：齐与不齐、空间够与不够，给出的选项不一样。
+	S=$TMPD/seg-out
+	mkdir -p "$S/live"
+	for f in live/filesystem.squashfs vmlinuz-live initrd-live.img live-entry.sh rig_ed25519; do
+		printf 'x' > "$S/$f"
+	done
+
+	# 齐、空间够：三选一。默认是第一项，直接使用。
+	out=$(ask_run "1" "OUT=$S OLD_ART=1")
+	assert_has "the first choice uses the existing build" "直接使用" "$out"
+	assert_has "using the existing build is recorded" "use=1" "$out"
+	assert_has "using the existing build skips the login question" "pw=" "$out"
+
+	# 重新构建并保留，私钥继续使用
+	out=$(ask_run "2|1" "OUT=$S OLD_ART=1")
+	assert_has "the second choice rebuilds and keeps" "keep=1" "$out"
+	assert_has "a kept build is announced" "目录改名保留" "$out"
+	assert_has "the key stays with the rebuild" "私钥：继续使用" "$out"
+
+	# 重新构建并替换，私钥重新生成
+	out=$(ask_run "3|2" "OUT=$S OLD_ART=1")
+	assert_has "the third choice replaces" "use= keep=" "$out"
+	assert_has "a regenerated key is announced" "私钥：重新生成" "$out"
+
+	# -b、-k 直接给出答案，不再问
+	out=$(ask_run "" "OUT=$S OLD_ART=1 WHAT=rebuild")
+	assert_has "-b skips the question about the old build" "use= keep=" "$out"
+	case $out in
+		*"上一次的产物  1"*) _fail "-b skips the question about the old build" "asked anyway" ;;
+		*) _pass "-b skips the question about the old build" ;;
+	esac
+	out=$(ask_run "" "OUT=$S OLD_ART=1 KEEP_OLD=1")
+	assert_has "a given keep is not asked about" "keep=1" "$out"
+	assert_has "a given keep is not switched to using the old build" "use=" "$out"
+
+	# 空间不足以同时放两份：不给「保留」这一项，第二项因此是替换（三选一时是保留）。
+	out=$(ask_run "2" "OUT=$S OLD_ART=1 OUT_AVAIL=0 OUT_NEED=10 OUT_OLD_SIZE=10")
+	assert_has "without room to keep, the second choice replaces" "use= keep=" "$out"
+
+	# 现有产物不完整：不给「直接使用」，默认因此是重新构建并替换。
+	B=$TMPD/seg-bad
+	mkdir -p "$B/live"
+	printf 'x' > "$B/live/filesystem.squashfs"
+	out=$(ask_run "" "OUT=$B OLD_ART=1")
+	assert_has "an incomplete build is not used by default" "use= keep=" "$out"
+
+	# 保留动作本身：目录改名、原地新建、私钥按选择复制
+	stash_run() {
+		bash -c '
+			set -u
+			die() { printf "ERROR: %s\n" "$*" >&2; exit 2; }
+			say() { printf "%s\n" "$*"; }
+			. "$1"
+			OUT=$2
+			eval "${3:-:}"
+			stash_old
+		' _ "$SEG" "$1" "${2:-}" 2>&1
+	}
+	K=$TMPD/stash
+	rm -rf "$K"
+	mkdir -p "$K/out/live"
+	printf 'x' > "$K/out/live/filesystem.squashfs"
+	printf 'KEY' > "$K/out/rig_ed25519"
+	printf 'PUB' > "$K/out/rig_ed25519.pub"
+	out=$(stash_run "$K/out")
+	assert_has "stashing announces the new name" "改名为" "$out"
+	K2=$(ls -d "$K"/out.* 2>/dev/null | head -1)
+	if [ -n "$K2" ] && [ -f "$K2/rig_ed25519" ] && [ -f "$K/out/rig_ed25519" ]; then
+		_pass "stashing keeps the old key and copies it back"
+	else
+		_fail "stashing keeps the old key and copies it back" "old=$K2"
+	fi
+	rm -rf "$K/out" "$K2"
+	mkdir -p "$K/out/live"
+	printf 'x' > "$K/out/live/filesystem.squashfs"
+	printf 'KEY' > "$K/out/rig_ed25519"
+	printf 'PUB' > "$K/out/rig_ed25519.pub"
+	out=$(stash_run "$K/out" "NEW_KEY=1")
+	K2=$(ls -d "$K"/out.* 2>/dev/null | head -1)
+	if [ -n "$K2" ] && [ -f "$K2/rig_ed25519" ] && [ ! -f "$K/out/rig_ed25519" ]; then
+		_pass "a regenerated key is not copied back"
+	else
+		_fail "a regenerated key is not copied back" "old=$K2"
+	fi
 else
 	skip "the settings segment" "could not locate it in live-boot.sh"
 fi

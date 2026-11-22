@@ -1,9 +1,11 @@
 #!/bin/bash
-# live-boot.sh：把本机送进迁移 Live。执行分三段，其间问两项设置、停两次确认。
+# live-boot.sh：把本机送进迁移 Live。执行分三段，其间问三项设置、停两次确认。
 #
 #   1. 预检。只读检查，逐项打印结果。有未通过项时停止，此时本机没有改动。
-#      通过后问两项设置：能不能用密码登录，sshd 监听哪个端口。
-#   2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印私钥。
+#      通过后问三项设置：现有产物怎么处置，私钥是否重新生成，能不能用密码登录，
+#      sshd 监听哪个端口。产物目录为空时只剩后两项。
+#   2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印私钥。选择直接使用
+#      现有产物时跳过这一段。
 #   3. 引导。取得确认后写入 GRUB 引导项并重启。
 #
 # 为什么构建放在这里：迁移要在目标盘空闲时执行，所以必须从迁移 Live 运行；而 Live
@@ -16,12 +18,14 @@
 #
 # 为什么停两次：预检之后停一次，让操作者在改动发生前读到结果；构建之后停一次，
 # 因为写入引导项会改变下次开机的去处，而此时登录信息已经生成，需要先交到操作者手上。
-# 产物目录里已有上一次构建时，第一处确认会点名要替换其中的镜像文件：旧镜像不保留，
-# 私钥沿用，因此撤回的办法只有回答 N 或事先把目录移走。
 #
-# 登录方式（D66、D67）：预检通过后问两项——能不能用密码登录，sshd 监听哪个端口。
-# 回车取方括号中的默认值，命令行给了的取值不再追问，-y 则一律取默认值。密码只提供
-# 随机生成一项：在问答里手打密码没有回显，敲错一个字符就进不去。
+# 现有产物（D69、D70）：产物目录中已有完整的上一次构建时，第一问给出三条路——直接
+# 使用它并跳过构建，重新构建并替换，重新构建并把现有目录改名保留。私钥另有一问：
+# 继续使用，或重新生成。重新生成后，之前打印的私钥对新的镜像无效。
+#
+# 登录方式（D66、D67）：能不能用密码登录，sshd 监听哪个端口。回车取方括号中的默认值，
+# 命令行给了的取值不再追问，-y 则一律取默认值。密码只提供随机生成一项：在问答里手打
+# 密码没有回显，敲错一个字符就进不去。
 #
 # 取值在构建时写入镜像。端口写在引导参数里，本机任何用户都能读到，它减少被扫描
 # 命中的次数，不是访问控制；密码由同一份镜像构建出的每台机器共用，提供的是访问
@@ -37,7 +41,9 @@ GITEE=${MIGRATOR_GITEE:-$OWNER}
 REF=${MIGRATOR_REF:-master}
 OUT=${RIG_OUT:-/var/tmp/migrator-live}
 PROFILE=slim
-SPEC=; YES=; DRY=; TREE=; OLD_ART=
+SPEC=; YES=; DRY=; TREE=
+OLD_ART=; OLD_FULL=; WHAT=; USE_OLD=; KEEP_OLD=; NEW_KEY=
+OUT_AVAIL=0; OUT_NEED=0; OUT_OLD_SIZE=0
 SSH_PORT=22; SSH_PW=; PORT_WANT=; PW_WANT=; PORT_SET=
 LIVE_MP=
 n_pass=0; n_warn=0; n_fail=0
@@ -118,15 +124,18 @@ usage() {
 用法：live-boot.sh [选项]
 
   在本机构建迁移 Live，写入本机的 GRUB 引导项，然后重启进入它。
-  构建不需要第二台机器：本机现有系统就是构建机。
+  构建不需要第二台机器：本机现有系统就是构建机。产物目录中已有完整的上一次
+  构建时，可以选择直接使用它，跳过构建。
 
-  执行分三段，其间问两项设置、停两次确认：
+  执行分三段，其间问两到三项设置、停两次确认：
     1. 预检。只读检查，逐项打印结果。有未通过项时停止，本机没有改动。
     2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印登录信息。
+       选择直接使用现有产物时跳过这一段。
     3. 引导。取得确认后写入引导项并重启。
 
   预检通过后先问两项：能不能用密码登录，sshd 监听哪个端口。直接回车取方括号
-  中的默认值。命令行给了的取值不再追问。
+  中的默认值。命令行给了的取值不再追问。产物目录中已有完整的上一次构建时，
+  这两问之前还有一问：直接使用这份产物，还是重新构建。
 
   -i SPEC      Live 的静态地址，格式 IP/前缀,网关,DNS
                例：192.168.1.50/24,192.168.1.1,114.114.114.114
@@ -137,6 +146,9 @@ usage() {
                信息中打印。省略时只接受私钥
   -m PROFILE   slim（默认，不含 qemu，体积小）或 full（含 qemu，可用于启动测试）
   -s DIR       使用 DIR 中已有的源码树，不从网络下载
+  -b           重新构建，并替换产物目录中的现有产物
+  -k           重新构建，并把现有产物的目录改名保留
+  -r           重新构建时生成新的私钥，不再使用现有的私钥
   -y           不提问也不确认，取值全用默认，一直执行到重启
   -n           只做预检并打印后续步骤，不改动本机，也不提问
   -h           显示本说明
@@ -151,8 +163,10 @@ usage() {
   存在可放置 Live 的非 LVM 分区且可用空间至少 3 GiB；构建依赖是否齐备；
   源码树是否可取；网络参数能否确定；本机是否已有迁移 Live 的引导项与产物。
 
-产物目录里已有上一次构建时，开始的确认会点名替换其中的镜像文件，私钥沿用；
--y 不做这次确认，直接替换。
+产物目录中已有完整的上一次构建时，设置阶段的第一问可以选择直接使用它，跳过构建。
+选择重新构建时，现有产物可以被替换，也可以改名保留；私钥可以继续使用，也可以
+重新生成。-y 不问这些，按默认值处理：直接使用现有的产物；没有现存产物，或给了
+-b、-k、-r、-P 时重新构建。
 
 构建完成后本机会重启。重启后：
   ssh -i <私钥> -p <端口> root@<地址>   私钥、端口与密码在构建结束时打印
@@ -168,13 +182,16 @@ usage() {
 EOF
 }
 
-while getopts "i:p:P:m:s:ynh" o; do
+while getopts "i:p:P:m:s:bkrRynh" o; do
 	case $o in
 		i) SPEC=$OPTARG ;;
 		p) SSH_PORT=$OPTARG; PORT_SET=1 ;;
 		P) SSH_PW=$OPTARG ;;
 		m) PROFILE=$OPTARG ;;
 		s) TREE=$OPTARG ;;
+		b) WHAT=rebuild ;;
+		k) WHAT=keep ;;
+		r) NEW_KEY=1 ;;
 		y) YES=1 ;;
 		n) DRY=1 ;;
 		h) usage; exit 0 ;;
@@ -183,6 +200,8 @@ while getopts "i:p:P:m:s:ynh" o; do
 done
 case $PROFILE in slim|full) ;; *) die 2 "未知的 PROFILE：$PROFILE（可选 slim 或 full）" ;; esac
 TREE=${TREE%/}
+# -k 是「重新构建并保留」的简写。没有现有产物时保留无从谈起，设置段会把它清掉。
+case ${WHAT:-} in keep) KEEP_OLD=1 ;; esac
 
 # 端口：数字或 random。-p slim 是上一版的 profile 写法，给出改法而不是只说错误。
 case $SSH_PORT in
@@ -261,7 +280,7 @@ pick() {
 
 need_tty() {
 	can_ask && return 0
-	die 2 "没有可交互的终端，无法询问$1。请用 -i、-p、-P 指定取值，并加 -y 重新运行"
+	die 2 "没有可交互的终端，无法询问$1。请用 -i、-p、-P、-b、-k 指定取值，并加 -y 重新运行"
 }
 
 # 端口号本身。空回答表示放弃指定、改回随机；范围之外的回答重问，三次后放弃。
@@ -297,10 +316,89 @@ ask_spec() {
 	done
 }
 
+# 现有产物缺什么。可用的判据不是「目录里有文件」，而是引导需要的五样都在：
+# 三份产物、写引导项的脚本、能登录的私钥。缺一样就不能直接使用。预检与设置
+# 都用这一个判据，免得表格说完整、问答说不完整。
+old_missing() {
+	local f m=
+	for f in live/filesystem.squashfs vmlinuz-live initrd-live.img live-entry.sh rig_ed25519; do
+		[ -s "${OUT:-}/$f" ] || m="$m $f"
+	done
+	printf '%s' "${m# }"
+}
+old_full() { [ -z "$(old_missing)" ]; }
+
+# 能否在保留现有产物的前提下重新构建：两个目录同时占空间，因此按两份算。
+# 预检把可用空间与两份的需求都算好放在 OUT_AVAIL、OUT_NEED、OUT_OLD_SIZE 里。
+can_keep() {
+	[ "${OUT_AVAIL:-0}" -ge $(( ${OUT_NEED:-0} + ${OUT_OLD_SIZE:-0} )) ]
+}
+
+# 保留现有产物：目录改名，在原位置新建。改名本身不占空间，但两个目录随后同时
+# 占盘，因此能不能这样做由 can_keep 判断。私钥随目录一起移走，选择继续使用时
+# 复制回来，rig/build-live.sh 会直接使用它。
+stash_old() {
+	local prev
+	prev=$OUT.$(date +%Y%m%d-%H%M%S)
+	say "现有产物的目录改名为 $prev"
+	mv "$OUT" "$prev" || die "无法移动现有产物的目录：$OUT"
+	mkdir -p "$OUT" || die "无法创建产物目录：$OUT"
+	if [ -z "${NEW_KEY:-}" ] && [ -s "$prev/rig_ed25519" ] && [ -s "$prev/rig_ed25519.pub" ]; then
+		cp -p "$prev/rig_ed25519" "$prev/rig_ed25519.pub" "$OUT/" || die "无法复制私钥：$prev"
+	fi
+}
+
+# 现有产物的处置。三选一：直接使用，重新构建并保留，重新构建并替换。
+# 空间不够时不给「保留」，产物不完整时不给「直接使用」。默认值随可用项变化：
+# 能直接使用时它是第一项，也是默认项。
+ask_old() {
+	local c=
+	[ -n "${OLD_ART:-}" ] || return 0
+	case ${WHAT:-} in rebuild|keep) return 0 ;; esac
+
+	if old_full; then
+		if can_keep; then
+			c=$(pick "  上一次的产物  1 直接使用  2 重新构建，保留现有产物  3 重新构建，替换现有产物   [1]：" 1 "1 2 3") ||
+				die 2 "没有取得选择。可以直接使用，或用 -b 重新构建并替换、用 -k 重新构建并保留"
+			case $c in
+				1) USE_OLD=1 ;;
+				2) KEEP_OLD=1 ;;
+			esac
+		else
+			c=$(pick "  上一次的产物  1 直接使用  2 重新构建，替换现有产物（可用空间不足以同时保留）   [1]：" 1 "1 2") ||
+				die 2 "没有取得选择。可以直接使用，或用 -b 重新构建并替换"
+			[ "$c" = 1 ] && USE_OLD=1
+		fi
+	elif can_keep; then
+		c=$(pick "  上一次的产物  内容不完整，不能直接使用。1 重新构建，保留现有产物  2 重新构建，替换现有产物   [2]：" 2 "1 2") ||
+			die 2 "没有取得选择。可用 -k 重新构建并保留，或用 -b 重新构建并替换"
+		[ "$c" = 1 ] && KEEP_OLD=1
+	else
+		say "  上一次的产物  内容不完整，不能直接使用。可用空间不足以同时保留，本次重新构建并替换"
+	fi
+	return 0
+}
+
+# 私钥：重建时才有选择。继续使用现有的私钥，上一次打印的那份对新镜像仍然有效；
+# 重新生成后，之前打印的私钥不能用于新镜像。直接使用现有产物时不必问。
+ask_key() {
+	local c=
+	[ -n "${USE_OLD:-}" ] && return 0
+	[ -n "${NEW_KEY:-}" ] && return 0
+	[ -s "${OUT:-}/rig_ed25519" ] || return 0
+	c=$(pick "  私钥          1 继续使用现有私钥  2 重新生成私钥   [1]：" 1 "1 2") ||
+		die 2 "没有取得选择。可以继续使用现有私钥，或用 -r 重新生成"
+	[ "$c" = 2 ] && NEW_KEY=1
+	return 0
+}
+
+
 # 登录凭据：-P 给了就不问。只提供随机密码：这里手打没有回显，敲错一个字符就
-# 进不去，而随机值由脚本生成、随登录信息一起打印。
+# 进不去，而随机值由脚本生成、随登录信息一起打印。使用现有产物时不问这一项：
+# 密码在构建时写入镜像，没有重新构建就没有地方可写。
 ask_login() {
 	local c=
+	[ -n "${USE_OLD:-}" ] && return 0
 	if [ -n "$SSH_PW" ] || [ -n "$PW_WANT" ]; then return 0; fi
 	c=$(pick "  登录方式  1 只用私钥  2 私钥加密码   [1]：" 1 "1 2") ||
 		die 2 "没有取得登录方式。可用 -P random 直接指定密码登录"
@@ -333,6 +431,12 @@ ask_port() {
 # 本次采用的取值。问答之后打印，是操作者改动本机之前最后一次核对的机会。
 print_settings() {
 	local lead=${1:-本次}
+	if [ -n "${USE_OLD:-}" ]; then
+		say "  $lead：直接使用 ${OUT:-} 中现有的产物，不重新构建"
+		say "        登录方式为私钥，sshd 监听 $(port_text)"
+		say "        密码在构建时写入镜像。上一次构建如果设置过密码，以当时打印的那份为准"
+		return 0
+	fi
 	if want_pw; then
 		say "  $lead：私钥与密码均可登录，sshd 监听 $(port_text)"
 		if [ "$SSH_PORT" = 22 ]; then
@@ -342,10 +446,24 @@ print_settings() {
 	else
 		say "  $lead：只接受私钥，sshd 监听 $(port_text)"
 	fi
+	if [ -n "${OLD_ART:-}" ]; then
+		if [ -n "${KEEP_OLD:-}" ]; then
+			say "        现有产物：目录改名保留，重新构建的产物写入 ${OUT:-}"
+		else
+			say "        现有产物：重新构建完成后替换，旧文件不再保留"
+		fi
+	fi
+	if [ -s "${OUT:-}/rig_ed25519" ]; then
+		if [ -n "${NEW_KEY:-}" ]; then
+			say "        私钥：重新生成，之前打印的私钥不能用于新的镜像"
+		else
+			say "        私钥：继续使用，之前打印的私钥对新的镜像有效"
+		fi
+	fi
 }
 
 ask_settings() {
-	need_tty "登录方式与端口"
+	need_tty "现有产物、私钥、登录方式与端口"
 	say ""
 	rule
 	say "  设置（直接回车取方括号中的默认值）"
@@ -354,6 +472,8 @@ ask_settings() {
 		say "  地址      无法自动确定，需要手工指定"
 		ask_spec
 	fi
+	ask_old
+	ask_key
 	ask_login
 	ask_port
 	print_settings
@@ -459,13 +579,48 @@ case ${avail:-} in ''|*[!0-9]*) avail=0 ;; esac
 need=$LIVE_NEED
 out_mnt=$(findmnt -no TARGET -T "$out_at" 2>/dev/null)
 [ -n "${out_mnt:-}" ] && [ "$out_mnt" = "$LIVE_MP" ] && need=$((LIVE_NEED * 2))
+
+# 已有产物。判据是「引导要用的五样都在」：三份产物、写引导项的脚本、能登录的私钥。
+# 齐全时本次可以直接使用它并跳过构建，因此放在构建依赖与源码树之前判断。
+old_size=0
+miss=
+if [ -f "$OUT/live/filesystem.squashfs" ]; then
+	OLD_ART=1
+	miss=$(old_missing)
+	[ -z "$miss" ] && OLD_FULL=1
+	old_size=$(du -sb "$OUT" 2>/dev/null | awk '{ print $1 }')
+	case ${old_size:-} in ''|*[!0-9]*) old_size=0 ;; esac
+fi
+OUT_AVAIL=$avail; OUT_NEED=$need; OUT_OLD_SIZE=$old_size
+if [ -n "$OLD_ART" ] && [ -z "$OLD_FULL" ]; then
+	warn "已有产物" "$OUT 中有上一次构建的产物，但内容不完整（缺少 $(cn_list "$miss")）。不能直接使用"
+elif [ -n "$OLD_FULL" ]; then
+	warn "已有产物" "$OUT 中有上一次构建的完整产物。设置阶段可以直接使用它，跳过构建"
+else
+	pass "已有产物" "$OUT 尚无产物。本次需要重新构建"
+fi
+
 if [ "$avail" -ge "$need" ]; then
-	pass "产物空间" "$out_at 有 $(iec "$avail") 可用，需要 $(iec "$need")"
+	if [ -n "$OLD_ART" ]; then
+		pass "产物空间" "$out_at 有 $(iec "$avail") 可用。替换现有产物需要 $(iec "$need")，保留现有产物需要 $(iec $((need + old_size)))"
+	else
+		pass "产物空间" "$out_at 有 $(iec "$avail") 可用，需要 $(iec "$need")"
+	fi
 else
 	fail "产物空间" "$out_at 只有 $(iec "$avail") 可用，需要 $(iec "$need")。可用 RIG_OUT 指定其他目录"
 fi
 
 # --- 构建依赖 ----------------------------------------------------------------
+# 依赖与源码树只在重新构建时用得上。已经有一份完整产物时，这两项降为提醒：否则
+# 只想使用现有产物的人会被与本次无关的条件挡在预检之外。选定了重新构建，两项在
+# 执行阶段仍然会被挡住，报错的地方是 apt 与下载。
+gate() {
+	if [ -n "$OLD_FULL" ]; then
+		warn "$1" "$2（选择重新构建时才需要）"
+	else
+		fail "$1" "$2"
+	fi
+}
 # 后端决定装哪个包：有 mmdebstrap 就用它（快，无特权也能跑），没有就装 debootstrap。
 # mmdebstrap 只存在于 Ubuntu 的 universe 源里，精简镜像常常没有；两者在真 root 下
 # 产出同一个 minbase 树，rig/build-live.sh 自带这条回退（D68）。debootstrap 在
@@ -496,10 +651,10 @@ if [ -n "$TREE" ]; then
 	if [ -f "$TREE/rig/build-live.sh" ]; then
 		pass "源码树" "使用本机已有的源码树 $TREE"
 	else
-		fail "源码树" "$TREE 不是 migrator 的源码树：找不到 rig/build-live.sh"
+		gate "源码树" "$TREE 不是 migrator 的源码树：找不到 rig/build-live.sh"
 	fi
 elif ! have curl && ! have wget; then
-	fail "源码树" "本机既没有 curl 也没有 wget，无法下载源码树。可用 -s 指定已有的源码树"
+	gate "源码树" "本机既没有 curl 也没有 wget，无法下载源码树。可用 -s 指定已有的源码树"
 else
 	reach=; unreach=
 	for u in "https://gitee.com/$GITEE/repository/archive/$REF.tar.gz" \
@@ -519,7 +674,7 @@ else
 			pass "源码树" "可从 $reach 取得"
 		fi
 	else
-		fail "源码树" "$unreach 均不可访问。请先解决网络，或用 -s 指定已有的源码树"
+		gate "源码树" "$unreach 均不可访问。请先解决网络，或用 -s 指定已有的源码树"
 	fi
 fi
 
@@ -558,16 +713,6 @@ else
 	pass "引导" "将新增一条 GRUB 引导项并设为默认"
 fi
 
-# 已有产物时，替换的是镜像文件，不是私钥：rig/build-live.sh 发现 rig_ed25519 已经
-# 存在就沿用，上一次打印的那把对新镜像仍然有效。这句话要说准，否则操作者会以为
-# 手里的私钥作废，去别处找一把并不存在的旧钥匙。
-if [ -f "$OUT/live/filesystem.squashfs" ]; then
-	OLD_ART=1
-	warn "已有产物" "$OUT 中有上一次构建的产物，本次替换其中的镜像文件。私钥沿用，凭私钥登录不受影响"
-else
-	pass "已有产物" "$OUT 尚无产物，本次新建"
-fi
-
 # --- 结论 --------------------------------------------------------------------
 say ""
 rule
@@ -589,20 +734,36 @@ if [ "$n_fail" -gt 0 ]; then
 fi
 
 # --- 设置 --------------------------------------------------------------------
-# 预检只判「能不能做」，具体取值由这一段定。三处取值都可能来自命令行，给了的
+# 预检只判「能不能做」，具体取值由这一段定。每一问都可能来自命令行，给了的
 # 就不再追问；-y 不提问，一律取默认值。
+#
+# -k 要求两个目录同时占用空间。没有现有产物时，-k 无保留的对象，按没有给处理。
+[ -n "$OLD_ART" ] || KEEP_OLD=
+if [ -n "$KEEP_OLD" ] && ! can_keep; then
+	die 2 "可用空间不足以同时保留现有产物：$out_at 有 $(iec "$OUT_AVAIL") 可用，需要 $(iec $((OUT_NEED + OUT_OLD_SIZE)))。去掉 -k，或用 RIG_OUT 指定其他目录"
+fi
+
 if [ -n "$DRY" ]; then
 	say ""
 	rule
 	say "  设置"
 	say ""
 	say "  执行时会询问登录方式与端口，直接回车即取下面这一行。用 -p、-P 可以直接指定，跳过问答。"
+	if [ -n "$OLD_ART" ]; then
+		say "  现有产物的处置另有一问：直接使用、重新构建并保留、重新构建并替换。用 -b 或 -k 可以跳过。"
+	fi
 	if [ -z "$SPEC" ]; then
 		say "  地址无法自动确定，执行时会要求输入，或用 -i 指定。"
 	fi
 	print_settings 取值
 elif [ -n "$YES" ]; then
 	[ -n "$SPEC" ] || die 2 "无法确定 Live 的网络参数。-y 不提问，请用 -i 指定，格式为 IP/前缀,网关,DNS"
+	# -y 取默认值：有完整产物时默认直接使用。给了 -b、-k、-r 或 -P 时改为重新构建：
+	# 前三者要求重新构建才成立，密码则只能在构建时写入镜像。
+	if [ -n "$OLD_FULL" ] && [ -z "$PW_WANT" ] && [ -z "$SSH_PW" ] &&
+		[ -z "$KEEP_OLD" ] && [ -z "$NEW_KEY" ] && [ -z "${WHAT:-}" ]; then
+		USE_OLD=1
+	fi
 	say ""
 	rule
 	say "  设置（-y 不提问，取默认值）"
@@ -612,20 +773,40 @@ else
 	ask_settings
 fi
 
+if [ -n "$USE_OLD" ] && want_pw; then
+	die 2 "使用现有产物时不能设置密码：密码在构建时写入镜像。去掉 -P，或用 -b 重新构建"
+fi
+
 # --- 后续步骤 ----------------------------------------------------------------
 n=0
 step() { n=$((n + 1)); printf '  %d. %s\n' "$n" "$*"; }
 say ""
 say "预检通过。接下来依次执行："
-if [ -n "$pkgs" ]; then step "安装构建依赖：$(cn_list "${pkgs# }")"; fi
-if [ -n "$TREE" ]; then step "使用本机已有的源码树"; else step "从镜像下载源码树"; fi
-step "编译在线迁移所需的 agent"
-step "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），耗时约十几分钟"
-step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
-say ""
-say "重启后本机从迁移 Live 启动，当前系统不再运行。产物写入 $OUT，占用约 2 GiB。"
-if [ -n "$OLD_ART" ]; then
-	say "$OUT 中上一次构建的镜像文件会被替换，旧镜像不保留；私钥沿用，上一次打印的那把仍然有效。"
+if [ -n "$USE_OLD" ]; then
+	step "使用 $OUT 中现有的产物，不重新构建"
+	step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
+	say ""
+	say "重启后本机从迁移 Live 启动，当前系统不再运行。引导文件取自 $OUT，复制到 $LIVE_MP 供引导使用。"
+else
+	if [ -n "$pkgs" ]; then step "安装构建依赖：$(cn_list "${pkgs# }")"; fi
+	if [ -n "$TREE" ]; then step "使用本机已有的源码树"; else step "从镜像下载源码树"; fi
+	step "编译在线迁移所需的 agent"
+	step "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），耗时约十几分钟"
+	step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
+	say ""
+	say "重启后本机从迁移 Live 启动，当前系统不再运行。产物写入 $OUT，占用约 2 GiB。"
+	if [ -n "$OLD_ART" ]; then
+		if [ -n "$KEEP_OLD" ]; then
+			say "现有产物的目录加时间戳改名保留，两个目录同时占用空间。"
+		else
+			say "$OUT 中的现有产物在构建完成后被替换，旧文件不再保留。"
+		fi
+	fi
+	if [ -n "$NEW_KEY" ]; then
+		say "私钥重新生成。之前打印的私钥不能用于本次构建的镜像。"
+	elif [ -f "$OUT/rig_ed25519" ]; then
+		say "私钥继续使用。上一次构建时打印的私钥对本次构建的镜像有效。"
+	fi
 fi
 say ""
 
@@ -636,14 +817,14 @@ fi
 
 # 替换发生在确认之后，回答 N 是唯一一次机会，因此把替换写进这一句，而不是只在
 # 预检表里提一句。用了 -y 的人已经明确表示不问。
-if [ -n "$OLD_ART" ]; then
-	text="开始执行，替换 $OUT 中上一次构建的产物"
+if [ -n "$OLD_ART" ] && [ -z "$KEEP_OLD" ] && [ -z "$USE_OLD" ]; then
+	text="开始执行，替换 $OUT 中的现有产物"
 else
 	text="开始执行"
 fi
 if ! confirm "$text"; then
 	if [ -n "$OLD_ART" ]; then
-		say "已取消，未做任何改动。$OUT 中上一次构建的产物仍在。"
+		say "已取消，未做任何改动。$OUT 中的产物保持原样。"
 	else
 		say "已取消，未做任何改动。"
 	fi
@@ -663,70 +844,82 @@ if [ -n "$PW_WANT" ]; then
 	[ -n "$SSH_PW" ] || die 2 "无法生成随机密码"
 fi
 
-if [ -n "$pkgs" ]; then
+if [ -n "$USE_OLD" ]; then
 	say ""
-	say "安装构建依赖：$(cn_list "${pkgs# }")"
-	apt-get update -qq || die "apt-get update 失败。请先解决软件源"
-	# shellcheck disable=SC2086  # pkgs is a deliberate word list
-	if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $pkgs; then
-		# apt 的原话在上面。最常见的是软件源里缺这个包或 apt 锁被占用，替它猜
-		# 没有意义，但把这两种可能说出来能省掉一次排查。
-		say ""
-		say "apt 的说明见上。两种常见原因："
-		say "  软件源里没有该包。Ubuntu 的 universe 源可以用 add-apt-repository universe 启用"
-		say "  另一个 apt 进程占着锁。等它结束再重试"
-		die "安装构建依赖失败：$(cn_list "${pkgs# }")"
-	fi
-fi
-
-TMP=
-if [ -z "$TREE" ]; then
-	TMP=$(mktemp -d "${TMPDIR:-/var/tmp}/migrator-live.XXXXXX") || die 2 "无法创建临时目录"
-	trap 'rm -rf "$TMP"' EXIT INT TERM
-	say ""
-	say "下载源码树"
-	got=
-	for u in "https://gitee.com/$GITEE/repository/archive/$REF.tar.gz" \
-		"https://github.com/$OWNER/archive/$REF.tar.gz"; do
-		say "  尝试 $u"
-		if have curl; then
-			curl -fsSL --connect-timeout 5 --max-time 300 -o "$TMP/tree.tar.gz" "$u" 2>/dev/null
-		else
-			wget -q -T 30 -t 1 -O "$TMP/tree.tar.gz" "$u" 2>/dev/null
-		fi || continue
-		mkdir -p "$TMP/x"
-		tar -xzf "$TMP/tree.tar.gz" -C "$TMP/x" 2>/dev/null || continue
-		TREE=$(ls -d "$TMP"/x/*/ 2>/dev/null | head -1)
-		[ -n "$TREE" ] && got=1 && break
-	done
-	[ -n "$got" ] || die "源码树未能从任何地址取到。请先解决网络，或用 -s 指定已有的源码树"
-	TREE=${TREE%/}
-fi
-[ -f "$TREE/rig/build-live.sh" ] || die "$TREE 不是 migrator 的源码树：找不到 rig/build-live.sh"
-
-# 在线迁移需要 agent 跟踪源端的写入；离线（两端都在 Live 中）不需要。
-# 这一步失败只是警告：离线迁移仍可继续。
-say ""
-say "编译 agent"
-if ( cd "$TREE" && make agent ) >/dev/null 2>&1; then
-	say "  agent 已编译"
+	say "使用 $OUT 中现有的产物，跳过安装依赖、下载源码树与构建"
 else
-	say "  WARN：agent 编译失败。本次只能做离线迁移（两端都进入 Live）；在线迁移需要 agent"
-fi
+	if [ -n "$pkgs" ]; then
+		say ""
+		say "安装构建依赖：$(cn_list "${pkgs# }")"
+		apt-get update -qq || die "apt-get update 失败。请先解决软件源"
+		# shellcheck disable=SC2086  # pkgs is a deliberate word list
+		if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $pkgs; then
+			# apt 的原话在上面。最常见的是软件源里缺这个包或 apt 锁被占用，替它猜
+			# 没有意义，但把这两种可能说出来能省掉一次排查。
+			say ""
+			say "apt 的说明见上。两种常见原因："
+			say "  软件源里没有该包。Ubuntu 的 universe 源可以用 add-apt-repository universe 启用"
+			say "  另一个 apt 进程占着锁。等它结束再重试"
+			die "安装构建依赖失败：$(cn_list "${pkgs# }")"
+		fi
+	fi
 
-say ""
-say "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），这一步需要十几分钟"
-# 密码可能含空格与标点，经环境变量传递，不放进命令行参数。
-if [ -n "$SSH_PW" ]; then export LIVE_SSH_PASSWORD="$SSH_PW"; fi
-LIVE_PROFILE=$PROFILE LIVE_NO_ISO=1 RIG_OUT=$OUT LIVE_SSH_PORT=$SSH_PORT \
-	bash "$TREE/rig/build-live.sh" ||
-	die "构建失败。上一次的输出在上面"
-unset LIVE_SSH_PASSWORD
+	TMP=
+	if [ -z "$TREE" ]; then
+		TMP=$(mktemp -d "${TMPDIR:-/var/tmp}/migrator-live.XXXXXX") || die 2 "无法创建临时目录"
+		trap 'rm -rf "$TMP"' EXIT INT TERM
+		say ""
+		say "下载源码树"
+		got=
+		for u in "https://gitee.com/$GITEE/repository/archive/$REF.tar.gz" \
+			"https://github.com/$OWNER/archive/$REF.tar.gz"; do
+			say "  尝试 $u"
+			if have curl; then
+				curl -fsSL --connect-timeout 5 --max-time 300 -o "$TMP/tree.tar.gz" "$u" 2>/dev/null
+			else
+				wget -q -T 30 -t 1 -O "$TMP/tree.tar.gz" "$u" 2>/dev/null
+			fi || continue
+			mkdir -p "$TMP/x"
+			tar -xzf "$TMP/tree.tar.gz" -C "$TMP/x" 2>/dev/null || continue
+			TREE=$(ls -d "$TMP"/x/*/ 2>/dev/null | head -1)
+			[ -n "$TREE" ] && got=1 && break
+		done
+		[ -n "$got" ] || die "源码树未能从任何地址取到。请先解决网络，或用 -s 指定已有的源码树"
+		TREE=${TREE%/}
+	fi
+	[ -f "$TREE/rig/build-live.sh" ] || die "$TREE 不是 migrator 的源码树：找不到 rig/build-live.sh"
 
-# live-entry.sh 是单文件脚本，复制一份到产物目录，撤销时不必回到源码树。
-if [ -f "$TREE/tools/live-entry.sh" ] && [ "$TREE/tools/live-entry.sh" != "$OUT/live-entry.sh" ]; then
-	cp -f "$TREE/tools/live-entry.sh" "$OUT/live-entry.sh" 2>/dev/null
-	chmod 0755 "$OUT/live-entry.sh" 2>/dev/null
+	# 在线迁移需要 agent 跟踪源端的写入；离线（两端都在 Live 中）不需要。
+	# 这一步失败只是警告：离线迁移仍可继续。
+	say ""
+	say "编译 agent"
+	if ( cd "$TREE" && make agent ) >/dev/null 2>&1; then
+		say "  agent 已编译"
+	else
+		say "  WARN：agent 编译失败。本次只能做离线迁移（两端都进入 Live）；在线迁移需要 agent"
+	fi
+
+	say ""
+	# 现有产物的处置在这里落地：依赖与源码树都已就绪，此前的失败不会改动它们。
+	if [ -n "$KEEP_OLD" ]; then
+		stash_old
+	elif [ -n "$NEW_KEY" ]; then
+		rm -f "$OUT/rig_ed25519" "$OUT/rig_ed25519.pub"
+	fi
+
+	say "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），这一步需要十几分钟"
+	# 密码可能含空格与标点，经环境变量传递，不放进命令行参数。
+	if [ -n "$SSH_PW" ]; then export LIVE_SSH_PASSWORD="$SSH_PW"; fi
+	LIVE_PROFILE=$PROFILE LIVE_NO_ISO=1 RIG_OUT=$OUT LIVE_SSH_PORT=$SSH_PORT \
+		bash "$TREE/rig/build-live.sh" ||
+		die "构建失败。上一次的输出在上面"
+	unset LIVE_SSH_PASSWORD
+
+	# live-entry.sh 是单文件脚本，复制一份到产物目录，撤销时不必回到源码树。
+	if [ -f "$TREE/tools/live-entry.sh" ] && [ "$TREE/tools/live-entry.sh" != "$OUT/live-entry.sh" ]; then
+		cp -f "$TREE/tools/live-entry.sh" "$OUT/live-entry.sh" 2>/dev/null
+		chmod 0755 "$OUT/live-entry.sh" 2>/dev/null
+	fi
 fi
 
 # =============================================================================
@@ -743,6 +936,8 @@ say "  地址  $live_addr"
 say "  端口  $SSH_PORT"
 if [ -n "$SSH_PW" ]; then
 	say "  密码  $SSH_PW（用户 root。这份镜像构建出的每台机器共用该密码）"
+elif [ -n "$USE_OLD" ]; then
+	say "  密码  取决于上一次构建的设置。设置过的话，以当时打印的为准"
 else
 	say "  密码  没有。只接受私钥"
 fi
@@ -770,12 +965,19 @@ if ! confirm "写入引导项并重启（下次开机进入迁移 Live）"; then
 	say "未写入引导项，本机仍从当前系统启动，磁盘上的分区与数据都没有改动。"
 	say "产物保留在 $OUT。日后要继续，执行："
 	say "  bash $OUT/live-entry.sh -s -f $OUT -i $SPEC -p $SSH_PORT"
-	say "放弃这次构建、释放空间：删除 $OUT 即可"
+	say "不再需要这份产物时，删除 $OUT 即可释放空间"
 	exit 0
 fi
 
+# 端口一并写进引导参数。重新构建时它已经写进镜像，放进引导参数只是让两处一致；
+# 直接使用现有产物时，这是唯一能改端口的地方。
+if [ -n "$USE_OLD" ]; then
+	entry=$OUT/live-entry.sh
+else
+	entry=$TREE/tools/live-entry.sh
+fi
 say "写入 GRUB 引导项"
-bash "$TREE/tools/live-entry.sh" -s -f "$OUT" -i "$SPEC" || die "写入引导项失败"
+bash "$entry" -s -f "$OUT" -i "$SPEC" -p "$SSH_PORT" || die "写入引导项失败"
 
 say "重启"
 reboot
