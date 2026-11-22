@@ -22,7 +22,7 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash -s -- -n
 ```
 
-脚本在重启之前打印登录用的地址、端口、密码与私钥，请先复制到其他设备。重启后确认已进入迁移 Live：
+脚本在重启之前打印登录用的地址、端口、密码与私钥，并写入产物目录的 `login.txt`，请先复制到其他设备。重启后确认已进入迁移 Live：
 
 ```sh
 cat /etc/migrator-live-release

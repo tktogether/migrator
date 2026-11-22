@@ -16,7 +16,7 @@ assert_has "the help says no second machine is needed" "构建不需要第二台
 assert_has "the help names the two scripts it drives" "rig/build-live.sh" "$out"
 assert_has "the help says how to get back out" "live-entry.sh -r" "$out"
 assert_has "the help says the run stops twice" "停两次确认" "$out"
-assert_has "the help says how many things it asks" "问两到三项设置" "$out"
+assert_has "the help says how many things it asks" "问二至四项设置" "$out"
 assert_has "the help says -n changes nothing" "不改动本机" "$out"
 
 assert_has "the help documents the port" "-p PORT" "$out"
@@ -219,8 +219,10 @@ if grep -q '^ask_settings()' "$SEG"; then
 			. "$1"
 			exec 3< "$2"
 			eval "${3:-:}"
+			# 提问原文一起收到输出里：提示写的是「给不给这一项」，断言要看得到。
 			ask() {
 				local a=
+				printf "%s" "$1" >&2
 				IFS= read -r a <&3
 				[ -n "$a" ] || a=$2
 				printf "%s\n" "$a"
@@ -304,6 +306,43 @@ if grep -q '^ask_settings()' "$SEG"; then
 	out=$(ask_run "" "OUT=$S OLD_ART=1 KEEP_OLD=1")
 	assert_has "a given keep is not asked about" "keep=1" "$out"
 	assert_has "a given keep is not switched to using the old build" "use=" "$out"
+
+	# 登录信息记录：构建结束时写下，直接使用现有产物时读回。有记录就照记录说，
+	# 没有记录就承认读不出来，并且给一次「重新构建并生成密码」的机会。
+	L1=$TMPD/seg-note
+	mkdir -p "$L1/live"
+	for f in live/filesystem.squashfs vmlinuz-live initrd-live.img live-entry.sh rig_ed25519; do
+		printf 'x' > "$L1/$f"
+	done
+	printf 'built=2026-11-22 21:30\nport=2222\nuser=root\npassword=abc123\n' > "$L1/login.txt"
+	out=$(ask_run "1" "OUT=$L1 OLD_ART=1")
+	assert_has "a recorded password is reported as such" "私钥与密码均可登录，密码取自上一次构建的记录" "$out"
+	case $out in
+		*"1 继续，凭私钥登录"*) _fail "a recorded password is not asked about" "asked anyway" ;;
+		*) _pass "a recorded password is not asked about" ;;
+	esac
+
+	printf 'built=2026-11-22 21:30\nport=22\nuser=root\npassword=\n' > "$L1/login.txt"
+	out=$(ask_run "1" "OUT=$L1 OLD_ART=1")
+	assert_has "a record without a password says so" "只接受私钥，上一次构建没有设置密码" "$out"
+
+	rm -f "$L1/login.txt"
+	out=$(ask_run "1" "OUT=$L1 OLD_ART=1")
+	assert_has "a missing record is admitted rather than guessed" "密码无法从镜像读出" "$out"
+	assert_has "a missing record offers a rebuild" "2 重新构建并生成密码" "$out"
+	out=$(ask_run "1|2" "OUT=$L1 OLD_ART=1")
+	assert_has "asking for a password drops the existing build" "use= keep=" "$out"
+	assert_has "asking for a password turns the login into a password" "want=random pw=random" "$out"
+	out=$(ask_run "1|1" "OUT=$L1 OLD_ART=1")
+	assert_has "keeping the key keeps the existing build" "use=1" "$out"
+
+	# 命令行要密码时，产物那一问里不再出现「直接使用」：选到它也要被拒绝。
+	out=$(ask_run "1" "OUT=$L1 OLD_ART=1 PW_WANT=random")
+	assert_has "a requested password rules out reusing the build" "要设置密码只能重新构建" "$out"
+	case $out in
+		*"1 直接使用"*) _fail "the reuse option is gone when a password is asked" "offered anyway" ;;
+		*) _pass "the reuse option is gone when a password is asked" ;;
+	esac
 
 	# 空间不足以同时放两份：不给「保留」这一项，第二项因此是替换（三选一时是保留）。
 	out=$(ask_run "2" "OUT=$S OLD_ART=1 OUT_AVAIL=0 OUT_NEED=10 OUT_OLD_SIZE=10")
@@ -446,5 +485,60 @@ if [ -n "$b" ] && [ -n "$e" ] && [ "$e" -gt "$b" ]; then
 else
 	skip "the ssh segment test" "could not locate the segment in build-live.sh"
 fi
+
+# 构建结束时把登录信息写入产物目录。这里用假源码树跑完一次构建，因为真正要紧的是
+# 「密码不再只出现在屏幕上一次」：第二遍直接使用同一份产物，应当能把它读回来。
+FT=$TMPD/fake-tree
+mkdir -p "$FT/rig" "$FT/tools"
+cat > "$FT/rig/build-live.sh" <<'FAKE'
+#!/bin/sh
+mkdir -p "$RIG_OUT/live"
+printf 'x' > "$RIG_OUT/live/filesystem.squashfs"
+printf 'x' > "$RIG_OUT/vmlinuz-live"
+printf 'x' > "$RIG_OUT/initrd-live.img"
+if [ ! -f "$RIG_OUT/rig_ed25519" ]; then
+	printf 'KEY\n' > "$RIG_OUT/rig_ed25519"
+	printf 'ssh-ed25519 AAAA\n' > "$RIG_OUT/rig_ed25519.pub"
+fi
+FAKE
+printf '#!/bin/sh\nexit 0\n' > "$FT/tools/live-entry.sh"
+chmod +x "$FT/rig/build-live.sh"
+stub reboot 'exit 0'
+
+O2=$TMPD/out-note
+SPEC2=192.168.22.50/24,192.168.22.1,114.114.114.114
+out=$(RIG_OUT=$O2 bash "$TMPD/lb.sh" -y -i "$SPEC2" -p 2222 -P secret123 -s "$FT" 2>&1); rc=$?
+assert_eq "a build with a password finishes" 0 "$rc"
+assert_has "the password is printed at the end" "secret123" "$out"
+assert_has "the output names the record file" "login.txt" "$out"
+if [ -f "$O2/login.txt" ]; then
+	_pass "the login record is written"
+	note=$(cat "$O2/login.txt")
+	case $note in
+		*"password=secret123"*) _pass "the record keeps the password" ;;
+		*) _fail "the record keeps the password" "$note" ;;
+	esac
+	case $note in
+		*"port=2222"*) _pass "the record keeps the port" ;;
+		*) _fail "the record keeps the port" "$note" ;;
+	esac
+	# Windows 上没有 POSIX 权限位，msys 一律报 644，这一项只能跳过。
+	case $(uname -s) in
+		MINGW*|MSYS*|CYGWIN*) skip "the record is readable by root only" "no POSIX modes here" ;;
+		*)
+			mode=$(stat -c %a "$O2/login.txt" 2>/dev/null)
+			assert_eq "the record is readable by root only" 600 "$mode"
+			;;
+	esac
+else
+	_fail "the login record is written" "no login.txt"
+fi
+
+# 第二遍：同一份产物，-y 默认直接使用。密码从记录里读回来，不靠记忆。
+out=$(RIG_OUT=$O2 bash "$TMPD/lb.sh" -y -i "$SPEC2" -p 2222 2>&1); rc=$?
+assert_eq "reusing the build finishes" 0 "$rc"
+assert_has "a reused build reports the recorded password" "secret123" "$out"
+assert_has "a reused build names the record as its source" "$O2/login.txt" "$out"
+assert_has "a reused build says when the record was written" "2026" "$out"
 
 t_end

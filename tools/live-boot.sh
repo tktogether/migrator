@@ -1,9 +1,9 @@
 #!/bin/bash
-# live-boot.sh：把本机送进迁移 Live。执行分三段，其间问三项设置、停两次确认。
+# live-boot.sh：把本机送进迁移 Live。执行分三段，其间问二至四项设置、停两次确认。
 #
 #   1. 预检。只读检查，逐项打印结果。有未通过项时停止，此时本机没有改动。
-#      通过后问三项设置：现有产物怎么处置，私钥是否重新生成，能不能用密码登录，
-#      sshd 监听哪个端口。产物目录为空时只剩后两项。
+#      通过后问设置：现有产物怎么处置，私钥是否重新生成，能不能用密码登录，
+#      sshd 监听哪个端口。产物目录为空时只问后两项。
 #   2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印私钥。选择直接使用
 #      现有产物时跳过这一段。
 #   3. 引导。取得确认后写入 GRUB 引导项并重启。
@@ -26,6 +26,11 @@
 # 登录方式（D66、D67）：能不能用密码登录，sshd 监听哪个端口。回车取方括号中的默认值，
 # 命令行给了的取值不再追问，-y 则一律取默认值。密码只提供随机生成一项：在问答里手打
 # 密码没有回显，敲错一个字符就进不去。
+#
+# 登录信息的记录（D71）：构建结束时把地址、端口、密码与私钥路径写入产物目录的
+# login.txt，权限 600。直接使用现有产物时据此读回，密码不再只出现在屏幕上一次。
+# 该文件之前构建的旧产物没有记录，密码无法从镜像读出：此时可以凭私钥继续，也可以
+# 重新构建并生成密码。
 #
 # 取值在构建时写入镜像。端口写在引导参数里，本机任何用户都能读到，它减少被扫描
 # 命中的次数，不是访问控制；密码由同一份镜像构建出的每台机器共用，提供的是访问
@@ -127,15 +132,15 @@ usage() {
   构建不需要第二台机器：本机现有系统就是构建机。产物目录中已有完整的上一次
   构建时，可以选择直接使用它，跳过构建。
 
-  执行分三段，其间问两到三项设置、停两次确认：
+  执行分三段，其间问二至四项设置、停两次确认：
     1. 预检。只读检查，逐项打印结果。有未通过项时停止，本机没有改动。
     2. 构建。取得确认后安装依赖、下载源码树、构建 Live，并打印登录信息。
        选择直接使用现有产物时跳过这一段。
     3. 引导。取得确认后写入引导项并重启。
 
-  预检通过后先问两项：能不能用密码登录，sshd 监听哪个端口。直接回车取方括号
-  中的默认值。命令行给了的取值不再追问。产物目录中已有完整的上一次构建时，
-  这两问之前还有一问：直接使用这份产物，还是重新构建。
+  预检通过后问设置：现有产物怎么处置，私钥是否重新生成，能不能用密码登录，
+  sshd 监听哪个端口。直接回车取方括号中的默认值；命令行给了的取值不再追问。
+  产物目录中有上一次构建时问前两项，没有时只问后两项。
 
   -i SPEC      Live 的静态地址，格式 IP/前缀,网关,DNS
                例：192.168.1.50/24,192.168.1.1,114.114.114.114
@@ -168,8 +173,12 @@ usage() {
 重新生成。-y 不问这些，按默认值处理：直接使用现有的产物；没有现存产物，或给了
 -b、-k、-r、-P 时重新构建。
 
+登录信息在构建结束时写入产物目录的 login.txt，权限 600。日后选择直接使用这份
+产物时据此读回。该文件出现之前的旧产物没有记录，密码无法从镜像读出；此时可以
+凭私钥继续，也可以重新构建并生成密码。
+
 构建完成后本机会重启。重启后：
-  ssh -i <私钥> -p <端口> root@<地址>   私钥、端口与密码在构建结束时打印
+  ssh -i <私钥> -p <端口> root@<地址>   私钥、端口与密码在构建结束时打印并记录
   cat /etc/migrator-live-release        确认已进入 Live
 
 本脚本不做自己的事：构建交给 rig/build-live.sh，写引导项交给 tools/live-entry.sh。
@@ -328,6 +337,32 @@ old_missing() {
 }
 old_full() { [ -z "$(old_missing)" ]; }
 
+# 登录信息的记录，与产物目录同级。写成函数而不是变量：交互段可能在 OUT 赋值之前
+# 就被载入（测试会单独取出这一段），取值的时刻必须晚于赋值。
+login_note() { printf '%s/login.txt' "${OUT:-}"; }
+
+# 从记录里取一个字段。没有记录时输出空，调用方据此判断。
+note_get() {
+	local f
+	f=$(login_note)
+	[ -s "$f" ] || return 0
+	sed -n "s/^$1=//p" "$f" 2>/dev/null | head -1
+}
+
+# 现有产物的登录方式，一句话。记录是构建完成时写下的，因此这里说的是事实而不是
+# 推测；没有记录时如实说明读不出来。
+old_login_brief() {
+	if [ ! -s "$(login_note)" ]; then
+		printf '登录方式取决于上一次构建。那次没有留下记录，密码无法从镜像读出'
+		return 0
+	fi
+	if [ -n "$(note_get password)" ]; then
+		printf '私钥与密码均可登录，密码取自上一次构建的记录'
+	else
+		printf '只接受私钥，上一次构建没有设置密码'
+	fi
+}
+
 # 能否在保留现有产物的前提下重新构建：两个目录同时占空间，因此按两份算。
 # 预检把可用空间与两份的需求都算好放在 OUT_AVAIL、OUT_NEED、OUT_OLD_SIZE 里。
 can_keep() {
@@ -348,15 +383,45 @@ stash_old() {
 	fi
 }
 
+# 登录信息写入产物目录。只在构建完成时写：直接使用现有产物时，记录就是上一次
+# 构建写下的那一份，不覆盖。权限 600，因为密码是明文，与私钥同级。
+write_login_note() {
+	local f tmp
+	f=$(login_note)
+	tmp=$f.tmp
+	if ! ( umask 077; {
+		printf '# 迁移 Live 的登录信息，构建完成时由 tools/live-boot.sh 写入。\n'
+		printf '# 只有 root 可读。目标盘被替换后，本机上的这份记录随之消失。\n'
+		printf 'built=%s\n' "$(date '+%Y-%m-%d %H:%M')"
+		printf 'address=%s\n' "${1:-}"
+		printf 'port=%s\n' "$SSH_PORT"
+		printf 'user=root\n'
+		printf 'password=%s\n' "$SSH_PW"
+		printf 'key=%s\n' "$OUT/rig_ed25519"
+	} > "$tmp" ); then
+		rm -f "$tmp"
+		say "WARN：登录信息写入失败：$f。请照抄上面的取值"
+		return 0
+	fi
+	mv -f "$tmp" "$f" || {
+		rm -f "$tmp"
+		say "WARN：登录信息写入失败：$f。请照抄上面的取值"
+		return 0
+	}
+	# umask 只在创建时生效。改名之后收紧一次，免得目标文件原本更宽。
+	chmod 600 "$f" 2>/dev/null || true
+}
+
 # 现有产物的处置。三选一：直接使用，重新构建并保留，重新构建并替换。
-# 空间不够时不给「保留」，产物不完整时不给「直接使用」。默认值随可用项变化：
-# 能直接使用时它是第一项，也是默认项。
+# 「直接使用」需要三个条件：产物完整、能同时保留时才有保留项、本次不要密码。
+# 密码只能在构建时写入镜像，因此要设置密码就不给「直接使用」，免得选到它之后才
+# 被拒绝。默认值随可用项变化：能直接使用时它是第一项，也是默认项。
 ask_old() {
-	local c=
+	local c= note=
 	[ -n "${OLD_ART:-}" ] || return 0
 	case ${WHAT:-} in rebuild|keep) return 0 ;; esac
 
-	if old_full; then
+	if old_full && ! want_pw; then
 		if can_keep; then
 			c=$(pick "  上一次的产物  1 直接使用  2 重新构建，保留现有产物  3 重新构建，替换现有产物   [1]：" 1 "1 2 3") ||
 				die 2 "没有取得选择。可以直接使用，或用 -b 重新构建并替换、用 -k 重新构建并保留"
@@ -369,12 +434,37 @@ ask_old() {
 				die 2 "没有取得选择。可以直接使用，或用 -b 重新构建并替换"
 			[ "$c" = 1 ] && USE_OLD=1
 		fi
-	elif can_keep; then
-		c=$(pick "  上一次的产物  内容不完整，不能直接使用。1 重新构建，保留现有产物  2 重新构建，替换现有产物   [2]：" 2 "1 2") ||
+		return 0
+	fi
+
+	# 到这里只剩重新构建。两种缘由都写进提问，免得读成「上一次的产物没有用了」。
+	if old_full; then
+		note="要设置密码只能重新构建"
+	else
+		note="内容不完整，不能直接使用"
+	fi
+	if can_keep; then
+		c=$(pick "  上一次的产物  $note。1 重新构建，保留现有产物  2 重新构建，替换现有产物   [2]：" 2 "1 2") ||
 			die 2 "没有取得选择。可用 -k 重新构建并保留，或用 -b 重新构建并替换"
 		[ "$c" = 1 ] && KEEP_OLD=1
 	else
-		say "  上一次的产物  内容不完整，不能直接使用。可用空间不足以同时保留，本次重新构建并替换"
+		say "  上一次的产物  $note。可用空间不足以同时保留，本次重新构建并替换"
+	fi
+	return 0
+}
+
+# 使用现有产物、而那次构建没有留下登录信息记录时，问一次：凭私钥继续，还是重新
+# 构建并生成密码。记录从本次版本起才有，因此这一问只出现在旧产物上。私钥在两种
+# 情况下都能用，所以默认是继续。
+ask_old_login() {
+	local c=
+	[ -n "${USE_OLD:-}" ] || return 0
+	[ -s "$(login_note)" ] && return 0
+	c=$(pick "  登录信息      上一次构建没有留下记录，密码无法读出，私钥不受影响
+                1 继续，凭私钥登录  2 重新构建并生成密码   [1]：" 1 "1 2") ||
+		die 2 "没有取得选择。可凭私钥继续，或用 -b 重新构建并设置密码"
+	if [ "$c" = 2 ]; then
+		USE_OLD=; PW_WANT=random
 	fi
 	return 0
 }
@@ -433,8 +523,8 @@ print_settings() {
 	local lead=${1:-本次}
 	if [ -n "${USE_OLD:-}" ]; then
 		say "  $lead：直接使用 ${OUT:-} 中现有的产物，不重新构建"
-		say "        登录方式为私钥，sshd 监听 $(port_text)"
-		say "        密码在构建时写入镜像。上一次构建如果设置过密码，以当时打印的那份为准"
+		say "        $(old_login_brief)"
+		say "        sshd 监听 $(port_text)"
 		return 0
 	fi
 	if want_pw; then
@@ -473,6 +563,7 @@ ask_settings() {
 		ask_spec
 	fi
 	ask_old
+	ask_old_login
 	ask_key
 	ask_login
 	ask_port
@@ -595,7 +686,11 @@ OUT_AVAIL=$avail; OUT_NEED=$need; OUT_OLD_SIZE=$old_size
 if [ -n "$OLD_ART" ] && [ -z "$OLD_FULL" ]; then
 	warn "已有产物" "$OUT 中有上一次构建的产物，但内容不完整（缺少 $(cn_list "$miss")）。不能直接使用"
 elif [ -n "$OLD_FULL" ]; then
-	warn "已有产物" "$OUT 中有上一次构建的完整产物。设置阶段可以直接使用它，跳过构建"
+	if [ -s "$(login_note)" ]; then
+		warn "已有产物" "$OUT 中有上一次构建的完整产物。设置阶段可以直接使用它，跳过构建；登录信息有记录"
+	else
+		warn "已有产物" "$OUT 中有上一次构建的完整产物。设置阶段可以直接使用它，跳过构建；登录信息没有记录"
+	fi
 else
 	pass "已有产物" "$OUT 尚无产物。本次需要重新构建"
 fi
@@ -784,7 +879,7 @@ say ""
 say "预检通过。接下来依次执行："
 if [ -n "$USE_OLD" ]; then
 	step "使用 $OUT 中现有的产物，不重新构建"
-	step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
+	step "读回登录信息，写入 GRUB 引导项并设为默认，然后重启"
 	say ""
 	say "重启后本机从迁移 Live 启动，当前系统不再运行。引导文件取自 $OUT，复制到 $LIVE_MP 供引导使用。"
 else
@@ -928,20 +1023,43 @@ fi
 KEY=$OUT/rig_ed25519
 live_addr=${SPEC%%,*}
 live_addr=${live_addr%%/*}
+note=$(login_note)
+note_built=; note_port=; note_pw=
+if [ -n "$USE_OLD" ]; then
+	note_built=$(note_get built)
+	note_port=$(note_get port)
+	note_pw=$(note_get password)
+else
+	# 构建刚结束，把这次的取值写下来：密码只在屏幕上出现过一次，滚动过去就没了。
+	write_login_note "$live_addr"
+fi
 say ""
 rule
 say "进入迁移 Live 的登录信息"
 say ""
 say "  地址  $live_addr"
 say "  端口  $SSH_PORT"
-if [ -n "$SSH_PW" ]; then
+if [ -n "$USE_OLD" ]; then
+	if [ -s "$note" ]; then
+		say "  来源  $note（${note_built:-构建时间未记录}）"
+		if [ -n "$note_pw" ]; then
+			say "  密码  $note_pw（用户 root）"
+		else
+			say "  密码  没有。那次构建只接受私钥"
+		fi
+		if [ -n "$note_port" ] && [ "$note_port" != "$SSH_PORT" ]; then
+			say "        那次构建写入镜像的端口是 $note_port，本次引导参数指定为 $SSH_PORT"
+		fi
+	else
+		say "  密码  无法读出。那次构建没有留下登录信息记录"
+	fi
+elif [ -n "$SSH_PW" ]; then
 	say "  密码  $SSH_PW（用户 root。这份镜像构建出的每台机器共用该密码）"
-elif [ -n "$USE_OLD" ]; then
-	say "  密码  取决于上一次构建的设置。设置过的话，以当时打印的为准"
 else
 	say "  密码  没有。只接受私钥"
 fi
 say ""
+
 say "私钥是进入迁移 Live 的凭据。目标盘随后会被整体替换，保存在本机上的副本不会"
 say "留下，请现在复制到其他设备："
 say ""
@@ -954,11 +1072,18 @@ fi
 say ""
 say "登录命令："
 say "  ssh -i <保存后的文件> -p $SSH_PORT root@$live_addr"
-if [ -n "$SSH_PW" ]; then
+pw_now=$SSH_PW
+[ -n "$USE_OLD" ] && pw_now=$note_pw
+if [ -n "$pw_now" ]; then
 	say "用密码登录：ssh -p $SSH_PORT root@$live_addr"
 fi
 rule
 say ""
+if [ -z "$USE_OLD" ]; then
+	say "上面的登录信息同时写入 $note，只有 root 可读。日后选择直接使用这份产物时"
+	say "据此读回，不必凭记忆；目标盘被替换后，这份记录随之消失。"
+	say ""
+fi
 
 if ! confirm "写入引导项并重启（下次开机进入迁移 Live）"; then
 	say ""
