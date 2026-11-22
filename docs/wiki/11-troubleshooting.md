@@ -72,6 +72,20 @@ flowchart TD
 
 `debootstrap` 在 Debian 与 Ubuntu 的主源里都有。两者都装不上时，先确认软件源可访问。若只是想让构建继续，也可以在一台有 mmdebstrap 或 debootstrap 的机器上手工构建，把产物交给 `tools/live-entry.sh`。
 
+## 重新构建会替换上一次的产物
+
+产物目录默认是 `/var/tmp/migrator-live`。目录里已有上一次构建时，预检的「已有产物」一行会说明，开始之前的那次确认也会点名，形如 `开始执行，替换 /var/tmp/migrator-live 中上一次构建的产物 [y/N]`；回答 N 则本机没有任何改动。
+
+替换的是三样：`live/filesystem.squashfs`、`vmlinuz-live`、`initrd-live.img`。旧镜像不保留，构建中途失败也一样，因为 `mksquashfs` 直接写在原位置。想留着它，先回答 N，再把整个目录移走，或者改用另一个产物目录：
+
+```sh
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | RIG_OUT=/var/tmp/migrator-live2 bash
+```
+
+新目录同样要通过预检的「产物空间」一项。
+
+私钥不在替换之列。`rig/build-live.sh` 发现 `rig_ed25519` 已存在就沿用，因此上一次打印的私钥对这次构建出的镜像仍然有效，不需要重新抄一遍。要主动换一把，先删掉 `rig_ed25519` 与 `rig_ed25519.pub` 再构建。
+
 ## 登不进迁移 Live
 
 现象：`ssh` 报 `Connection refused`、连接超时，或提示 `Permission denied (publickey)`。

@@ -83,6 +83,38 @@ assert_has "the dry run says the questions come first" "执行时会询问登录
 assert_has "the dry run prints the settings it would ask about" "取值：只接受私钥，sshd 监听 22" "$out"
 assert_has "the build names the backend it will use" "构建后端 mmdebstrap" "$out"
 
+# 已有产物：替换的是镜像文件，不是私钥。rig/build-live.sh 复用已有的 rig_ed25519，
+# 所以预检不能再说私钥会被替换——那句话会让人以为手里的钥匙作废。
+mkdir -p "$TMPD/out/live"
+: > "$TMPD/out/live/filesystem.squashfs"
+out=$(RIG_OUT="$TMPD/out" bash "$TMPD/lb.sh" -n 2>&1); rc=$?
+assert_eq "a previous build still clears the precheck" 0 "$rc"
+assert_has "a previous build is reported" "中有上一次构建的产物" "$out"
+assert_has "the key is said to be kept" "私钥沿用" "$out"
+assert_has "the dry run says the old image goes away" "旧镜像不保留" "$out"
+case $out in
+	*"私钥会被替换"*)
+		_fail "the report does not claim the key is replaced" "still claims it" ;;
+	*)
+		_pass "the report does not claim the key is replaced" ;;
+esac
+# 替换发生在确认之后，回答 N 是唯一一次机会：这一句必须点名替换。
+if grep -qF '替换 $OUT 中上一次构建的产物' "$L"; then
+	_pass "the start confirmation names what it replaces"
+else
+	_fail "the start confirmation names what it replaces" "the prompt does not mention it"
+fi
+# 没有产物时不多说一句：这一行只在重新构建时出现。用一个空目录，避免读到本机
+# 真实存在的默认产物目录。
+out=$(RIG_OUT="$TMPD/none" bash "$TMPD/lb.sh" -n 2>&1)
+case $out in
+	*"旧镜像不保留"*)
+		_fail "a first build says nothing about replacing" "printed the replacement line" ;;
+	*)
+		_pass "a first build says nothing about replacing" ;;
+esac
+rm -rf "$TMPD/out"
+
 # 构建后端：mmdebstrap 只存在于 Ubuntu 的 universe 源里。没有它就装 debootstrap，
 # 两者在真 root 下产出同一个 minbase 树。
 mv "$TMPD/stub/mmdebstrap" "$TMPD/stub/mmdebstrap.off"

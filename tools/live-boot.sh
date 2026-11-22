@@ -16,6 +16,8 @@
 #
 # 为什么停两次：预检之后停一次，让操作者在改动发生前读到结果；构建之后停一次，
 # 因为写入引导项会改变下次开机的去处，而此时登录信息已经生成，需要先交到操作者手上。
+# 产物目录里已有上一次构建时，第一处确认会点名要替换其中的镜像文件：旧镜像不保留，
+# 私钥沿用，因此撤回的办法只有回答 N 或事先把目录移走。
 #
 # 登录方式（D66、D67）：预检通过后问两项——能不能用密码登录，sshd 监听哪个端口。
 # 回车取方括号中的默认值，命令行给了的取值不再追问，-y 则一律取默认值。密码只提供
@@ -35,7 +37,7 @@ GITEE=${MIGRATOR_GITEE:-$OWNER}
 REF=${MIGRATOR_REF:-master}
 OUT=${RIG_OUT:-/var/tmp/migrator-live}
 PROFILE=slim
-SPEC=; YES=; DRY=; TREE=
+SPEC=; YES=; DRY=; TREE=; OLD_ART=
 SSH_PORT=22; SSH_PW=; PORT_WANT=; PW_WANT=; PORT_SET=
 LIVE_MP=
 n_pass=0; n_warn=0; n_fail=0
@@ -148,6 +150,9 @@ usage() {
   root 权限；本机未处于迁移 Live；Debian 或 Ubuntu 系；x86_64；内存至少 1536 MiB；
   存在可放置 Live 的非 LVM 分区且可用空间至少 3 GiB；构建依赖是否齐备；
   源码树是否可取；网络参数能否确定；本机是否已有迁移 Live 的引导项与产物。
+
+产物目录里已有上一次构建时，开始的确认会点名替换其中的镜像文件，私钥沿用；
+-y 不做这次确认，直接替换。
 
 构建完成后本机会重启。重启后：
   ssh -i <私钥> -p <端口> root@<地址>   私钥、端口与密码在构建结束时打印
@@ -553,8 +558,12 @@ else
 	pass "引导" "将新增一条 GRUB 引导项并设为默认"
 fi
 
+# 已有产物时，替换的是镜像文件，不是私钥：rig/build-live.sh 发现 rig_ed25519 已经
+# 存在就沿用，上一次打印的那把对新镜像仍然有效。这句话要说准，否则操作者会以为
+# 手里的私钥作废，去别处找一把并不存在的旧钥匙。
 if [ -f "$OUT/live/filesystem.squashfs" ]; then
-	warn "已有产物" "$OUT 中有上一次构建的产物，本次会覆盖。其中的私钥会被替换"
+	OLD_ART=1
+	warn "已有产物" "$OUT 中有上一次构建的产物，本次替换其中的镜像文件。私钥沿用，凭私钥登录不受影响"
 else
 	pass "已有产物" "$OUT 尚无产物，本次新建"
 fi
@@ -615,6 +624,9 @@ step "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），耗时约十�
 step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
 say ""
 say "重启后本机从迁移 Live 启动，当前系统不再运行。产物写入 $OUT，占用约 2 GiB。"
+if [ -n "$OLD_ART" ]; then
+	say "$OUT 中上一次构建的镜像文件会被替换，旧镜像不保留；私钥沿用，上一次打印的那把仍然有效。"
+fi
 say ""
 
 if [ -n "$DRY" ]; then
@@ -622,8 +634,19 @@ if [ -n "$DRY" ]; then
 	exit 0
 fi
 
-if ! confirm "开始执行"; then
-	say "已取消，未做任何改动。"
+# 替换发生在确认之后，回答 N 是唯一一次机会，因此把替换写进这一句，而不是只在
+# 预检表里提一句。用了 -y 的人已经明确表示不问。
+if [ -n "$OLD_ART" ]; then
+	text="开始执行，替换 $OUT 中上一次构建的产物"
+else
+	text="开始执行"
+fi
+if ! confirm "$text"; then
+	if [ -n "$OLD_ART" ]; then
+		say "已取消，未做任何改动。$OUT 中上一次构建的产物仍在。"
+	else
+		say "已取消，未做任何改动。"
+	fi
 	exit 0
 fi
 

@@ -36,6 +36,8 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 
 第一处停顿在预检之后：先问两项设置，再确认是否开始。预检表格与 `tools/preflight.sh` 同一形态，每项一行，取值为 PASS、WARN 或 FAIL。
 
+产物目录里已有上一次构建时，这次确认会点名要替换其中的镜像文件，例如 `开始执行，替换 /var/tmp/migrator-live 中上一次构建的产物 [y/N]`。旧镜像不保留，想留着它就先回答 N，把整个目录移走，或者用 `RIG_OUT` 换一个产物目录。私钥不在替换之列，上一次打印的那把对新镜像仍然有效。
+
 | 检查项 | 判据 |
 |---|---|
 | 运行身份 | 当前用户为 root |
@@ -49,7 +51,7 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 | 源码树 | 用 `-s` 指定的源码树可用，或镜像地址可访问 |
 | 网络参数 | 能从本机推出 Live 使用的静态地址、网关与 DNS。推不出时不拦下整次执行，改在设置段补问 |
 | 引导 | 本机使用 GRUB，且能执行 `update-grub` |
-| 已有产物 | 产物目录是否已有上一次构建的内容。有则本次会覆盖 |
+| 已有产物 | 产物目录是否已有上一次构建的内容。有则本次替换其中的镜像文件，私钥沿用 |
 
 WARN 不阻止执行，FAIL 会。有 FAIL 时脚本打印合计后停止，退出码为 2，本机没有改动。
 
