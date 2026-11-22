@@ -206,13 +206,22 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 
 | 脚本 | 适用环境 | 说明 |
 |---|---|---|
-| `rig/build-live.sh` | 具备 mmdebstrap 的 Debian 系构建机 | 使用 mmdebstrap、live-boot、mksquashfs、xorriso 生成 BIOS 引导 ISO |
+| `rig/build-live.sh` | 有 root 的 Debian 系构建机 | 使用 mmdebstrap、live-boot、mksquashfs、xorriso 生成 BIOS 引导 ISO；没有 mmdebstrap 时自动改用 debootstrap，产物相同 |
 | `rig/build-live-debootstrap.sh` | 无 mmdebstrap、但有 root 与 debootstrap 的 Debian/Ubuntu 构建机 | 使用 debootstrap 生成同样结构的 ISO，并额外输出 `vmlinuz-live`、`initrd-live.img` 与 squashfs 供自包含引导使用 |
+
+`mmdebstrap` 在 Ubuntu 上属于 universe 源，精简镜像常常没有。`rig/build-live.sh` 与 `tools/live-boot.sh` 都按「有 mmdebstrap 就用它，没有就用 debootstrap」处理，两者在真 root 下产出同一个最小系统，不需要为此换机器或改源。
 
 两份脚本都支持 `LIVE_PROFILE` / `PROFILE`：
 
 - `slim`：不包含 QEMU，squashfs 使用 xz 压缩，适合 1 GiB 内存的目标端；无法执行试启动验证。
 - `full`：包含 QEMU 与 QEMU 工具，squashfs 使用 zstd 压缩，可执行 `-o boottest=1`。
+
+构建从 Debian 镜像取基础系统，默认 `http://deb.debian.org/debian`。网络到该地址较慢时改用就近的镜像，环境变量对管道里的 `bash` 同样生效：
+
+```sh
+export LIVE_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian
+curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh | bash
+```
 
 登录方式由两个环境变量决定，两者都写入镜像，改动需要重新构建：
 

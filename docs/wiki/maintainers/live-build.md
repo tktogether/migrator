@@ -8,7 +8,7 @@
 
 | 脚本 | 适用环境 |
 |---|---|
-| `rig/build-live.sh` | 具备 mmdebstrap 的 Debian 系构建机，可在无特权容器中运行 |
+| `rig/build-live.sh` | 有 root 的 Debian 系构建机；有 mmdebstrap 时用它（可在无特权容器中运行），没有则在同一脚本内改用 debootstrap |
 | `rig/build-live-debootstrap.sh` | 无 mmdebstrap、但有 root 与 debootstrap 的 Debian/Ubuntu 构建机 |
 
 ## 共同产物
@@ -41,7 +41,7 @@
 
 1. 创建 `$RIG_OUT`；
 2. 若不存在则生成 rig 密钥对；
-3. 使用 mmdebstrap 构建 minbase 系统并安装依赖；
+3. 构建 minbase 系统并安装依赖。有 mmdebstrap 时用它，否则用 debootstrap（需要真 root，容器里 mknod 会失败）；
 4. 写入 Live 标记、网络配置、主机名；
 5. 安装 zram 与静态网络服务；
 6. 安装 migrator、库与 agent；

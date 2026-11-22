@@ -56,6 +56,22 @@ flowchart TD
 
 标记文件存在却仍报错时，说明启动的是精简 Live（`boot=base`），缺少 `bash`、`systemctl` 或 `apt-get`。改用完整镜像。
 
+## 构建依赖装不上
+
+现象：`live-boot.sh` 打印「安装构建依赖：…」后，apt 报 `E: Unable to locate package mmdebstrap`，脚本以退出码 1 结束。
+
+`mmdebstrap` 只存在于 Ubuntu 的 universe 源里。没有它时脚本改用 `debootstrap`，两者在真 root 下产出同一个最小系统，预检的「构建依赖」一行会写明「构建后端 debootstrap」。因此这条消息通常说明 apt 比脚本更早失败，按 apt 的原话处理：
+
+1. 软件源里缺包。启用 universe 后重试：
+
+   ```sh
+   add-apt-repository universe && apt-get update
+   ```
+
+2. apt 锁被占用。等另一个 apt 进程结束，或先完成系统的更新。
+
+`debootstrap` 在 Debian 与 Ubuntu 的主源里都有。两者都装不上时，先确认软件源可访问。若只是想让构建继续，也可以在一台有 mmdebstrap 或 debootstrap 的机器上手工构建，把产物交给 `tools/live-entry.sh`。
+
 ## 登不进迁移 Live
 
 现象：`ssh` 报 `Connection refused`、连接超时，或提示 `Permission denied (publickey)`。

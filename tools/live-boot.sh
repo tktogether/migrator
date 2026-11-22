@@ -461,18 +461,29 @@ else
 fi
 
 # --- 构建依赖 ----------------------------------------------------------------
+# 后端决定装哪个包：有 mmdebstrap 就用它（快，无特权也能跑），没有就装 debootstrap。
+# mmdebstrap 只存在于 Ubuntu 的 universe 源里，精简镜像常常没有；两者在真 root 下
+# 产出同一个 minbase 树，rig/build-live.sh 自带这条回退（D68）。debootstrap 在
+# Debian 与 Ubuntu 的主源里都有，因此是「装一个一定能装上」的那条路。
 pkgs=
-have mmdebstrap || pkgs="$pkgs mmdebstrap"
+if have mmdebstrap; then
+	BACKEND=mmdebstrap; BACKEND_NOTE=
+else
+	BACKEND=debootstrap; BACKEND_NOTE="（本机没有 mmdebstrap，两者产物相同）"
+	have debootstrap || pkgs="$pkgs debootstrap"
+fi
 have mksquashfs || pkgs="$pkgs squashfs-tools"
 have make || pkgs="$pkgs make"
 have gcc || pkgs="$pkgs build-essential"
 have ssh-keygen || pkgs="$pkgs openssh-client"
 have tar || pkgs="$pkgs tar"
+# 开启密码登录时 rig/build-live.sh 用 openssl 生成 sha512 口令
+have openssl || pkgs="$pkgs openssl"
 [ -e /usr/include/zstd.h ] || pkgs="$pkgs libzstd-dev"
-if [ -z "$pkgs" ]; then
-	pass "构建依赖" "所需软件包均已安装"
+if [ -n "$pkgs" ]; then
+	warn "构建依赖" "缺少 $(cn_list "${pkgs# }")，确认后自动安装。构建后端 $BACKEND$BACKEND_NOTE"
 else
-	warn "构建依赖" "缺少 $(cn_list "${pkgs# }")，确认后自动安装"
+	pass "构建依赖" "所需软件包均已安装。构建后端 $BACKEND$BACKEND_NOTE"
 fi
 
 # --- 源码树 ------------------------------------------------------------------
@@ -600,7 +611,7 @@ say "预检通过。接下来依次执行："
 if [ -n "$pkgs" ]; then step "安装构建依赖：$(cn_list "${pkgs# }")"; fi
 if [ -n "$TREE" ]; then step "使用本机已有的源码树"; else step "从镜像下载源码树"; fi
 step "编译在线迁移所需的 agent"
-step "构建迁移 Live（profile=$PROFILE），耗时约十几分钟"
+step "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），耗时约十几分钟"
 step "打印登录信息，写入 GRUB 引导项并设为默认，然后重启"
 say ""
 say "重启后本机从迁移 Live 启动，当前系统不再运行。产物写入 $OUT，占用约 2 GiB。"
@@ -634,8 +645,15 @@ if [ -n "$pkgs" ]; then
 	say "安装构建依赖：$(cn_list "${pkgs# }")"
 	apt-get update -qq || die "apt-get update 失败。请先解决软件源"
 	# shellcheck disable=SC2086  # pkgs is a deliberate word list
-	DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $pkgs ||
+	if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $pkgs; then
+		# apt 的原话在上面。最常见的是软件源里缺这个包或 apt 锁被占用，替它猜
+		# 没有意义，但把这两种可能说出来能省掉一次排查。
+		say ""
+		say "apt 的说明见上。两种常见原因："
+		say "  软件源里没有该包。Ubuntu 的 universe 源可以用 add-apt-repository universe 启用"
+		say "  另一个 apt 进程占着锁。等它结束再重试"
 		die "安装构建依赖失败：$(cn_list "${pkgs# }")"
+	fi
 fi
 
 TMP=
@@ -674,7 +692,7 @@ else
 fi
 
 say ""
-say "构建迁移 Live（profile=$PROFILE），这一步需要十几分钟"
+say "构建迁移 Live（profile=$PROFILE，后端 $BACKEND），这一步需要十几分钟"
 # 密码可能含空格与标点，经环境变量传递，不放进命令行参数。
 if [ -n "$SSH_PW" ]; then export LIVE_SSH_PASSWORD="$SSH_PW"; fi
 LIVE_PROFILE=$PROFILE LIVE_NO_ISO=1 RIG_OUT=$OUT LIVE_SSH_PORT=$SSH_PORT \

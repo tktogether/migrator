@@ -45,7 +45,7 @@ curl -fsSL https://gitee.com/tktogether/migrator/raw/master/tools/live-boot.sh |
 | 内存 | 不少于 1536 MiB。少于 2048 MiB 时提醒，切换前不要运行其他占用内存的程序 |
 | 放置位置 | 存在可放置引导文件的非 LVM 分区，且该分区有 3 GiB 可用空间 |
 | 产物空间 | 默认产物目录 `/var/tmp/migrator-live` 所在分区可用空间足够。与放置位置在同一分区时按两份计算 |
-| 构建依赖 | `mmdebstrap`、`squashfs-tools`、`make`、`gcc`、`ssh-keygen`、`libzstd-dev` 是否齐备 |
+| 构建依赖 | 构建后端与 `squashfs-tools`、`make`、`gcc`、`ssh-keygen`、`openssl`、`libzstd-dev` 是否齐备。缺少的确认后自动安装；后端有 `mmdebstrap` 就用它，否则用 `debootstrap`，两者产物相同 |
 | 源码树 | 用 `-s` 指定的源码树可用，或镜像地址可访问 |
 | 网络参数 | 能从本机推出 Live 使用的静态地址、网关与 DNS。推不出时不拦下整次执行，改在设置段补问 |
 | 引导 | 本机使用 GRUB，且能执行 `update-grub` |

@@ -35,10 +35,22 @@ rm -rf "$CH" "$ISODIR"
 KEY=$OUT/rig_ed25519
 [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C migrator-rig -f "$KEY"
 
-echo "[live] mmdebstrap $SUITE ($PROFILE profile, D7: baked in)..."
-mmdebstrap --variant=minbase \
-	--include="$PKGS" \
-	"$SUITE" "$CH" "$MIRROR"
+echo "[live] bootstrap $SUITE ($PROFILE profile, baked in)..."
+# D13 选 mmdebstrap 是因为无特权容器里 debootstrap 的 mknod 会失败。有真 root 时两者
+# 产出同一个 minbase 树，因此没有 mmdebstrap 的宿主改用 debootstrap：Ubuntu 的
+# universe 未启用、或精简镜像里就没有这个包，整次构建不该停在一个包名上（D68）。
+if command -v mmdebstrap >/dev/null 2>&1; then
+	echo "[live]   backend mmdebstrap"
+	mmdebstrap --variant=minbase --include="$PKGS" "$SUITE" "$CH" "$MIRROR"
+else
+	echo "[live]   backend debootstrap (mmdebstrap 不可用)"
+	[ "$(id -u)" = 0 ] || { echo "没有 mmdebstrap 时 debootstrap 需要 root（要 mknod）" >&2; exit 2; }
+	command -v debootstrap >/dev/null 2>&1 ||
+		{ echo "既没有 mmdebstrap 也没有 debootstrap，无法构建" >&2; exit 2; }
+	# 老版 debootstrap 没有 bookworm 的脚本，sid 的与它同一套 suite 逻辑
+	[ -e "/usr/share/debootstrap/scripts/$SUITE" ] || ln -sfn sid "/usr/share/debootstrap/scripts/$SUITE"
+	debootstrap --variant=minbase --no-check-gpg --include="$PKGS" "$SUITE" "$CH" "$MIRROR"
+fi
 
 echo "[live] install the tool + marker + network config..."
 SHORT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo dev)

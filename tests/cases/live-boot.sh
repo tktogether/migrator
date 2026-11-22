@@ -81,6 +81,17 @@ assert_has "the dry run says nothing was changed" "未做任何改动" "$out"
 assert_has "the default way in is the key alone" "只接受私钥" "$out"
 assert_has "the dry run says the questions come first" "执行时会询问登录方式与端口" "$out"
 assert_has "the dry run prints the settings it would ask about" "取值：只接受私钥，sshd 监听 22" "$out"
+assert_has "the build names the backend it will use" "构建后端 mmdebstrap" "$out"
+
+# 构建后端：mmdebstrap 只存在于 Ubuntu 的 universe 源里。没有它就装 debootstrap，
+# 两者在真 root 下产出同一个 minbase 树。
+mv "$TMPD/stub/mmdebstrap" "$TMPD/stub/mmdebstrap.off"
+out=$(bash "$TMPD/lb.sh" -n 2>&1); rc=$?
+assert_eq "a host without mmdebstrap still clears the precheck" 0 "$rc"
+assert_has "the fallback backend is named" "构建后端 debootstrap" "$out"
+assert_has "the fallback says the products are the same" "两者产物相同" "$out"
+assert_has "the fallback installs debootstrap instead" "安装构建依赖：debootstrap" "$out"
+mv "$TMPD/stub/mmdebstrap.off" "$TMPD/stub/mmdebstrap"
 
 # 随机端口在问答阶段没有数字可显示：端口在构建时才确定
 out=$(bash "$TMPD/lb.sh" -n -p random 2>&1); rc=$?
@@ -210,6 +221,10 @@ fi
 # The names have to agree: build-live.sh writes them, live-entry.sh reads them.
 bl=$(cat "$REPO/rig/build-live.sh")
 le=$(cat "$REPO/tools/live-entry.sh")
+case $bl in
+	*'backend debootstrap'*) _pass "build-live.sh falls back to debootstrap" ;;
+	*) _fail "build-live.sh falls back to debootstrap" "no debootstrap branch" ;;
+esac
 case $bl in
 	*'vmlinuz-live'*) _pass "build-live.sh writes the kernel under the name live-entry.sh reads" ;;
 	*) _fail "build-live.sh writes the kernel under the name live-entry.sh reads" "no vmlinuz-live" ;;
